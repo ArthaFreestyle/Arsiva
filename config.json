@@ -1,0 +1,10 @@
+{
+    "app":{
+        "name" : "Arsiva",
+        "version" : "1.0.0"
+    },
+    "web" :{
+        "prefork" : false,
+        "port" : 3000
+    }
+}
