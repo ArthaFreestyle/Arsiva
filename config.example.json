@@ -11,14 +11,14 @@
         "postgres" : {
             "host" : "localhost",
             "port" : 5432,
-            "user" : "artha",
-            "password" : "passwordku",
-            "dbname" : "arsiva"
+            "user" : "NAMA_USER_POSTGRES",
+            "password" : "PASSWORD_POSTGRES",
+            "dbname" : "NAMA_DB_POSTGRES"
         },
         "redis" : {
             "host" : "localhost",
             "port" : 6379,
-            "password" : "",
+            "password" : "PASSWORD_REDIS",
             "db" : 0
         }
     }

@@ -1,0 +1,1 @@
+DROP TABLE IF EXISTS member_activity_logs CASCADE;
