@@ -1,0 +1,29 @@
+INSERT INTO users (username, email, password_hash, role, created_at, last_login, is_active) 
+VALUES 
+  (
+    'Aditya', 
+    'Aditya@gmail.com', 
+    '$2a$10$cKpVeVrdMtUL/gwSv3ErQumTbXG/9Vf3gaJbTk3Cw5scSzkHO2J/O', 
+    'member', 
+    NOW(), 
+    NOW(), 
+    true
+  ),
+  (
+    'Helmi', 
+    'Helmi@gmail.com', 
+    '$2a$10$cKpVeVrdMtUL/gwSv3ErQumTbXG/9Vf3gaJbTk3Cw5scSzkHO2J/O', 
+    'super_admin', 
+    NOW(), 
+    NOW(), 
+    true
+  ),
+  (
+    'Mufi', 
+    'Mufi@gmail.com', 
+    '$2a$10$cKpVeVrdMtUL/gwSv3ErQumTbXG/9Vf3gaJbTk3Cw5scSzkHO2J/O', 
+    'guru', 
+    NOW(), 
+    NOW(), 
+    true
+  );
