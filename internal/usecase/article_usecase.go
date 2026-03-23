@@ -17,7 +17,7 @@ type ArticleUseCase interface {
 	GetAllArticle(ctx context.Context) ([]*model.ArticleResponse, error)
 	GetArticleBySlug(ctx context.Context, slug string) (*model.ArticleResponse, error)
 	GetArticleById(ctx context.Context, articleId string) (*model.ArticleResponse, error)
-	CreateArticle(ctx context.Context, article *model.ArticleCreateRequest) (*model.ArticleResponse, error)
+	CreateArticle(ctx context.Context, article *model.ArticleCreateRequest,UserId string) (*model.ArticleResponse, error)
 	UpdateArticle(ctx context.Context, article *model.ArticleUpdateRequest, articleId string) (*model.ArticleResponse, error)
 	DeleteArticle(ctx context.Context, articleId string) (error)
 }
@@ -69,7 +69,7 @@ func (u *articleUseCaseImpl) GetArticleById(ctx context.Context, articleId strin
 	return res,nil
 }
 
-func (u *articleUseCaseImpl) CreateArticle(ctx context.Context, article *model.ArticleCreateRequest) (*model.ArticleResponse, error) {
+func (u *articleUseCaseImpl) CreateArticle(ctx context.Context, article *model.ArticleCreateRequest,userId string) (*model.ArticleResponse, error) {
 	err := u.Validator.Struct(article)
 	if err != nil {
 		u.Log.Warnf("error when validate article: %v",err)
@@ -86,7 +86,7 @@ func (u *articleUseCaseImpl) CreateArticle(ctx context.Context, article *model.A
 		},
 		Status: "draft",
 		CreatedBy: entity.User{
-			UserId: article.CreatedBy,
+			UserId: userId,
 		},
 	}
 

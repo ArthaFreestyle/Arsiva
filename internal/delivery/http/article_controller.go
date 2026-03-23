@@ -77,7 +77,8 @@ func (c *articleControllerImpl) CreateArticle(ctx fiber.Ctx) (error) {
 		return fiber.ErrBadRequest
 	}
 
-	createdArticle,err := c.ArticleUseCase.CreateArticle(ctx,article)
+	userId := ctx.Locals("user_id").(string)
+	createdArticle,err := c.ArticleUseCase.CreateArticle(ctx,article,userId)
 	if err != nil {
 		c.Log.Warnf("Failed create article : %+v",err)
 		return err

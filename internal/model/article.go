@@ -3,7 +3,6 @@ package model
 type ArticleCreateRequest struct {
 	Title string `json:"title" validate:"required"`
 	CategoryId string `json:"category_id" validate:"required"`
-	CreatedBy string `json:"created_by" validate:"required"`
 }
 
 type ArticleUpdateRequest struct {
