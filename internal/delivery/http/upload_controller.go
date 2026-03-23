@@ -19,6 +19,7 @@ import (
 
 type UploadController interface {
 	UploadImage(ctx fiber.Ctx) error
+	GetFile(ctx fiber.Ctx) error
 }
 
 type uploadControllerImpl struct {
@@ -100,4 +101,8 @@ func (c *uploadControllerImpl) UploadImage(ctx fiber.Ctx) error {
 	}
 	
 	return ctx.Status(fiber.StatusOK).JSON(res)
+}
+
+func (c *uploadControllerImpl) GetFile(ctx fiber.Ctx) error {
+	return ctx.SendFile("./uploads/"+ctx.Params("*"))
 }

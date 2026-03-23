@@ -12,6 +12,7 @@ type RouteConfig struct {
 	ArticleCategoryController http.ArticleCategoryController
 	ArticleController http.ArticleController
 	UploadController http.UploadController
+	PuzzleController http.PuzzleController
 }
 
 func (c *RouteConfig) SetupRoutes() {
@@ -46,6 +47,14 @@ func (c *RouteConfig) SetupAuthRoutes() {
 	c.App.Put("/api/v1/articles/:id",c.ArticleController.UpdateArticle)
 	c.App.Delete("/api/v1/articles/:id",c.ArticleController.DeleteArticle)
 
+	//puzzle
+	c.App.Get("/api/v1/puzzles",c.PuzzleController.GetAllPuzzle)
+	c.App.Get("/api/v1/puzzles/:id",c.PuzzleController.GetPuzzleById)
+	c.App.Post("/api/v1/puzzles",c.PuzzleController.CreatePuzzle)
+	c.App.Put("/api/v1/puzzles/:id",c.PuzzleController.UpdatePuzzle)
+	c.App.Delete("/api/v1/puzzles/:id",c.PuzzleController.DeletePuzzle)
+	
 	//upload
 	c.App.Post("/api/v1/upload/image",c.UploadController.UploadImage)
+	c.App.Get("/uploads/*",c.UploadController.GetFile)
 }
