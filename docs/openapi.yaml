@@ -36,6 +36,8 @@ tags:
     description: CRUD kategori artikel
   - name: Articles
     description: Manajemen artikel (two-phase create → update)
+  - name: Puzzles
+    description: CRUD puzzle dan manajemen soal
   - name: Upload
     description: Upload file gambar untuk artikel
 
@@ -433,7 +435,6 @@ paths:
             example:
               title: Sejarah Kerajaan Majapahit
               category_id: "1"
-              created_by: "1"
       responses:
         "200":
           description: Artikel draft berhasil dibuat
@@ -625,6 +626,167 @@ paths:
               example:
                 error: "Format file tidak didukung. Gunakan: jpg, jpeg, png, webp, gif"
 
+  # ── GET UPLOADED FILE ──────────────────────────────────────
+  /uploads/{filepath}:
+    parameters:
+      - name: filepath
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Path file gambar
+        example: "2026/03/majapahit.jpg"
+    get:
+      tags: [Upload]
+      summary: Get uploaded file
+      description: Mengambil file gambar yang telah diupload berdasarkan path-nya.
+      operationId: getFile
+      responses:
+        "200":
+          description: File gambar
+          content:
+            image/*:
+              schema:
+                type: string
+                format: binary
+        "404":
+          description: File tidak ditemukan
+
+  # ── PUZZLES ──────────────────────────────────────────────
+  /api/v1/puzzles:
+    get:
+      tags: [Puzzles]
+      summary: Get all puzzles
+      operationId: getAllPuzzles
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Daftar puzzle
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PuzzleListWrapper"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      tags: [Puzzles]
+      summary: Create puzzle
+      operationId: createPuzzle
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PuzzleRequest"
+      responses:
+        "200":
+          description: Puzzle berhasil dibuat
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PuzzleWrapper"
+        "400":
+          description: Validasi gagal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/puzzles/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: ID puzzle
+    get:
+      tags: [Puzzles]
+      summary: Get puzzle by ID
+      operationId: getPuzzleById
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Detail puzzle
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PuzzleWrapper"
+        "500":
+          description: Puzzle tidak ditemukan atau error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      tags: [Puzzles]
+      summary: Update puzzle
+      operationId: updatePuzzle
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PuzzleRequest"
+      responses:
+        "200":
+          description: Puzzle berhasil diupdate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PuzzleWrapper"
+        "400":
+          description: Validasi gagal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      tags: [Puzzles]
+      summary: Delete puzzle
+      operationId: deletePuzzle
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Puzzle berhasil dihapus
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: string
+                    example: "puzzle deleted successfully"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 # ───────────────────── COMPONENTS ───────────────────────
 components:
   securitySchemes:
@@ -693,6 +855,9 @@ components:
         role:
           type: string
           enum: [admin, guru]
+        created_at:
+          type: string
+          format: date-time
 
     LoginResponse:
       type: object
@@ -790,7 +955,7 @@ components:
     # ── Article Schemas ──
     ArticleCreateRequest:
       type: object
-      required: [title, category_id, created_by]
+      required: [title, category_id]
       properties:
         title:
           type: string
@@ -799,10 +964,6 @@ components:
         category_id:
           type: string
           description: ID kategori artikel
-          example: "1"
-        created_by:
-          type: string
-          description: User ID pembuat artikel
           example: "1"
 
     ArticleUpdateRequest:
@@ -891,3 +1052,58 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/UploadResponse"
+
+    # ── Puzzle Schemas ──
+    PuzzleRequest:
+      type: object
+      required: [judul, gambar, thumbnail, kategori, xp_reward, is_published]
+      properties:
+        judul:
+          type: string
+        gambar:
+          type: string
+        thumbnail:
+          type: string
+        kategori:
+          type: string
+        xp_reward:
+          type: integer
+        is_published:
+          type: boolean
+
+    PuzzleResponse:
+      type: object
+      properties:
+        puzzle_id:
+          type: string
+        judul:
+          type: string
+        gambar:
+          type: string
+        thumbnail:
+          type: string
+        kategori:
+          type: string
+        xp_reward:
+          type: integer
+        user:
+          $ref: "#/components/schemas/UserResponse"
+        created_at:
+          type: string
+          format: date-time
+        is_published:
+          type: boolean
+
+    PuzzleWrapper:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/PuzzleResponse"
+
+    PuzzleListWrapper:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/PuzzleResponse"
