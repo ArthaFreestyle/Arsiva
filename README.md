@@ -76,4 +76,9 @@ go run cmd/web/main.go
 make start
 ```
 
+### Dokumentasi API
+
 [![Swagger](https://img.shields.io/badge/Swagger-Dokumentasi%20API%20Arsiva-85EA2D?logo=swagger&logoColor=black)](https://petstore.swagger.io/?url=https://raw.githubusercontent.com/ArthaFreestyle/Arsiva/1bacdb437e9bb66052a0543b82cec9d46b2e810b/docs/openapi.yaml)
+
+Silakan lihat dokumentasi API kami di sini: 
+[👉 Buka Dokumentasi API Arsiva (Swagger UI)](https://petstore.swagger.io/?url=https://raw.githubusercontent.com/ArthaFreestyle/Arsiva/1bacdb437e9bb66052a0543b82cec9d46b2e810b/docs/openapi.yaml)
