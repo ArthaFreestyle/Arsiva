@@ -37,8 +37,7 @@ func (c *AuthControllerImpl) Login(ctx fiber.Ctx)  error {
 		return err
 	}
 
-	return ctx.JSON(model.WebResponse[model.LoginResponse]{
-		Status: "success",
+	return ctx.Status(fiber.StatusOK).JSON(model.WebResponse[model.LoginResponse]{
 		Data: *result,
 	})
 }

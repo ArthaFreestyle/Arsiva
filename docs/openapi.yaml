@@ -1,0 +1,411 @@
+openapi: "3.0.3"
+
+info:
+  title: Arsiva API
+  description: |
+    REST API untuk **Arsiva** — sistem manajemen arsip dan inventaris.
+
+    ## Autentikasi
+    Endpoint di bawah grup **Users** memerlukan JWT Bearer token.  
+    Dapatkan token melalui endpoint `POST /api/v1/login`.
+
+    ## Format Response
+    Semua response mengikuti format:
+    ```json
+    {
+      "data": ...,
+      "paging": { "page": 1, "size": 10 },
+      "errors": ""
+    }
+    ```
+  version: "1.0.0"
+  contact:
+    name: Artha
+
+servers:
+  - url: http://localhost:3000
+    description: Local development
+
+# ───────────────────────── TAGS ─────────────────────────
+tags:
+  - name: Auth
+    description: Autentikasi & token management
+  - name: Users
+    description: CRUD manajemen data user
+
+# ───────────────────────── PATHS ────────────────────────
+paths:
+  # ── LOGIN ──────────────────────────────────────────────
+  /api/v1/login:
+    post:
+      tags: [Auth]
+      summary: Login
+      description: |
+        Autentikasi user dengan email dan password.  
+        Mengembalikan **access token** (expired 60 menit) dan **refresh token** (expired 7 hari).
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+            example:
+              email: admin@example.com
+              password: rahasia123
+      responses:
+        "200":
+          description: Login berhasil
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponseWrapper"
+              example:
+                data:
+                  user:
+                    id: "550e8400-e29b-41d4-a716-446655440000"
+                    username: admin
+                    email: admin@example.com
+                    role: admin
+                  access_token: "eyJhbGciOiJIUzI1NiIs..."
+                  refresh_token: "eyJhbGciOiJIUzI1NiIs..."
+        "400":
+          description: Request body tidak valid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: "Bad Request"
+        "401":
+          description: Email atau password salah
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: "Unauthorized"
+
+  # ── GET ALL USERS ──────────────────────────────────────
+  /api/v1/users:
+    get:
+      tags: [Users]
+      summary: Get all users
+      description: Mengambil seluruh user yang aktif (`is_active = true`).
+      operationId: getAllUsers
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Daftar user berhasil diambil
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserListResponseWrapper"
+              example:
+                data:
+                  - id: "550e8400-e29b-41d4-a716-446655440000"
+                    username: admin
+                    email: admin@example.com
+                    role: admin
+                  - id: "660f9511-f30c-52e5-b827-557766550111"
+                    username: budi
+                    email: budi@example.com
+                    role: guru
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    # ── CREATE USER ────────────────────────────────────────
+    post:
+      tags: [Users]
+      summary: Create user
+      description: |
+        Membuat user baru. Password akan di-hash menggunakan bcrypt (cost 12).  
+        Semua field wajib diisi.
+      operationId: createUser
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserRequest"
+            example:
+              username: charlie
+              email: charlie@example.com
+              password: secret123
+              role: guru
+      responses:
+        "200":
+          description: User berhasil dibuat
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponseWrapper"
+              example:
+                data:
+                  id: "770a0622-a41d-63f6-c938-668877660222"
+                  username: charlie
+                  email: charlie@example.com
+                  role: guru
+        "400":
+          description: Validasi gagal (field kosong / email tidak valid)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: "Bad Request"
+        "500":
+          description: Gagal menyimpan ke database
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ── GET / UPDATE / DELETE USER BY ID ───────────────────
+  /api/v1/users/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: UUID user
+        schema:
+          type: string
+          format: uuid
+        example: "550e8400-e29b-41d4-a716-446655440000"
+
+    get:
+      tags: [Users]
+      summary: Get user by ID
+      description: Mengambil detail satu user berdasarkan `user_id`.
+      operationId: getUserById
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Detail user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponseWrapper"
+              example:
+                data:
+                  id: "550e8400-e29b-41d4-a716-446655440000"
+                  username: admin
+                  email: admin@example.com
+                  role: admin
+        "500":
+          description: User tidak ditemukan / error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    put:
+      tags: [Users]
+      summary: Update user
+      description: |
+        Mengupdate data user. Semua field harus diisi termasuk password baru.  
+        Password akan di-hash ulang.
+      operationId: updateUser
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserRequest"
+            example:
+              username: admin-updated
+              email: admin-new@example.com
+              password: newpassword
+              role: admin
+      responses:
+        "200":
+          description: User berhasil diupdate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponseWrapper"
+              example:
+                data:
+                  id: "550e8400-e29b-41d4-a716-446655440000"
+                  username: admin-updated
+                  email: admin-new@example.com
+                  role: admin
+        "400":
+          description: Validasi gagal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Gagal update ke database
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    delete:
+      tags: [Users]
+      summary: Delete user (soft delete)
+      description: |
+        Melakukan **soft delete** — mengubah `is_active` menjadi `false`.  
+        Data user tetap ada di database.
+      operationId: deleteUser
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: User berhasil dihapus
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: string
+                    example: "User deleted successfully"
+        "500":
+          description: Gagal menghapus user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+# ───────────────────── COMPONENTS ───────────────────────
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Gunakan access token dari response login.  
+        Format: `Authorization: Bearer <token>`
+
+  schemas:
+    # ── Request Schemas ──
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          description: Email user terdaftar
+          example: admin@example.com
+        password:
+          type: string
+          format: password
+          description: Password user
+          example: rahasia123
+
+    UserRequest:
+      type: object
+      required: [username, email, password, role]
+      properties:
+        username:
+          type: string
+          description: Nama pengguna (unik)
+          example: charlie
+        email:
+          type: string
+          format: email
+          description: Alamat email (unik)
+          example: charlie@example.com
+        password:
+          type: string
+          format: password
+          description: Password (akan di-hash bcrypt)
+          example: secret123
+        role:
+          type: string
+          description: "Role user: `admin` atau `guru`"
+          enum: [admin, guru]
+          example: guru
+
+    # ── Response Schemas ──
+    UserResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: UUID user
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [admin, guru]
+
+    LoginResponse:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/UserResponse"
+        access_token:
+          type: string
+          description: JWT access token (expired 60 menit)
+        refresh_token:
+          type: string
+          description: JWT refresh token (expired 7 hari)
+
+    # ── Wrapper Schemas (WebResponse<T>) ──
+    UserResponseWrapper:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/UserResponse"
+        paging:
+          $ref: "#/components/schemas/PageMetaData"
+        errors:
+          type: string
+
+    UserListResponseWrapper:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/UserResponse"
+        paging:
+          $ref: "#/components/schemas/PageMetaData"
+        errors:
+          type: string
+
+    LoginResponseWrapper:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/LoginResponse"
+        paging:
+          $ref: "#/components/schemas/PageMetaData"
+        errors:
+          type: string
+
+    PageMetaData:
+      type: object
+      nullable: true
+      properties:
+        page:
+          type: integer
+        size:
+          type: integer
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Pesan error

@@ -25,12 +25,15 @@ func Bootstrap(cfg BootstrapConfig) {
 	userRepo := repository.NewUserRepository(cfg.DB,cfg.Log)
 
 	AuthUseCase := usecase.NewAuthUseCase(userRepo,cfg.Secret,cfg.Validate,cfg.Log,cfg.DB)
+	UserUseCase := usecase.NewUserUseCase(userRepo,cfg.Log,cfg.DB,cfg.Validate)
 
 	AuthController := http.NewAuthController(cfg.Log,AuthUseCase)
+	UserController := http.NewUserController(UserUseCase,cfg.Log)
 
 	routeConfig := route.RouteConfig{
 		App: cfg.App,
 		AuthController : AuthController,
+		UserController : UserController,
 	}
 
 	routeConfig.SetupRoutes()
