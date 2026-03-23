@@ -1,6 +1,6 @@
 package entity
 
 type ArticleCategory struct {
-	ArticleCategoryId int `json:"article_category_id"`
-	NamaKategori string `json:"nama_kategori"`
+	ArticleCategoryId 	string 		`db:"kategori_artikel_id"`
+	NamaKategori 		string 		`db:"nama_kategori"`
 }

@@ -24,17 +24,15 @@ This project follows **Clean Architecture** principles:
 
 - Golang : https://github.com/golang/go
 - PostgreSQL (Database) : https://github.com/postgres/postgres
-- Apache Kafka : https://github.com/apache/kafka
 
 ## Framework & Library
 
 - GoFiber (HTTP Framework) : https://github.com/gofiber/fiber
-- GORM (ORM) : https://github.com/go-gorm/gorm
+- PgxPool (Database Connection) : https://github.com/jackc/pgxpool
 - Viper (Configuration) : https://github.com/spf13/viper
 - Golang Migrate (Database Migration) : https://github.com/golang-migrate/migrate
 - Go Playground Validator (Validation) : https://github.com/go-playground/validator
 - Logrus (Logger) : https://github.com/sirupsen/logrus
-- Sarama (Kafka Client) : https://github.com/IBM/sarama
 
 ## Configuration
 

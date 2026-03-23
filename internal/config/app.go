@@ -23,17 +23,31 @@ type BootstrapConfig struct{
 
 func Bootstrap(cfg BootstrapConfig) {
 	userRepo := repository.NewUserRepository(cfg.DB,cfg.Log)
+	articleCategoryRepo := repository.NewArticleCategoryRepository(cfg.DB,cfg.Log)
+	articleRepo := repository.NewArticleRepository(cfg.DB,cfg.Log)
 
 	AuthUseCase := usecase.NewAuthUseCase(userRepo,cfg.Secret,cfg.Validate,cfg.Log,cfg.DB)
 	UserUseCase := usecase.NewUserUseCase(userRepo,cfg.Log,cfg.DB,cfg.Validate)
+	ArticleCategoryUseCase := usecase.NewArticleCategoryUseCase(articleCategoryRepo,cfg.Log,cfg.Validate)
+	ArticleUseCase := usecase.NewArticleUseCase(articleRepo,cfg.Log,cfg.Validate)
 
 	AuthController := http.NewAuthController(cfg.Log,AuthUseCase)
 	UserController := http.NewUserController(UserUseCase,cfg.Log)
+	ArticleCategoryController := http.NewArticleCategoryController(ArticleCategoryUseCase,cfg.Log)
+	ArticleController := http.NewArticleController(ArticleUseCase,cfg.Log)
+	UploadController := http.NewUploadController(cfg.Log,"./uploads")
+
+	cfg.App.Get("/uploads/*",func(c fiber.Ctx) error {
+		return c.SendFile("./uploads/"+c.Params("*"))
+	})
 
 	routeConfig := route.RouteConfig{
 		App: cfg.App,
 		AuthController : AuthController,
 		UserController : UserController,
+		ArticleCategoryController : ArticleCategoryController,
+		ArticleController : ArticleController,
+		UploadController : UploadController,
 	}
 
 	routeConfig.SetupRoutes()

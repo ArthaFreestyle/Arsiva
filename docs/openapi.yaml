@@ -32,6 +32,10 @@ tags:
     description: Autentikasi & token management
   - name: Users
     description: CRUD manajemen data user
+  - name: Article Categories
+    description: CRUD kategori artikel
+  - name: Articles
+    description: Manajemen artikel (two-phase create → update)
 
 # ───────────────────────── PATHS ────────────────────────
 paths:
@@ -280,6 +284,268 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  # ── ARTICLE CATEGORY ─────────────────────────────────────
+  /api/v1/categories/article:
+    get:
+      tags: [Article Categories]
+      summary: Get all article categories
+      operationId: getAllArticleCategories
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Daftar kategori artikel
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArticleCategoryListWrapper"
+
+    post:
+      tags: [Article Categories]
+      summary: Create article category
+      operationId: createArticleCategory
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArticleCategoryRequest"
+            example:
+              nama_kategori: Sejarah
+      responses:
+        "200":
+          description: Kategori berhasil dibuat
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArticleCategoryWrapper"
+        "400":
+          description: Validasi gagal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/categories/article/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: ID kategori artikel
+
+    get:
+      tags: [Article Categories]
+      summary: Get article category by ID
+      operationId: getArticleCategoryById
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Detail kategori
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArticleCategoryWrapper"
+
+    put:
+      tags: [Article Categories]
+      summary: Update article category
+      operationId: updateArticleCategory
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArticleCategoryRequest"
+      responses:
+        "200":
+          description: Kategori berhasil diupdate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArticleCategoryWrapper"
+
+    delete:
+      tags: [Article Categories]
+      summary: Delete article category
+      operationId: deleteArticleCategory
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Kategori berhasil dihapus
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: string
+                    example: "Article Category Deleted"
+
+  # ── ARTICLES ─────────────────────────────────────────────
+  /api/v1/articles:
+    get:
+      tags: [Articles]
+      summary: Get all articles
+      description: Mengambil semua artikel yang aktif (tanpa konten, untuk listing).
+      operationId: getAllArticles
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Daftar artikel
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArticleListWrapper"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    post:
+      tags: [Articles]
+      summary: Create article (draft)
+      description: |
+        Membuat artikel baru dengan status **draft**.  
+        Hanya memerlukan `title`, `category_id`, dan `created_by`.  
+        Slug otomatis di-generate dari judul.
+      operationId: createArticle
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArticleCreateRequest"
+            example:
+              title: Sejarah Kerajaan Majapahit
+              category_id: "1"
+              created_by: "1"
+      responses:
+        "200":
+          description: Artikel draft berhasil dibuat
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArticleWrapper"
+        "400":
+          description: Validasi gagal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/articles/{slug}:
+    parameters:
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Slug artikel (unique)
+        example: sejarah-kerajaan-majapahit-123456
+
+    get:
+      tags: [Articles]
+      summary: Get article by slug
+      description: Mengambil detail artikel lengkap beserta konten.
+      operationId: getArticleBySlug
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Detail artikel
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArticleWrapper"
+        "500":
+          description: Artikel tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/articles/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: ID artikel
+
+    put:
+      tags: [Articles]
+      summary: Update article
+      description: |
+        Update artikel dengan konten lengkap dari Block-Based Editor (BSON).  
+        Slug dan excerpt otomatis di-generate ulang.
+      operationId: updateArticle
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArticleUpdateRequest"
+            example:
+              title: Sejarah Kerajaan Majapahit (Revisi)
+              category_id: "1"
+              status: published
+              content: '{"blocks":[{"type":"paragraph","data":{"text":"Kerajaan Majapahit..."}}]}'
+              thumbnail: /uploads/majapahit.jpg
+      responses:
+        "200":
+          description: Artikel berhasil diupdate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArticleWrapper"
+        "400":
+          description: Validasi gagal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    delete:
+      tags: [Articles]
+      summary: Delete article (soft delete)
+      description: Mengubah `is_active` menjadi `false`.
+      operationId: deleteArticle
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Artikel berhasil dihapus
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: string
+                    example: "Article Deleted"
+        "500":
+          description: Gagal menghapus artikel
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 # ───────────────────── COMPONENTS ───────────────────────
 components:
   securitySchemes:
@@ -409,3 +675,117 @@ components:
         error:
           type: string
           description: Pesan error
+
+    # ── Article Category Schemas ──
+    ArticleCategoryRequest:
+      type: object
+      required: [nama_kategori]
+      properties:
+        nama_kategori:
+          type: string
+          description: Nama kategori artikel
+          example: Sejarah
+
+    ArticleCategoryResponse:
+      type: object
+      properties:
+        article_category_id:
+          type: string
+        nama_kategori:
+          type: string
+
+    ArticleCategoryWrapper:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/ArticleCategoryResponse"
+
+    ArticleCategoryListWrapper:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ArticleCategoryResponse"
+
+    # ── Article Schemas ──
+    ArticleCreateRequest:
+      type: object
+      required: [title, category_id, created_by]
+      properties:
+        title:
+          type: string
+          description: Judul artikel
+          example: Sejarah Kerajaan Majapahit
+        category_id:
+          type: string
+          description: ID kategori artikel
+          example: "1"
+        created_by:
+          type: string
+          description: User ID pembuat artikel
+          example: "1"
+
+    ArticleUpdateRequest:
+      type: object
+      required: [title, category_id, status, content]
+      properties:
+        title:
+          type: string
+          description: Judul artikel
+        category_id:
+          type: string
+          description: ID kategori artikel
+        status:
+          type: string
+          description: Status publikasi
+          enum: [draft, published]
+        content:
+          type: string
+          description: Konten BSON dari Block-Based Editor
+        thumbnail:
+          type: string
+          description: Path thumbnail (opsional)
+
+    ArticleResponse:
+      type: object
+      properties:
+        article_id:
+          type: string
+        slug:
+          type: string
+          description: Auto-generated dari judul
+        title:
+          type: string
+        content:
+          type: string
+          description: Konten BSON (hanya muncul pada detail)
+        category:
+          $ref: "#/components/schemas/ArticleCategoryResponse"
+        status:
+          type: string
+          enum: [draft, published]
+        excerpt:
+          type: string
+          description: Auto-generated dari konten (max 150 chars)
+        created_by:
+          $ref: "#/components/schemas/UserResponse"
+        created_at:
+          type: string
+          format: date-time
+        thumbnail:
+          type: string
+
+    ArticleWrapper:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/ArticleResponse"
+
+    ArticleListWrapper:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ArticleResponse"

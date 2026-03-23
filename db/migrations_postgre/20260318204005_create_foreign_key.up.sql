@@ -49,9 +49,6 @@ ALTER TABLE scene ADD CONSTRAINT scene_cerita_id_fkey FOREIGN KEY (cerita_id) RE
 -- AddForeignKey for puzzles
 ALTER TABLE puzzles ADD CONSTRAINT puzzles_created_by_fkey FOREIGN KEY (created_by) REFERENCES users(user_id) ON DELETE SET NULL ON UPDATE CASCADE;
 
--- AddForeignKey for kategori_artikel
-ALTER TABLE kategori_artikel ADD CONSTRAINT kategori_artikel_created_by_fkey FOREIGN KEY (created_by) REFERENCES users(user_id) ON DELETE SET NULL ON UPDATE CASCADE;
-
 -- AddForeignKey for artikel
 ALTER TABLE artikel ADD CONSTRAINT artikel_kategori_id_fkey FOREIGN KEY (kategori_id) REFERENCES kategori_artikel(kategori_artikel_id) ON DELETE SET NULL ON UPDATE CASCADE;
 ALTER TABLE artikel ADD CONSTRAINT artikel_created_by_fkey FOREIGN KEY (created_by) REFERENCES users(user_id) ON DELETE SET NULL ON UPDATE CASCADE;
