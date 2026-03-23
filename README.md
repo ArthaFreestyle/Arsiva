@@ -75,3 +75,5 @@ go run cmd/web/main.go
 # or
 make start
 ```
+
+[![Swagger](https://img.shields.io/badge/Swagger-Dokumentasi%20API%20Arsiva-85EA2D?logo=swagger&logoColor=black)](https://petstore.swagger.io/?url=https://raw.githubusercontent.com/ArthaFreestyle/Arsiva/1bacdb437e9bb66052a0543b82cec9d46b2e810b/docs/openapi.yaml)

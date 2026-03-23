@@ -36,6 +36,8 @@ tags:
     description: CRUD kategori artikel
   - name: Articles
     description: Manajemen artikel (two-phase create → update)
+  - name: Upload
+    description: Upload file gambar untuk artikel
 
 # ───────────────────────── PATHS ────────────────────────
 paths:
@@ -477,6 +479,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/articles/detail/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: ID artikel
+
+    get:
+      tags: [Articles]
+      summary: Get article by ID
+      description: Mengambil detail artikel lengkap berdasarkan ID (untuk halaman edit).
+      operationId: getArticleById
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Detail artikel
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArticleWrapper"
+        "500":
+          description: Artikel tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/articles/{id}:
     parameters:
       - name: id
@@ -545,6 +577,53 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+
+  # ── UPLOAD ───────────────────────────────────────────────
+  /api/v1/upload/image:
+    post:
+      tags: [Upload]
+      summary: Upload gambar
+      description: |
+        Upload file gambar untuk digunakan di artikel (thumbnail atau konten Block-Based Editor).  
+        - Format yang didukung: **jpg, jpeg, png, webp, gif**  
+        - Ukuran maksimal: **5MB**  
+        - File disimpan di `uploads/YYYY/MM/<uuid>.ext`  
+        - URL yang dikembalikan bisa langsung diakses via `GET /uploads/...`
+      operationId: uploadImage
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [image]
+              properties:
+                image:
+                  type: string
+                  format: binary
+                  description: File gambar (jpg/jpeg/png/webp/gif, max 5MB)
+      responses:
+        "200":
+          description: Upload berhasil
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadResponseWrapper"
+              example:
+                data:
+                  url: "/uploads/2026/03/a1b2c3d4-e5f6-7890-abcd-ef1234567890.jpg"
+                  filename: "majapahit.jpg"
+                  size: 204800
+        "400":
+          description: File tidak valid (format/ukuran salah)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: "Format file tidak didukung. Gunakan: jpg, jpeg, png, webp, gif"
 
 # ───────────────────── COMPONENTS ───────────────────────
 components:
@@ -789,3 +868,26 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ArticleResponse"
+
+    # ── Upload Schemas ──
+    UploadResponse:
+      type: object
+      properties:
+        url:
+          type: string
+          description: URL akses gambar (relative path)
+          example: "/uploads/2026/03/uuid.jpg"
+        filename:
+          type: string
+          description: Nama file asli
+          example: "majapahit.jpg"
+        size:
+          type: integer
+          description: Ukuran file dalam bytes
+          example: 204800
+
+    UploadResponseWrapper:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/UploadResponse"
