@@ -825,6 +825,162 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  # ── QUIZZES ──────────────────────────────────────────────
+  /api/v1/quizzes:
+    get:
+      tags: [Quizzes]
+      summary: Get all quizzes
+      operationId: getAllQuizzes
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Nomor halaman
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 10
+          description: Jumlah item per halaman
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Pencarian berdasarkan judul kuis
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Daftar kuis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuizListWrapper"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      tags: [Quizzes]
+      summary: Create quiz
+      description: Membuat kuis baru beserta soal dan pilihan gandanya.
+      operationId: createQuiz
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuizRequest"
+      responses:
+        "200":
+          description: Kuis berhasil dibuat
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuizWrapper"
+        "400":
+          description: Validasi gagal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/quizzes/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+        description: ID kuis
+    get:
+      tags: [Quizzes]
+      summary: Get quiz by ID
+      description: Get kuis lengkap beserta pertanyaan dan pilihan ganda.
+      operationId: getQuizById
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Detail kuis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuizWrapper"
+        "500":
+          description: Kuis tidak ditemukan atau error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      tags: [Quizzes]
+      summary: Update quiz
+      description: Update kuis, pertanyaan, dan pilihan ganda. Ini akan me-replace pertanyaan dan pilihan lama.
+      operationId: updateQuiz
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuizRequest"
+      responses:
+        "200":
+          description: Kuis berhasil diupdate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuizWrapper"
+        "400":
+          description: Validasi gagal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      tags: [Quizzes]
+      summary: Delete quiz
+      operationId: deleteQuiz
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Kuis berhasil dihapus
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: string
+                    example: "quiz deleted successfully"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 # ───────────────────── COMPONENTS ───────────────────────
 components:
   securitySchemes:
@@ -1145,3 +1301,133 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PuzzleResponse"
+
+    # ── Quiz Schemas ──
+    OptionRequest:
+      type: object
+      required: [teks_pilihan, is_correct, score]
+      properties:
+        teks_pilihan:
+          type: string
+        is_correct:
+          type: boolean
+        score:
+          type: integer
+
+    QuestionRequest:
+      type: object
+      required: [teks_pertanyaan, tipe, poin, pertanyaan_gambar, pilihan]
+      properties:
+        teks_pertanyaan:
+          type: string
+        tipe:
+          type: string
+          enum: [multiple_choice, code]
+        poin:
+          type: integer
+        pertanyaan_gambar:
+          type: string
+        pilihan:
+          type: array
+          items:
+            $ref: "#/components/schemas/OptionRequest"
+
+    QuizRequest:
+      type: object
+      required: [judul, gambar, thumbnail, xp_reward, kategori_id, is_published, soal]
+      properties:
+        judul:
+          type: string
+        gambar:
+          type: string
+        thumbnail:
+          type: string
+        xp_reward:
+          type: integer
+        kategori_id:
+          type: string
+        is_published:
+          type: boolean
+        soal:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuestionRequest"
+
+    OptionResponse:
+      type: object
+      properties:
+        pilihan_id:
+          type: integer
+        pertanyaan_id:
+          type: integer
+        teks_pilihan:
+          type: string
+        is_correct:
+          type: boolean
+        score:
+          type: integer
+
+    QuestionResponse:
+      type: object
+      properties:
+        pertanyaan_id:
+          type: integer
+        kuis_id:
+          type: integer
+        teks_pertanyaan:
+          type: string
+        tipe:
+          type: string
+        poin:
+          type: integer
+        pertanyaan_gambar:
+          type: string
+        pilihan:
+          type: array
+          items:
+            $ref: "#/components/schemas/OptionResponse"
+
+    QuizResponse:
+      type: object
+      properties:
+        kuis_id:
+          type: integer
+        judul:
+          type: string
+        gambar:
+          type: string
+        thumbnail:
+          type: string
+        xp_reward:
+          type: integer
+        kategori_id:
+          type: string
+        kategori:
+          type: string
+        is_published:
+          type: boolean
+        user:
+          $ref: "#/components/schemas/UserResponse"
+        created_at:
+          type: string
+          format: date-time
+        soal:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuestionResponse"
+
+    QuizWrapper:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/QuizResponse"
+
+    QuizListWrapper:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuizResponse"
+        paging:
+          $ref: "#/components/schemas/PageMetaData"
