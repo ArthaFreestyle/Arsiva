@@ -3,6 +3,7 @@ package http
 import (
 	"ArthaFreestyle/Arsiva/internal/model"
 	"ArthaFreestyle/Arsiva/internal/usecase"
+	"strconv"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/sirupsen/logrus"
@@ -30,14 +31,24 @@ func NewArticleController(articleUseCase usecase.ArticleUseCase,log *logrus.Logg
 }
 
 func (c *articleControllerImpl) GetAllArticle(ctx fiber.Ctx) (error) {
-	articles,err := c.ArticleUseCase.GetAllArticle(ctx)
+	page, _ := strconv.Atoi(ctx.Query("page", "1"))
+	size, _ := strconv.Atoi(ctx.Query("size", "10"))
+	search := ctx.Query("search", "")
+
+	articles,total,err := c.ArticleUseCase.GetAllArticle(ctx,page,size,search)
 	if err != nil {
 		c.Log.Warnf("Failed get all article : %+v",err)
 		return err
 	}
 
+	totalPages := (total + size - 1) / size
+
 	res := model.WebResponse[[]*model.ArticleResponse]{
 		Data: articles,
+		Paging: &model.PageMetaData{
+			Page: page,
+			Size: totalPages,
+		},
 	}
 	return ctx.Status(fiber.StatusOK).JSON(res)
 }

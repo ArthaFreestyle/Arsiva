@@ -9,7 +9,7 @@ import (
 )
 
 type ArticleRepository interface {
-	GetAllArticle(ctx context.Context) ([]*entity.Article, error)
+	GetAllArticle(ctx context.Context, page int, size int, search string) ([]*entity.Article, int, error)
 	GetArticleBySlug(ctx context.Context, slug string) (*entity.Article, error)
 	GetArticleById(ctx context.Context, articleId string) (*entity.Article, error)
 	CreateArticle(ctx context.Context, article *entity.Article) (*entity.Article, error)
@@ -29,7 +29,18 @@ func NewArticleRepository(db *pgxpool.Pool, log *logrus.Logger) ArticleRepositor
 	}
 }
 
-func (r *articleRepositoryImpl) GetAllArticle(ctx context.Context) ([]*entity.Article, error) {
+func (r *articleRepositoryImpl) GetAllArticle(ctx context.Context, page int, size int, search string) ([]*entity.Article, int, error) {
+	offset := (page - 1) * size
+	searchPattern := "%" + search + "%"
+
+	var total int
+	err := r.DB.QueryRow(ctx,
+		`SELECT COUNT(*) FROM artikel WHERE judul ILIKE $1`,
+		searchPattern).Scan(&total)
+	if err != nil {
+		return nil, 0, err
+	}
+
 	SQL := `SELECT 
     a.artikel_id,
     a.slug,
@@ -48,17 +59,20 @@ func (r *articleRepositoryImpl) GetAllArticle(ctx context.Context) ([]*entity.Ar
     a.thumbnail 
 FROM artikel a
 LEFT JOIN kategori_artikel k ON a.kategori_id = k.kategori_artikel_id
-LEFT JOIN users u ON a.created_by = u.user_id`
+LEFT JOIN users u ON a.created_by = u.user_id
+WHERE a.judul ILIKE $1
+ORDER BY a.created_at DESC
+LIMIT $2 OFFSET $3`
 
-	rows, err := r.DB.Query(ctx, SQL)
+	rows, err := r.DB.Query(ctx, SQL, searchPattern, size, offset)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	articles, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[entity.Article])
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	return articles, nil
+	return articles, total, nil
 }
 
 func (r *articleRepositoryImpl) GetArticleBySlug(ctx context.Context, slug string) (*entity.Article, error) {

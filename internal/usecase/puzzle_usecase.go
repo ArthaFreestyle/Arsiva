@@ -13,7 +13,7 @@ import (
 )
 
 type PuzzleUseCase interface {
-	GetAllPuzzle(ctx context.Context) ([]*model.PuzzleResponse, error)
+	GetAllPuzzle(ctx context.Context, page int, size int, search string) ([]*model.PuzzleResponse, int, error)
 	GetPuzzleById(ctx context.Context, puzzleId string) (*model.PuzzleResponse, error)
 	CreatePuzzle(ctx context.Context, puzzle *model.PuzzleRequest,userId string) (*model.PuzzleResponse, error)
 	UpdatePuzzle(ctx context.Context, puzzle *model.PuzzleRequest, puzzleId string) (*model.PuzzleResponse, error)
@@ -34,15 +34,22 @@ func NewPuzzleUseCase(puzzleRepository repository.PuzzleRepository,log *logrus.L
 	}
 }
 
-func (u *puzzleUseCaseImpl) GetAllPuzzle(ctx context.Context) ([]*model.PuzzleResponse, error) {
-	puzzles,err := u.PuzzleRepository.FindAll(ctx)
+func (u *puzzleUseCaseImpl) GetAllPuzzle(ctx context.Context, page int, size int, search string) ([]*model.PuzzleResponse, int, error) {
+	if page < 1 {
+		page = 1
+	}
+	if size < 1 || size > 50 {
+		size = 10
+	}
+
+	puzzles,total,err := u.PuzzleRepository.FindAll(ctx,page,size,search)
 	if err != nil {
 		u.Log.Warnf("error when get all puzzle: %v",err)
-		return nil,fiber.ErrInternalServerError
+		return nil,0,fiber.ErrInternalServerError
 	}
 
 	res := converter.ToPuzzleResponses(puzzles)
-	return res,nil
+	return res,total,nil
 }
 
 func (u *puzzleUseCaseImpl) GetPuzzleById(ctx context.Context, puzzleId string) (*model.PuzzleResponse, error) {

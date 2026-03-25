@@ -14,7 +14,7 @@ import (
 )
 
 type ArticleUseCase interface {
-	GetAllArticle(ctx context.Context) ([]*model.ArticleResponse, error)
+	GetAllArticle(ctx context.Context, page int, size int, search string) ([]*model.ArticleResponse, int, error)
 	GetArticleBySlug(ctx context.Context, slug string) (*model.ArticleResponse, error)
 	GetArticleById(ctx context.Context, articleId string) (*model.ArticleResponse, error)
 	CreateArticle(ctx context.Context, article *model.ArticleCreateRequest,UserId string) (*model.ArticleResponse, error)
@@ -36,15 +36,22 @@ func NewArticleUseCase(articleRepository repository.ArticleRepository,log *logru
 	}
 }
 
-func (u *articleUseCaseImpl) GetAllArticle(ctx context.Context) ([]*model.ArticleResponse, error) {
-	articles,err := u.ArticleRepository.GetAllArticle(ctx)
+func (u *articleUseCaseImpl) GetAllArticle(ctx context.Context, page int, size int, search string) ([]*model.ArticleResponse, int, error) {
+	if page < 1 {
+		page = 1
+	}
+	if size < 1 || size > 50 {
+		size = 10
+	}
+
+	articles,total,err := u.ArticleRepository.GetAllArticle(ctx,page,size,search)
 	if err != nil {
 		u.Log.Warnf("error when get all article: %v",err)
-		return nil,fiber.ErrInternalServerError
+		return nil,0,fiber.ErrInternalServerError
 	}
 
 	res := converter.ToArticleResponses(articles)
-	return res,nil
+	return res,total,nil
 }
 
 func (u *articleUseCaseImpl) GetArticleBySlug(ctx context.Context, slug string) (*model.ArticleResponse, error) {

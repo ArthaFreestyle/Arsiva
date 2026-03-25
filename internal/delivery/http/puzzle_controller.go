@@ -3,6 +3,8 @@ package http
 import (
 	"ArthaFreestyle/Arsiva/internal/model"
 	"ArthaFreestyle/Arsiva/internal/usecase"
+	"strconv"
+
 	"github.com/gofiber/fiber/v3"
 	"github.com/sirupsen/logrus"
 )
@@ -28,14 +30,24 @@ func NewPuzzleController(puzzleUseCase usecase.PuzzleUseCase,log *logrus.Logger)
 }
 
 func (c *puzzleControllerImpl) GetAllPuzzle(ctx fiber.Ctx) (error) {
-	puzzles,err := c.PuzzleUseCase.GetAllPuzzle(ctx)
+	page, _ := strconv.Atoi(ctx.Query("page", "1"))
+	size, _ := strconv.Atoi(ctx.Query("size", "10"))
+	search := ctx.Query("search", "")
+
+	puzzles,total,err := c.PuzzleUseCase.GetAllPuzzle(ctx,page,size,search)
 	if err != nil {
 		c.Log.Warnf("error when get all puzzle: %v",err)
 		return fiber.NewError(fiber.StatusInternalServerError,"internal server error")
 	}
 
+	totalPages := (total + size - 1) / size
+
 	res := model.WebResponse[[]*model.PuzzleResponse]{
 		Data: puzzles,
+		Paging: &model.PageMetaData{
+			Page: page,
+			Size: totalPages,
+		},
 	}
 
 	return ctx.Status(fiber.StatusOK).JSON(res)

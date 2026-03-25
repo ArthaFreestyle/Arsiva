@@ -1,11 +1,12 @@
 package entity
 
 type Question struct {
-	PertanyaanId int `db:"pertanyaan_id"`
-	KuisId int `db:"kuis_id"`
-	TeksPertanyaan string `db:"teks_pertanyaan"`
-	Image string `db:"image"`
-	Tipe string `db:"tipe"`
-	Poin int `db:"poin"`
-	Urutan int `db:"urutan"`
+	PertanyaanId   int       `db:"pertanyaan_id"`
+	KuisId         int       `db:"kuis_id"`
+	TeksPertanyaan string    `db:"teks_pertanyaan"`
+	Image          string    `db:"image"`
+	Tipe           string    `db:"tipe"`
+	Poin           int       `db:"poin"`
+	Urutan         int       `db:"urutan"`
+	Pilihan        []*Option
 }

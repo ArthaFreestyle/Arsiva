@@ -10,7 +10,7 @@ import (
 )
 
 type PuzzleRepository interface {
-	FindAll(ctx context.Context) ([]*entity.Puzzle, error)
+	FindAll(ctx context.Context, page int, size int, search string) ([]*entity.Puzzle, int, error)
 	FindById(ctx context.Context, puzzleId string) (*entity.Puzzle, error)
 	Create(ctx context.Context, puzzle *entity.Puzzle) (*entity.Puzzle, error)
 	Update(ctx context.Context, puzzle *entity.Puzzle) (*entity.Puzzle, error)
@@ -29,7 +29,18 @@ func NewPuzzleRepository(db *pgxpool.Pool,log *logrus.Logger) PuzzleRepository {
 	}
 }
 
-func (r *puzzleRepositoryImpl) FindAll(ctx context.Context) ([]*entity.Puzzle, error) {
+func (r *puzzleRepositoryImpl) FindAll(ctx context.Context, page int, size int, search string) ([]*entity.Puzzle, int, error) {
+	offset := (page - 1) * size
+	searchPattern := "%" + search + "%"
+
+	var total int
+	err := r.DB.QueryRow(ctx,
+		`SELECT COUNT(*) FROM puzzles WHERE is_published = true AND judul ILIKE $1`,
+		searchPattern).Scan(&total)
+	if err != nil {
+		return nil, 0, err
+	}
+
 	SQL := `SELECT p.puzzle_id,p.judul,p.thumbnail,p.kategori,p.xp_reward,
 	JSON_BUILD_OBJECT(
 		'user_id',u.user_id,
@@ -38,19 +49,20 @@ func (r *puzzleRepositoryImpl) FindAll(ctx context.Context) ([]*entity.Puzzle, e
 	p.created_at,p.is_published
 	FROM puzzles p 
 	JOIN users u ON p.created_by = u.user_id 
-	WHERE p.is_published = true 
-	ORDER BY p.created_at DESC`
+	WHERE p.is_published = true AND p.judul ILIKE $1
+	ORDER BY p.created_at DESC
+	LIMIT $2 OFFSET $3`
 
-	rows,err := r.DB.Query(ctx,SQL)
+	rows,err := r.DB.Query(ctx,SQL,searchPattern,size,offset)
 	if err != nil {
-		return nil,err
+		return nil,0,err
 	}
 	
 	puzzles,err := pgx.CollectRows(rows,pgx.RowToAddrOfStructByNameLax[entity.Puzzle])
 	if err != nil {
-		return nil,err
+		return nil,0,err
 	}
-	return puzzles,nil
+	return puzzles,total,nil
 }
 
 func (r *puzzleRepositoryImpl) FindById(ctx context.Context, puzzleId string) (*entity.Puzzle, error) {

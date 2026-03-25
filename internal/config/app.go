@@ -26,12 +26,14 @@ func Bootstrap(cfg BootstrapConfig) {
 	articleCategoryRepo := repository.NewArticleCategoryRepository(cfg.DB,cfg.Log)
 	articleRepo := repository.NewArticleRepository(cfg.DB,cfg.Log)
 	puzzleRepo := repository.NewPuzzleRepository(cfg.DB,cfg.Log)
+	quizRepo := repository.NewQuizRepository(cfg.DB,cfg.Log)
 
 	AuthUseCase := usecase.NewAuthUseCase(userRepo,cfg.Secret,cfg.Validate,cfg.Log,cfg.DB)
 	UserUseCase := usecase.NewUserUseCase(userRepo,cfg.Log,cfg.DB,cfg.Validate)
 	ArticleCategoryUseCase := usecase.NewArticleCategoryUseCase(articleCategoryRepo,cfg.Log,cfg.Validate)
 	ArticleUseCase := usecase.NewArticleUseCase(articleRepo,cfg.Log,cfg.Validate)
 	PuzzleUseCase := usecase.NewPuzzleUseCase(puzzleRepo,cfg.Log,cfg.Validate)
+	QuizUseCase := usecase.NewQuizUseCase(quizRepo,cfg.Log,cfg.Validate)
 
 	AuthController := http.NewAuthController(cfg.Log,AuthUseCase)
 	UserController := http.NewUserController(UserUseCase,cfg.Log)
@@ -39,6 +41,7 @@ func Bootstrap(cfg BootstrapConfig) {
 	ArticleController := http.NewArticleController(ArticleUseCase,cfg.Log)
 	UploadController := http.NewUploadController(cfg.Log,"./uploads")
 	PuzzleController := http.NewPuzzleController(PuzzleUseCase,cfg.Log)
+	QuizController := http.NewQuizController(QuizUseCase,cfg.Log)
 
 	routeConfig := route.RouteConfig{
 		App: cfg.App,
@@ -48,6 +51,7 @@ func Bootstrap(cfg BootstrapConfig) {
 		ArticleController : ArticleController,
 		UploadController : UploadController,
 		PuzzleController : PuzzleController,
+		QuizController : QuizController,
 	}
 
 	routeConfig.SetupRoutes()
