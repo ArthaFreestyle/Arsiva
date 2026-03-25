@@ -1309,10 +1309,13 @@ components:
       properties:
         teks_pilihan:
           type: string
+          example: "Jakarta"
         is_correct:
           type: boolean
+          example: true
         score:
           type: integer
+          example: 10
 
     QuestionRequest:
       type: object
@@ -1320,13 +1323,17 @@ components:
       properties:
         teks_pertanyaan:
           type: string
+          example: "Apa ibukota Indonesia?"
         tipe:
           type: string
           enum: [multiple_choice, code]
+          example: "multiple_choice"
         poin:
           type: integer
+          example: 10
         pertanyaan_gambar:
           type: string
+          example: "/uploads/2026/03/peta-indonesia.jpg"
         pilihan:
           type: array
           items:
@@ -1338,16 +1345,22 @@ components:
       properties:
         judul:
           type: string
+          example: "Kuis Geografi Indonesia"
         gambar:
           type: string
+          example: "/uploads/2026/03/geografi-bg.jpg"
         thumbnail:
           type: string
+          example: "/uploads/2026/03/geografi-thumb.jpg"
         xp_reward:
           type: integer
+          example: 100
         kategori_id:
           type: string
+          example: "2"
         is_published:
           type: boolean
+          example: true
         soal:
           type: array
           items:
@@ -1358,30 +1371,41 @@ components:
       properties:
         pilihan_id:
           type: integer
+          example: 1
         pertanyaan_id:
           type: integer
+          example: 1
         teks_pilihan:
           type: string
+          example: "Jakarta"
         is_correct:
           type: boolean
+          example: true
         score:
           type: integer
+          example: 10
 
     QuestionResponse:
       type: object
       properties:
         pertanyaan_id:
           type: integer
+          example: 1
         kuis_id:
           type: integer
+          example: 1
         teks_pertanyaan:
           type: string
+          example: "Apa ibukota Indonesia?"
         tipe:
           type: string
+          example: "multiple_choice"
         poin:
           type: integer
+          example: 10
         pertanyaan_gambar:
           type: string
+          example: "/uploads/2026/03/peta-indonesia.jpg"
         pilihan:
           type: array
           items:
@@ -1392,25 +1416,34 @@ components:
       properties:
         kuis_id:
           type: integer
+          example: 1
         judul:
           type: string
+          example: "Kuis Geografi Indonesia"
         gambar:
           type: string
+          example: "/uploads/2026/03/geografi-bg.jpg"
         thumbnail:
           type: string
+          example: "/uploads/2026/03/geografi-thumb.jpg"
         xp_reward:
           type: integer
+          example: 100
         kategori_id:
           type: string
+          example: "2"
         kategori:
           type: string
+          example: "Geografi Nusantara"
         is_published:
           type: boolean
+          example: true
         user:
           $ref: "#/components/schemas/UserResponse"
         created_at:
           type: string
           format: date-time
+          example: "2026-03-25T15:04:05Z"
         soal:
           type: array
           items:
