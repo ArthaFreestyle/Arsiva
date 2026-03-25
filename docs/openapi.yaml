@@ -38,6 +38,8 @@ tags:
     description: Manajemen artikel (two-phase create → update)
   - name: Puzzles
     description: CRUD puzzle dan manajemen soal
+  - name: Quizzes
+    description: CRUD kuis, termasuk soal dan pilihan ganda
   - name: Upload
     description: Upload file gambar untuk artikel
 
@@ -400,6 +402,24 @@ paths:
       summary: Get all articles
       description: Mengambil semua artikel yang aktif (tanpa konten, untuk listing).
       operationId: getAllArticles
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Nomor halaman
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 10
+          description: Jumlah item per halaman
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Pencarian berdasarkan judul artikel
       security:
         - BearerAuth: []
       responses:
@@ -658,6 +678,24 @@ paths:
       tags: [Puzzles]
       summary: Get all puzzles
       operationId: getAllPuzzles
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Nomor halaman
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 10
+          description: Jumlah item per halaman
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Pencarian berdasarkan judul puzzle
       security:
         - BearerAuth: []
       responses:
