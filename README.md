@@ -78,7 +78,7 @@ make start
 
 ### Dokumentasi API
 
-[![Swagger](https://img.shields.io/badge/Swagger-Dokumentasi%20API%20Arsiva-85EA2D?logo=swagger&logoColor=black)](https://petstore.swagger.io/?url=https://raw.githubusercontent.com/ArthaFreestyle/Arsiva/59b3ea9f6b46afc84e57e8d66bf20f570c95e1f7/docs/openapi.yaml)
+[![Swagger](https://img.shields.io/badge/Swagger-Dokumentasi%20API%20Arsiva-85EA2D?logo=swagger&logoColor=black)](https://petstore.swagger.io/?url=https://raw.githubusercontent.com/ArthaFreestyle/Arsiva/main/docs/openapi.yaml)
 
 Silakan lihat dokumentasi API kami di sini: 
 [👉 Buka Dokumentasi API Arsiva (Swagger UI)](https://petstore.swagger.io/?url=https://raw.githubusercontent.com/ArthaFreestyle/Arsiva/59b3ea9f6b46afc84e57e8d66bf20f570c95e1f7/docs/openapi.yaml)
