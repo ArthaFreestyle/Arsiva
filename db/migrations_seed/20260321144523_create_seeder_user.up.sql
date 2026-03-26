@@ -2,7 +2,7 @@ INSERT INTO users (username, email, password_hash, role, created_at, last_login,
 VALUES 
   (
     'Aditya', 
-    'Aditya@gmail.com', 
+    'aditya@gmail.com', 
     '$2a$10$cKpVeVrdMtUL/gwSv3ErQumTbXG/9Vf3gaJbTk3Cw5scSzkHO2J/O', 
     'member', 
     NOW(), 
@@ -11,7 +11,7 @@ VALUES
   ),
   (
     'Helmi', 
-    'Helmi@gmail.com', 
+    'helmi@gmail.com', 
     '$2a$10$cKpVeVrdMtUL/gwSv3ErQumTbXG/9Vf3gaJbTk3Cw5scSzkHO2J/O', 
     'super_admin', 
     NOW(), 
@@ -20,7 +20,7 @@ VALUES
   ),
   (
     'Mufi', 
-    'Mufi@gmail.com', 
+    'mufi@gmail.com', 
     '$2a$10$cKpVeVrdMtUL/gwSv3ErQumTbXG/9Vf3gaJbTk3Cw5scSzkHO2J/O', 
     'guru', 
     NOW(), 

@@ -2,7 +2,7 @@ package model
 
 type ArticleCategoryResponse struct {
 	ArticleCategoryId 		string `json:"article_category_id"`
-	NamaKategori 			string `json:"nama_kategori"`
+	NamaKategori 			string `json:"nama_kategori,omitempty"`
 }
 
 type ArticleCategoryRequest struct {

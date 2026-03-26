@@ -21,7 +21,7 @@ type ArticleResponse struct {
 	Category ArticleCategoryResponse `json:"category"`
 	Status string `json:"status"`
 	Excerpt string `json:"excerpt,omitempty"`
-	CreatedBy UserResponse `json:"created_by"`
+	CreatedBy UserResponse `json:"created_by,omitempty"`
 	CreatedAt string `json:"created_at"`
 	Thumbnail string `json:"thumbnail,omitempty"`
 }

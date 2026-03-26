@@ -4,7 +4,7 @@ CREATE TABLE artikel (
     judul VARCHAR(100) NOT NULL,
     konten JSONB NULL,
     kategori_id INTEGER NULL,
-    status status_enum NOT NULL,
+    status status_enum NOT NULL DEFAULT 'draft',
     excerpt VARCHAR(255) NULL,
     created_by INTEGER NULL,
     created_at TIMESTAMP(0) NOT NULL DEFAULT CURRENT_TIMESTAMP,

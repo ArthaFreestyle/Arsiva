@@ -6,23 +6,37 @@ import (
 )
 
 func ToArticleResponse(article *entity.Article) *model.ArticleResponse {
+	var content, excerpt, thumbnail, createdAt string
+	if article.Konten != nil {
+		content = *article.Konten
+	}
+	if article.Excerpt != nil {
+		excerpt = *article.Excerpt
+	}
+	if article.Thumbnail != nil {
+		thumbnail = *article.Thumbnail
+	}
+	if article.CreatedAt != nil {
+		createdAt = article.CreatedAt.Format("2006-01-02 15:04:05")
+	}
+
 	return &model.ArticleResponse{
 		ArticleId: article.ArticleId,
 		Slug: article.Slug,
 		Title: article.Judul,
-		Content: article.Konten,
+		Content: content,
 		Category: model.ArticleCategoryResponse{
-			ArticleCategoryId: article.KategoriId.ArticleCategoryId,
-			NamaKategori: article.KategoriId.NamaKategori,
+			ArticleCategoryId: article.Kategori.ArticleCategoryId,
+			NamaKategori: article.Kategori.NamaKategori,
 		},
 		Status: article.Status,
-		Excerpt: article.Excerpt,
+		Excerpt: excerpt,
 		CreatedBy: model.UserResponse{
 			ID: article.CreatedBy.UserId,
 			Username: article.CreatedBy.Username,
 		},
-		CreatedAt: article.CreatedAt.Format("2006-01-02 15:04:05"),
-		Thumbnail: article.Thumbnail,
+		CreatedAt: createdAt,
+		Thumbnail: thumbnail,
 	}
 }
 

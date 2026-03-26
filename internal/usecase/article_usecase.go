@@ -7,7 +7,7 @@ import (
 	"ArthaFreestyle/Arsiva/internal/repository"
 	"ArthaFreestyle/Arsiva/internal/utils"
 	"context"
-
+	"strconv"
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v3"
 	"github.com/sirupsen/logrus"
@@ -84,11 +84,13 @@ func (u *articleUseCaseImpl) CreateArticle(ctx context.Context, article *model.A
 	}
 
 	slug := utils.GenerateSlug(article.Title)
+	categoryIdInt, _ := strconv.Atoi(article.CategoryId)
 
 	NewArticle := &entity.Article{
 		Judul: article.Title,
 		Slug: slug,
-		KategoriId: entity.ArticleCategory{
+		KategoriId: categoryIdInt,
+		Kategori: entity.ArticleCategory{
 			ArticleCategoryId: article.CategoryId,
 		},
 		Status: "draft",
@@ -116,18 +118,20 @@ func (u *articleUseCaseImpl) UpdateArticle(ctx context.Context, article *model.A
 
 	slug := utils.GenerateSlug(article.Title)
 	excerpt := utils.GenerateExcerpt(article.Content,150)
+	categoryIdInt, _ := strconv.Atoi(article.CategoryId)
 
 	UpdatedArticle := &entity.Article{
 		ArticleId: articleId,
 		Judul: article.Title,
 		Slug: slug,
-		Konten: article.Content,
-		Excerpt: excerpt,
-		KategoriId: entity.ArticleCategory{
+		Konten: &article.Content,
+		Excerpt: &excerpt,
+		KategoriId: categoryIdInt,
+		Kategori: entity.ArticleCategory{
 			ArticleCategoryId: article.CategoryId,
 		},
 		Status: article.Status,
-		Thumbnail: article.Thumbnail,
+		Thumbnail: &article.Thumbnail,
 	}
 
 	updatedArticle,err := u.ArticleRepository.UpdateArticle(ctx,UpdatedArticle)

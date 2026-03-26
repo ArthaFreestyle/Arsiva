@@ -35,7 +35,7 @@ info:
     name: Artha
 
 servers:
-  - url: http://localhost:3000
+  - url: http://127.0.0.1:3000
     description: Local development
 
 # ───────────────────────── TAGS ─────────────────────────
@@ -52,6 +52,8 @@ tags:
     description: CRUD puzzle (🔒 GET = semua role, POST/PUT/DELETE = guru + super_admin)
   - name: Quizzes
     description: CRUD kuis (🔒 GET = semua role, POST/PUT/DELETE = guru + super_admin)
+  - name: Story Categories
+    description: CRUD kategori cerita (🔒 GET = semua role, POST/PUT/DELETE = guru + super_admin)
   - name: Stories
     description: CRUD cerita interaktif (🔒 GET = semua role, POST/PUT/DELETE = guru + super_admin)
   - name: Upload
@@ -433,6 +435,139 @@ paths:
                   data:
                     type: string
                     example: "Article Category Deleted"
+
+  # ── STORY CATEGORY ─────────────────────────────────────
+  /api/v1/categories/story:
+    get:
+      tags: [Story Categories]
+      summary: Get all story categories
+      description: |
+        🔒 **Role**: `member`, `guru`, `super_admin`
+      operationId: getAllStoryCategories
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Nomor halaman
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 10
+          description: Jumlah item per halaman
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Pencarian berdasarkan nama kategori
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Daftar kategori cerita
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StoryCategoryListWrapper"
+
+    post:
+      tags: [Story Categories]
+      summary: Create story category
+      description: |
+        🔒 **Role**: `guru`, `super_admin`
+      operationId: createStoryCategory
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoryCategoryRequest"
+            example:
+              nama_kategori: Fantasi
+      responses:
+        "200":
+          description: Kategori berhasil dibuat
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StoryCategoryWrapper"
+        "400":
+          description: Validasi gagal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/categories/story/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: ID kategori cerita
+
+    get:
+      tags: [Story Categories]
+      summary: Get story category by ID
+      description: |
+        🔒 **Role**: `member`, `guru`, `super_admin`
+      operationId: getStoryCategoryById
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Detail kategori
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StoryCategoryWrapper"
+
+    put:
+      tags: [Story Categories]
+      summary: Update story category
+      description: |
+        🔒 **Role**: `guru`, `super_admin`
+      operationId: updateStoryCategory
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoryCategoryRequest"
+      responses:
+        "200":
+          description: Kategori berhasil diupdate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StoryCategoryWrapper"
+
+    delete:
+      tags: [Story Categories]
+      summary: Delete story category
+      description: |
+        🔒 **Role**: `guru`, `super_admin`
+      operationId: deleteStoryCategory
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Kategori berhasil dihapus
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: string
+                    example: "Story Category Deleted"
 
   # ── ARTICLES ─────────────────────────────────────────────
   /api/v1/articles:
@@ -1408,6 +1543,42 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ArticleCategoryResponse"
+
+    # ── Story Category Schemas ──
+    StoryCategoryRequest:
+      type: object
+      required: [nama_kategori]
+      properties:
+        nama_kategori:
+          type: string
+          description: Nama kategori cerita
+          example: Fantasi
+
+    StoryCategoryResponse:
+      type: object
+      properties:
+        story_category_id:
+          type: string
+          description: ID kategori cerita
+        nama_kategori:
+          type: string
+          description: Nama kategori cerita
+
+    StoryCategoryWrapper:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/StoryCategoryResponse"
+
+    StoryCategoryListWrapper:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/StoryCategoryResponse"
+        paging:
+          $ref: "#/components/schemas/PageMetaData"
 
     # ── Article Schemas ──
     ArticleCreateRequest:

@@ -3,6 +3,7 @@ package repository
 import (
 	"ArthaFreestyle/Arsiva/internal/entity"
 	"context"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sirupsen/logrus"
@@ -46,14 +47,14 @@ func (r *articleRepositoryImpl) GetAllArticle(ctx context.Context, page int, siz
     a.slug,
     a.judul,
     JSON_BUILD_OBJECT(
-        'kategori_id', k.kategori_artikel_id, 
-        'nama_kategori', k.nama_kategori
+        'ArticleCategoryId', k.kategori_artikel_id::text, 
+        'NamaKategori', k.nama_kategori
     ) AS kategori,
     a.status,
     a.excerpt,
     JSON_BUILD_OBJECT(
-        'user_id', u.user_id, 
-        'username', u.username
+        'UserId', u.user_id::text, 
+        'Username', u.username
     ) AS "user",
     a.created_at,
     a.thumbnail 
@@ -68,7 +69,7 @@ LIMIT $2 OFFSET $3`
 	if err != nil {
 		return nil, 0, err
 	}
-	articles, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[entity.Article])
+	articles, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByNameLax[entity.Article])
 	if err != nil {
 		return nil, 0, err
 	}
@@ -82,14 +83,14 @@ func (r *articleRepositoryImpl) GetArticleBySlug(ctx context.Context, slug strin
     a.judul,
     a.konten,
     JSON_BUILD_OBJECT(
-        'kategori_id', k.kategori_artikel_id, 
-        'nama_kategori', k.nama_kategori
+        'ArticleCategoryId', k.kategori_artikel_id::text, 
+        'NamaKategori', k.nama_kategori
     ) AS kategori,
     a.status,
     a.excerpt,
     JSON_BUILD_OBJECT(
-        'user_id', u.user_id, 
-        'username', u.username
+        'UserId', u.user_id::text, 
+        'Username', u.username
     ) AS "user",
     a.created_at,
     a.thumbnail 
@@ -101,7 +102,7 @@ WHERE a.slug = $1`
 	if err != nil {
 		return nil, err
 	}
-	article, err := pgx.CollectExactlyOneRow(rows, pgx.RowToAddrOfStructByName[entity.Article])
+	article, err := pgx.CollectExactlyOneRow(rows, pgx.RowToAddrOfStructByNameLax[entity.Article])
 	if err != nil {
 		return nil, err
 	}
@@ -115,14 +116,14 @@ func (r *articleRepositoryImpl) GetArticleById(ctx context.Context, articleId st
     a.judul,
     a.konten,
     JSON_BUILD_OBJECT(
-        'kategori_id', k.kategori_artikel_id, 
-        'nama_kategori', k.nama_kategori
+        'ArticleCategoryId', k.kategori_artikel_id::text, 
+        'NamaKategori', k.nama_kategori
     ) AS kategori,
     a.status,
     a.excerpt,
     JSON_BUILD_OBJECT(
-        'user_id', u.user_id, 
-        'username', u.username
+        'UserId', u.user_id::text, 
+        'Username', u.username
     ) AS "user",
     a.created_at,
     a.thumbnail 
@@ -134,7 +135,7 @@ WHERE a.artikel_id = $1`
 	if err != nil {
 		return nil, err
 	}
-	article, err := pgx.CollectExactlyOneRow(rows, pgx.RowToAddrOfStructByName[entity.Article])
+	article, err := pgx.CollectExactlyOneRow(rows, pgx.RowToAddrOfStructByNameLax[entity.Article])
 	if err != nil {
 		return nil, err
 	}
@@ -142,12 +143,19 @@ WHERE a.artikel_id = $1`
 }
 
 func (r *articleRepositoryImpl) CreateArticle(ctx context.Context, article *entity.Article) (*entity.Article, error) {
-	SQL := `INSERT INTO artikel (slug,judul,konten,kategori_id,status,excerpt,created_by,thumbnail) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING artikel_id,slug,judul,konten,kategori_id,status,excerpt,created_by,created_at,thumbnail`
-	rows, err := r.DB.Query(ctx, SQL, article.Slug, article.Judul, article.Konten, article.KategoriId.ArticleCategoryId, article.Status, article.Excerpt, article.CreatedBy.UserId, article.Thumbnail)
-	if err != nil {
-		return nil, err
-	}
-	article, err = pgx.CollectExactlyOneRow(rows, pgx.RowToAddrOfStructByName[entity.Article])
+	SQL := `INSERT INTO artikel (slug,judul,kategori_id,created_by) VALUES ($1,$2,$3,$4) RETURNING artikel_id,slug,judul,konten,kategori_id,status,excerpt,created_by,created_at,thumbnail`
+	err := r.DB.QueryRow(ctx, SQL, article.Slug, article.Judul, article.KategoriId, article.CreatedBy.UserId).Scan(
+        &article.ArticleId,
+        &article.Slug,
+        &article.Judul,
+        &article.Konten,
+        &article.KategoriId,
+        &article.Status,
+        &article.Excerpt,
+        &article.CreatedBy.UserId, // <--- String dari DB langsung dipetakan ke property UserId di dalam nested struct
+        &article.CreatedAt,
+        &article.Thumbnail,
+    )
 	if err != nil {
 		return nil, err
 	}
@@ -156,14 +164,34 @@ func (r *articleRepositoryImpl) CreateArticle(ctx context.Context, article *enti
 
 func (r *articleRepositoryImpl) UpdateArticle(ctx context.Context, article *entity.Article) (*entity.Article, error) {
 	SQL := `UPDATE artikel SET slug = $1,judul = $2,konten = $3,kategori_id = $4,status = $5,excerpt = $6,thumbnail = $7 WHERE artikel_id = $8 RETURNING artikel_id,slug,judul,konten,kategori_id,status,excerpt,created_by,created_at,thumbnail`
-	rows, err := r.DB.Query(ctx, SQL, article.Slug, article.Judul, article.Konten, article.KategoriId.ArticleCategoryId, article.Status, article.Excerpt, article.Thumbnail, article.ArticleId)
+	var createdByID string // (Ubah ke tipe UUID jika database kamu pakai UUID)
+
+	err := r.DB.QueryRow(ctx, SQL, 
+		article.Slug, 
+		article.Judul, 
+		article.Konten, 
+		article.KategoriId, 
+		article.Status, 
+		article.Excerpt, 
+		article.Thumbnail, 
+		article.ArticleId,
+	).Scan(
+		&article.ArticleId,
+		&article.Slug,
+		&article.Judul,
+		&article.Konten,
+		&article.KategoriId,
+		&article.Status,
+		&article.Excerpt,
+		&createdByID, // <--- Masuk ke variabel sementara dulu, biar gak panic!
+		&article.CreatedAt,
+		&article.Thumbnail,
+	)
 	if err != nil {
 		return nil, err
 	}
-	article, err = pgx.CollectExactlyOneRow(rows, pgx.RowToAddrOfStructByName[entity.Article])
-	if err != nil {
-		return nil, err
-	}
+
+	article.CreatedBy.UserId = createdByID
 	return article, nil
 }
 

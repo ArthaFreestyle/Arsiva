@@ -7,7 +7,7 @@ import (
 	"ArthaFreestyle/Arsiva/internal/repository"
 	"ArthaFreestyle/Arsiva/internal/utils"
 	"context"
-
+	"strings"
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -75,7 +75,7 @@ func (c *UserUseCaseImpl) CreateUser(ctx context.Context,user *model.UserRequest
 
 	NewUser := &entity.User{
 		Username: user.Username,
-		Email: user.Email,
+		Email: strings.ToLower(user.Email),
 		PasswordHash: HashedPassword,
 		Role: user.Role,
 	}
@@ -104,7 +104,7 @@ func (c *UserUseCaseImpl) UpdateUser(ctx context.Context,user *model.UserRequest
 	UpdatedUser := &entity.User{
 		UserId: UserId,
 		Username: user.Username,
-		Email: user.Email,
+		Email: strings.ToLower(user.Email),
 		PasswordHash: HashedPassword,
 		Role: user.Role,
 	}

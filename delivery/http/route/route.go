@@ -16,6 +16,7 @@ type RouteConfig struct {
 	PuzzleController http.PuzzleController
 	QuizController http.QuizController
 	CeritaController http.CeritaController
+	StoryCategoryController http.StoryCategoryController
 	AuthMiddleware fiber.Handler
 }
 
@@ -26,7 +27,7 @@ func (c *RouteConfig) SetupRoutes() {
 
 func (c *RouteConfig) SetupGuestRoutes() {
 	c.App.Post("/api/v1/login",c.AuthController.Login)
-	c.App.Get("/uploads/*",c.UploadController.GetFile)
+	c.App.Get("uploads/*",c.UploadController.GetFile)
 }
 
 func (c *RouteConfig) SetupAuthRoutes() {
@@ -71,6 +72,10 @@ func (c *RouteConfig) SetupAuthRoutes() {
 	allAuth.Get("/stories",c.CeritaController.GetAllCerita)
 	allAuth.Get("/stories/:id",c.CeritaController.GetCeritaById)
 
+	//story category - read
+	allAuth.Get("/categories/story",c.StoryCategoryController.GetAllStoryCategories)
+	allAuth.Get("/categories/story/:id",c.StoryCategoryController.GetStoryCategoryById)
+
 	// ==========================================
 	// GURU + SUPERADMIN (content management)
 	// ==========================================
@@ -100,6 +105,11 @@ func (c *RouteConfig) SetupAuthRoutes() {
 	guruAdmin.Post("/stories",c.CeritaController.CreateCerita)
 	guruAdmin.Put("/stories/:id",c.CeritaController.UpdateCerita)
 	guruAdmin.Delete("/stories/:id",c.CeritaController.DeleteCerita)
+
+	//story category - write
+	guruAdmin.Post("/categories/story",c.StoryCategoryController.CreateStoryCategory)
+	guruAdmin.Put("/categories/story/:id",c.StoryCategoryController.UpdateStoryCategory)
+	guruAdmin.Delete("/categories/story/:id",c.StoryCategoryController.DeleteStoryCategory)
 
 	//upload
 	guruAdmin.Post("/upload/image",c.UploadController.UploadImage)

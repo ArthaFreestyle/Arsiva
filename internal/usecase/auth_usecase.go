@@ -1,12 +1,12 @@
 package usecase
 
 import (
-
 	"ArthaFreestyle/Arsiva/internal/model"
 	"ArthaFreestyle/Arsiva/internal/model/converter"
 	"ArthaFreestyle/Arsiva/internal/repository"
 	"ArthaFreestyle/Arsiva/internal/utils"
 	"context"
+	"strings"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v3"
@@ -41,6 +41,8 @@ func (c *AuthUseCaseImpl) Login(ctx context.Context,request *model.LoginRequest)
 		c.Log.Warnf("Invalid request body  : %+v", err)
 		return nil,fiber.ErrBadRequest
 	}
+
+	request.Email = strings.ToLower(request.Email)
 
 	user,err := c.Repo.FindByEmail(ctx,request.Email); 
 	if err != nil {

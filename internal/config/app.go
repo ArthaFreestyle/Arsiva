@@ -29,6 +29,7 @@ func Bootstrap(cfg BootstrapConfig) {
 	puzzleRepo := repository.NewPuzzleRepository(cfg.DB,cfg.Log)
 	quizRepo := repository.NewQuizRepository(cfg.DB,cfg.Log)
 	ceritaRepo := repository.NewCeritaRepository(cfg.DB,cfg.Log)
+	storyCategoryRepo := repository.NewStoryCategoryRepository(cfg.DB,cfg.Log)
 
 	AuthUseCase := usecase.NewAuthUseCase(userRepo,cfg.Secret,cfg.Validate,cfg.Log,cfg.DB)
 	UserUseCase := usecase.NewUserUseCase(userRepo,cfg.Log,cfg.DB,cfg.Validate)
@@ -37,6 +38,7 @@ func Bootstrap(cfg BootstrapConfig) {
 	PuzzleUseCase := usecase.NewPuzzleUseCase(puzzleRepo,cfg.Log,cfg.Validate)
 	QuizUseCase := usecase.NewQuizUseCase(quizRepo,cfg.Log,cfg.Validate)
 	CeritaUseCase := usecase.NewCeritaUseCase(ceritaRepo,cfg.Log,cfg.Validate)
+	StoryCategoryUseCase := usecase.NewStoryCategoryUseCase(storyCategoryRepo,cfg.Log,cfg.Validate)
 
 	AuthController := http.NewAuthController(cfg.Log,AuthUseCase)
 	UserController := http.NewUserController(UserUseCase,cfg.Log)
@@ -46,6 +48,7 @@ func Bootstrap(cfg BootstrapConfig) {
 	PuzzleController := http.NewPuzzleController(PuzzleUseCase,cfg.Log)
 	QuizController := http.NewQuizController(QuizUseCase,cfg.Log)
 	CeritaController := http.NewCeritaController(CeritaUseCase,cfg.Log)
+	StoryCategoryController := http.NewStoryCategoryController(StoryCategoryUseCase,cfg.Log)
 
 	// Create auth middleware
 	authMiddleware := middleware.NewAuthMiddleware(cfg.Secret,cfg.Log)
@@ -60,6 +63,7 @@ func Bootstrap(cfg BootstrapConfig) {
 		PuzzleController : PuzzleController,
 		QuizController : QuizController,
 		CeritaController : CeritaController,
+		StoryCategoryController : StoryCategoryController,
 		AuthMiddleware : authMiddleware,
 	}
 
