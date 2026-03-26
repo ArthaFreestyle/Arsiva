@@ -17,6 +17,7 @@ type RouteConfig struct {
 	QuizController http.QuizController
 	CeritaController http.CeritaController
 	StoryCategoryController http.StoryCategoryController
+	QuizCategoryController http.QuizCategoryController
 	AuthMiddleware fiber.Handler
 }
 
@@ -76,6 +77,10 @@ func (c *RouteConfig) SetupAuthRoutes() {
 	allAuth.Get("/categories/story",c.StoryCategoryController.GetAllStoryCategories)
 	allAuth.Get("/categories/story/:id",c.StoryCategoryController.GetStoryCategoryById)
 
+	//quiz category - read
+	allAuth.Get("/categories/quiz",c.QuizCategoryController.GetAllQuizCategories)
+	allAuth.Get("/categories/quiz/:id",c.QuizCategoryController.GetQuizCategoryById)
+
 	// ==========================================
 	// GURU + SUPERADMIN (content management)
 	// ==========================================
@@ -110,6 +115,11 @@ func (c *RouteConfig) SetupAuthRoutes() {
 	guruAdmin.Post("/categories/story",c.StoryCategoryController.CreateStoryCategory)
 	guruAdmin.Put("/categories/story/:id",c.StoryCategoryController.UpdateStoryCategory)
 	guruAdmin.Delete("/categories/story/:id",c.StoryCategoryController.DeleteStoryCategory)
+
+	//quiz category - write
+	guruAdmin.Post("/categories/quiz",c.QuizCategoryController.CreateQuizCategory)
+	guruAdmin.Put("/categories/quiz/:id",c.QuizCategoryController.UpdateQuizCategory)
+	guruAdmin.Delete("/categories/quiz/:id",c.QuizCategoryController.DeleteQuizCategory)
 
 	//upload
 	guruAdmin.Post("/upload/image",c.UploadController.UploadImage)

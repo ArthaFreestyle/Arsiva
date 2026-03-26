@@ -6,7 +6,7 @@ type QuizRequest struct {
 	Judul       string             `json:"judul" validate:"required"`
 	Gambar      string             `json:"gambar"`
 	Thumbnail   string             `json:"thumbnail"`
-	KategoriId  int                `json:"kategori_id" validate:"required"`
+	KategoriId  string                `json:"kategori_id" validate:"required"`
 	XpReward    int                `json:"xp_reward"`
 	IsPublished bool               `json:"is_published"`
 	Soal        []*QuestionRequest `json:"soal" validate:"required,dive"`

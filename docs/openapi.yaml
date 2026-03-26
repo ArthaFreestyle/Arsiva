@@ -52,6 +52,8 @@ tags:
     description: CRUD puzzle (🔒 GET = semua role, POST/PUT/DELETE = guru + super_admin)
   - name: Quizzes
     description: CRUD kuis (🔒 GET = semua role, POST/PUT/DELETE = guru + super_admin)
+  - name: Quiz Categories
+    description: CRUD kategori kuis (🔒 GET = semua role, POST/PUT/DELETE = guru + super_admin)
   - name: Story Categories
     description: CRUD kategori cerita (🔒 GET = semua role, POST/PUT/DELETE = guru + super_admin)
   - name: Stories
@@ -568,6 +570,140 @@ paths:
                   data:
                     type: string
                     example: "Story Category Deleted"
+
+  # ── QUIZ CATEGORY ──────────────────────────────────────
+  /api/v1/categories/quiz:
+    get:
+      tags: [Quiz Categories]
+      summary: Get all quiz categories
+      description: |
+        🔒 **Role**: `member`, `guru`, `super_admin`
+      operationId: getAllQuizCategories
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Nomor halaman
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 10
+          description: Jumlah item per halaman
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Pencarian berdasarkan nama kategori
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Daftar kategori kuis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuizCategoryListWrapper"
+
+    post:
+      tags: [Quiz Categories]
+      summary: Create quiz category
+      description: |
+        🔒 **Role**: `guru`, `super_admin`
+      operationId: createQuizCategory
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuizCategoryRequest"
+            example:
+              nama_kategori: Pengetahuan Umum
+              deskripsi: Kategori kuis untuk pengetahuan umum
+      responses:
+        "200":
+          description: Kategori berhasil dibuat
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuizCategoryWrapper"
+        "400":
+          description: Validasi gagal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/categories/quiz/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: ID kategori kuis
+
+    get:
+      tags: [Quiz Categories]
+      summary: Get quiz category by ID
+      description: |
+        🔒 **Role**: `member`, `guru`, `super_admin`
+      operationId: getQuizCategoryById
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Detail kategori
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuizCategoryWrapper"
+
+    put:
+      tags: [Quiz Categories]
+      summary: Update quiz category
+      description: |
+        🔒 **Role**: `guru`, `super_admin`
+      operationId: updateQuizCategory
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuizCategoryRequest"
+      responses:
+        "200":
+          description: Kategori berhasil diupdate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuizCategoryWrapper"
+
+    delete:
+      tags: [Quiz Categories]
+      summary: Delete quiz category
+      description: |
+        🔒 **Role**: `guru`, `super_admin`
+      operationId: deleteQuizCategory
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Kategori berhasil dihapus
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: string
+                    example: "Quiz Category Deleted"
 
   # ── ARTICLES ─────────────────────────────────────────────
   /api/v1/articles:
@@ -1580,6 +1716,53 @@ components:
         paging:
           $ref: "#/components/schemas/PageMetaData"
 
+    # ── Quiz Category Schemas ──
+    QuizCategoryRequest:
+      type: object
+      required: [nama_kategori]
+      properties:
+        nama_kategori:
+          type: string
+          description: Nama kategori kuis
+          example: Pengetahuan Umum
+        deskripsi:
+          type: string
+          description: Deskripsi kategori kuis (opsional)
+          example: Kategori kuis untuk pengetahuan umum
+
+    QuizCategoryResponse:
+      type: object
+      properties:
+        quiz_category_id:
+          type: string
+          description: ID kategori kuis
+        nama_kategori:
+          type: string
+          description: Nama kategori kuis
+        created_at:
+          type: string
+          format: date-time
+        created_by:
+          type: string
+        deskripsi:
+          type: string
+
+    QuizCategoryWrapper:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/QuizCategoryResponse"
+
+    QuizCategoryListWrapper:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuizCategoryResponse"
+        paging:
+          $ref: "#/components/schemas/PageMetaData"
+
     # ── Article Schemas ──
     ArticleCreateRequest:
       type: object
@@ -1739,9 +1922,9 @@ components:
     # ── Quiz Schemas ──
     OptionRequest:
       type: object
-      required: [teks_pilihan, is_correct, score]
+      required: [teks_jawaban, is_correct, score]
       properties:
-        teks_pilihan:
+        teks_jawaban:
           type: string
           example: "Jakarta"
         is_correct:
@@ -1755,13 +1938,16 @@ components:
       type: object
       required: [teks_pertanyaan, tipe, poin, pertanyaan_gambar, pilihan]
       properties:
+        urutan:
+          type: integer
+          example: 1
         teks_pertanyaan:
           type: string
           example: "Apa ibukota Indonesia?"
         tipe:
           type: string
-          enum: [multiple_choice, code]
-          example: "multiple_choice"
+          enum: ["pilihan_ganda", "benar_salah"]
+          example: "pilihan_ganda"
         poin:
           type: integer
           example: 10
@@ -1775,7 +1961,8 @@ components:
 
     QuizRequest:
       type: object
-      required: [judul, gambar, thumbnail, xp_reward, kategori_id, is_published, soal]
+      required:
+        [judul, gambar, thumbnail, xp_reward, kategori_id, is_published, soal]
       properties:
         judul:
           type: string

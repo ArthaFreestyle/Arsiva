@@ -7,7 +7,7 @@ type Quiz struct {
 	Judul       string     `db:"judul"`
 	Gambar      string     `db:"gambar"`
 	Thumbnail   string     `db:"thumbnail"`
-	KategoriId  int        `db:"kategori_id"`
+	KategoriId  string        `db:"kategori_id"`
 	Kategori    string     `db:"kategori"`
 	XpReward    int        `db:"xp_reward"`
 	CreatedAt   *time.Time `db:"created_at"`
