@@ -3,6 +3,7 @@ package route
 import (
 	"github.com/gofiber/fiber/v3"
 	"ArthaFreestyle/Arsiva/internal/delivery/http"
+	"ArthaFreestyle/Arsiva/delivery/http/middleware"
 )
 
 type RouteConfig struct {
@@ -14,6 +15,8 @@ type RouteConfig struct {
 	UploadController http.UploadController
 	PuzzleController http.PuzzleController
 	QuizController http.QuizController
+	CeritaController http.CeritaController
+	AuthMiddleware fiber.Handler
 }
 
 func (c *RouteConfig) SetupRoutes() {
@@ -23,46 +26,81 @@ func (c *RouteConfig) SetupRoutes() {
 
 func (c *RouteConfig) SetupGuestRoutes() {
 	c.App.Post("/api/v1/login",c.AuthController.Login)
+	c.App.Get("/uploads/*",c.UploadController.GetFile)
 }
 
 func (c *RouteConfig) SetupAuthRoutes() {
+	// Group with auth middleware
+	auth := c.App.Group("/api/v1", c.AuthMiddleware)
+
+	// ==========================================
+	// SUPERADMIN ONLY
+	// ==========================================
+	superadmin := auth.Group("", middleware.RoleMiddleware("super_admin"))
+
 	//users
-	c.App.Get("/api/v1/users",c.UserController.GetAllUsers)
-	c.App.Get("/api/v1/users/:id",c.UserController.GetUserById)
-	c.App.Post("/api/v1/users",c.UserController.CreateUser)
-	c.App.Put("/api/v1/users/:id",c.UserController.UpdateUser)
-	c.App.Delete("/api/v1/users/:id",c.UserController.DeleteUser)
+	superadmin.Get("/users",c.UserController.GetAllUsers)
+	superadmin.Get("/users/:id",c.UserController.GetUserById)
+	superadmin.Post("/users",c.UserController.CreateUser)
+	superadmin.Put("/users/:id",c.UserController.UpdateUser)
+	superadmin.Delete("/users/:id",c.UserController.DeleteUser)
 
-	//article category
-	c.App.Get("/api/v1/categories/article",c.ArticleCategoryController.GetAllArticleCategories)
-	c.App.Get("/api/v1/categories/article/:id",c.ArticleCategoryController.GetArticleCategoryById)
-	c.App.Post("/api/v1/categories/article",c.ArticleCategoryController.CreateArticleCategory)
-	c.App.Put("/api/v1/categories/article/:id",c.ArticleCategoryController.UpdateArticleCategory)
-	c.App.Delete("/api/v1/categories/article/:id",c.ArticleCategoryController.DeleteArticleCategory)
+	// ==========================================
+	// ALL AUTHENTICATED (member, guru, superadmin)
+	// ==========================================
+	allAuth := auth.Group("", middleware.RoleMiddleware("member","guru","super_admin"))
 
-	//article
-	c.App.Get("/api/v1/articles",c.ArticleController.GetAllArticle)
-	c.App.Get("/api/v1/articles/detail/:id",c.ArticleController.GetArticleById)
-	c.App.Get("/api/v1/articles/:slug",c.ArticleController.GetArticleBySlug)
-	c.App.Post("/api/v1/articles",c.ArticleController.CreateArticle)
-	c.App.Put("/api/v1/articles/:id",c.ArticleController.UpdateArticle)
-	c.App.Delete("/api/v1/articles/:id",c.ArticleController.DeleteArticle)
+	//article category - read
+	allAuth.Get("/categories/article",c.ArticleCategoryController.GetAllArticleCategories)
+	allAuth.Get("/categories/article/:id",c.ArticleCategoryController.GetArticleCategoryById)
 
-	//puzzle
-	c.App.Get("/api/v1/puzzles",c.PuzzleController.GetAllPuzzle)
-	c.App.Get("/api/v1/puzzles/:id",c.PuzzleController.GetPuzzleById)
-	c.App.Post("/api/v1/puzzles",c.PuzzleController.CreatePuzzle)
-	c.App.Put("/api/v1/puzzles/:id",c.PuzzleController.UpdatePuzzle)
-	c.App.Delete("/api/v1/puzzles/:id",c.PuzzleController.DeletePuzzle)
+	//article - read
+	allAuth.Get("/articles",c.ArticleController.GetAllArticle)
+	allAuth.Get("/articles/detail/:id",c.ArticleController.GetArticleById)
+	allAuth.Get("/articles/:slug",c.ArticleController.GetArticleBySlug)
 
-	//quiz
-	c.App.Get("/api/v1/quizzes",c.QuizController.GetAllQuiz)
-	c.App.Get("/api/v1/quizzes/:id",c.QuizController.GetQuizById)
-	c.App.Post("/api/v1/quizzes",c.QuizController.CreateQuiz)
-	c.App.Put("/api/v1/quizzes/:id",c.QuizController.UpdateQuiz)
-	c.App.Delete("/api/v1/quizzes/:id",c.QuizController.DeleteQuiz)
-	
+	//puzzle - read
+	allAuth.Get("/puzzles",c.PuzzleController.GetAllPuzzle)
+	allAuth.Get("/puzzles/:id",c.PuzzleController.GetPuzzleById)
+
+	//quiz - read
+	allAuth.Get("/quizzes",c.QuizController.GetAllQuiz)
+	allAuth.Get("/quizzes/:id",c.QuizController.GetQuizById)
+
+	//cerita interaktif - read
+	allAuth.Get("/stories",c.CeritaController.GetAllCerita)
+	allAuth.Get("/stories/:id",c.CeritaController.GetCeritaById)
+
+	// ==========================================
+	// GURU + SUPERADMIN (content management)
+	// ==========================================
+	guruAdmin := auth.Group("", middleware.RoleMiddleware("guru","super_admin"))
+
+	//article category - write
+	guruAdmin.Post("/categories/article",c.ArticleCategoryController.CreateArticleCategory)
+	guruAdmin.Put("/categories/article/:id",c.ArticleCategoryController.UpdateArticleCategory)
+	guruAdmin.Delete("/categories/article/:id",c.ArticleCategoryController.DeleteArticleCategory)
+
+	//article - write
+	guruAdmin.Post("/articles",c.ArticleController.CreateArticle)
+	guruAdmin.Put("/articles/:id",c.ArticleController.UpdateArticle)
+	guruAdmin.Delete("/articles/:id",c.ArticleController.DeleteArticle)
+
+	//puzzle - write
+	guruAdmin.Post("/puzzles",c.PuzzleController.CreatePuzzle)
+	guruAdmin.Put("/puzzles/:id",c.PuzzleController.UpdatePuzzle)
+	guruAdmin.Delete("/puzzles/:id",c.PuzzleController.DeletePuzzle)
+
+	//quiz - write
+	guruAdmin.Post("/quizzes",c.QuizController.CreateQuiz)
+	guruAdmin.Put("/quizzes/:id",c.QuizController.UpdateQuiz)
+	guruAdmin.Delete("/quizzes/:id",c.QuizController.DeleteQuiz)
+
+	//cerita interaktif - write
+	guruAdmin.Post("/stories",c.CeritaController.CreateCerita)
+	guruAdmin.Put("/stories/:id",c.CeritaController.UpdateCerita)
+	guruAdmin.Delete("/stories/:id",c.CeritaController.DeleteCerita)
+
 	//upload
-	c.App.Post("/api/v1/upload/image",c.UploadController.UploadImage)
-	c.App.Get("/uploads/*",c.UploadController.GetFile)
+	guruAdmin.Post("/upload/image",c.UploadController.UploadImage)
 }

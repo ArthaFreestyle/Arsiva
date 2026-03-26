@@ -6,8 +6,20 @@ info:
     REST API untuk **Arsiva** — sistem manajemen arsip dan inventaris.
 
     ## Autentikasi
-    Endpoint di bawah grup **Users** memerlukan JWT Bearer token.  
+    Semua endpoint (kecuali Login dan GET uploaded files) memerlukan JWT Bearer token.  
     Dapatkan token melalui endpoint `POST /api/v1/login`.
+
+    ## Role-Based Access Control
+    Setiap endpoint dilindungi oleh middleware berdasarkan role yang ada di JWT:
+
+    | Role | Deskripsi | Akses |
+    |------|-----------|-------|
+    | `member` | Siswa / Murid | Hanya bisa **membaca** konten (GET) |
+    | `guru` | Guru / Pengajar | Membaca + **membuat/edit/hapus** konten |
+    | `super_admin` | Administrator | Semua akses termasuk **manajemen user** |
+
+    Response `401 Unauthorized` jika token tidak valid/expired.  
+    Response `403 Forbidden` jika role tidak memiliki izin.
 
     ## Format Response
     Semua response mengikuti format:
@@ -29,19 +41,21 @@ servers:
 # ───────────────────────── TAGS ─────────────────────────
 tags:
   - name: Auth
-    description: Autentikasi & token management
+    description: Autentikasi & token management (public)
   - name: Users
-    description: CRUD manajemen data user
+    description: CRUD manajemen data user (🔒 super_admin)
   - name: Article Categories
-    description: CRUD kategori artikel
+    description: CRUD kategori artikel (🔒 GET = semua role, POST/PUT/DELETE = guru + super_admin)
   - name: Articles
-    description: Manajemen artikel (two-phase create → update)
+    description: Manajemen artikel (🔒 GET = semua role, POST/PUT/DELETE = guru + super_admin)
   - name: Puzzles
-    description: CRUD puzzle dan manajemen soal
+    description: CRUD puzzle (🔒 GET = semua role, POST/PUT/DELETE = guru + super_admin)
   - name: Quizzes
-    description: CRUD kuis, termasuk soal dan pilihan ganda
+    description: CRUD kuis (🔒 GET = semua role, POST/PUT/DELETE = guru + super_admin)
+  - name: Stories
+    description: CRUD cerita interaktif (🔒 GET = semua role, POST/PUT/DELETE = guru + super_admin)
   - name: Upload
-    description: Upload file gambar untuk artikel
+    description: Upload file gambar (🔒 POST = guru + super_admin, GET = public)
 
 # ───────────────────────── PATHS ────────────────────────
 paths:
@@ -101,7 +115,9 @@ paths:
     get:
       tags: [Users]
       summary: Get all users
-      description: Mengambil seluruh user yang aktif (`is_active = true`).
+      description: |
+        Mengambil seluruh user yang aktif (`is_active = true`).  
+        🔒 **Role**: `super_admin`
       operationId: getAllUsers
       security:
         - BearerAuth: []
@@ -122,6 +138,10 @@ paths:
                     username: budi
                     email: budi@example.com
                     role: guru
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
         "500":
           description: Internal server error
           content:
@@ -135,7 +155,8 @@ paths:
       summary: Create user
       description: |
         Membuat user baru. Password akan di-hash menggunakan bcrypt (cost 12).  
-        Semua field wajib diisi.
+        Semua field wajib diisi.  
+        🔒 **Role**: `super_admin`
       operationId: createUser
       security:
         - BearerAuth: []
@@ -171,6 +192,10 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
               example:
                 error: "Bad Request"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
         "500":
           description: Gagal menyimpan ke database
           content:
@@ -193,7 +218,9 @@ paths:
     get:
       tags: [Users]
       summary: Get user by ID
-      description: Mengambil detail satu user berdasarkan `user_id`.
+      description: |
+        Mengambil detail satu user berdasarkan `user_id`.  
+        🔒 **Role**: `super_admin`
       operationId: getUserById
       security:
         - BearerAuth: []
@@ -222,7 +249,8 @@ paths:
       summary: Update user
       description: |
         Mengupdate data user. Semua field harus diisi termasuk password baru.  
-        Password akan di-hash ulang.
+        Password akan di-hash ulang.  
+        🔒 **Role**: `super_admin`
       operationId: updateUser
       security:
         - BearerAuth: []
@@ -268,7 +296,8 @@ paths:
       summary: Delete user (soft delete)
       description: |
         Melakukan **soft delete** — mengubah `is_active` menjadi `false`.  
-        Data user tetap ada di database.
+        Data user tetap ada di database.  
+        🔒 **Role**: `super_admin`
       operationId: deleteUser
       security:
         - BearerAuth: []
@@ -295,6 +324,8 @@ paths:
     get:
       tags: [Article Categories]
       summary: Get all article categories
+      description: |
+        🔒 **Role**: `member`, `guru`, `super_admin`
       operationId: getAllArticleCategories
       security:
         - BearerAuth: []
@@ -309,6 +340,8 @@ paths:
     post:
       tags: [Article Categories]
       summary: Create article category
+      description: |
+        🔒 **Role**: `guru`, `super_admin`
       operationId: createArticleCategory
       security:
         - BearerAuth: []
@@ -346,6 +379,8 @@ paths:
     get:
       tags: [Article Categories]
       summary: Get article category by ID
+      description: |
+        🔒 **Role**: `member`, `guru`, `super_admin`
       operationId: getArticleCategoryById
       security:
         - BearerAuth: []
@@ -360,6 +395,8 @@ paths:
     put:
       tags: [Article Categories]
       summary: Update article category
+      description: |
+        🔒 **Role**: `guru`, `super_admin`
       operationId: updateArticleCategory
       security:
         - BearerAuth: []
@@ -380,6 +417,8 @@ paths:
     delete:
       tags: [Article Categories]
       summary: Delete article category
+      description: |
+        🔒 **Role**: `guru`, `super_admin`
       operationId: deleteArticleCategory
       security:
         - BearerAuth: []
@@ -400,7 +439,9 @@ paths:
     get:
       tags: [Articles]
       summary: Get all articles
-      description: Mengambil semua artikel yang aktif (tanpa konten, untuk listing).
+      description: |
+        Mengambil semua artikel yang aktif (tanpa konten, untuk listing).  
+        🔒 **Role**: `member`, `guru`, `super_admin`
       operationId: getAllArticles
       parameters:
         - name: page
@@ -442,7 +483,8 @@ paths:
       description: |
         Membuat artikel baru dengan status **draft**.  
         Hanya memerlukan `title`, `category_id`, dan `created_by`.  
-        Slug otomatis di-generate dari judul.
+        Slug otomatis di-generate dari judul.  
+        🔒 **Role**: `guru`, `super_admin`
       operationId: createArticle
       security:
         - BearerAuth: []
@@ -482,7 +524,9 @@ paths:
     get:
       tags: [Articles]
       summary: Get article by slug
-      description: Mengambil detail artikel lengkap beserta konten.
+      description: |
+        Mengambil detail artikel lengkap beserta konten.  
+        🔒 **Role**: `member`, `guru`, `super_admin`
       operationId: getArticleBySlug
       security:
         - BearerAuth: []
@@ -512,7 +556,9 @@ paths:
     get:
       tags: [Articles]
       summary: Get article by ID
-      description: Mengambil detail artikel lengkap berdasarkan ID (untuk halaman edit).
+      description: |
+        Mengambil detail artikel lengkap berdasarkan ID (untuk halaman edit).  
+        🔒 **Role**: `member`, `guru`, `super_admin`
       operationId: getArticleById
       security:
         - BearerAuth: []
@@ -544,7 +590,8 @@ paths:
       summary: Update article
       description: |
         Update artikel dengan konten lengkap dari Block-Based Editor (BSON).  
-        Slug dan excerpt otomatis di-generate ulang.
+        Slug dan excerpt otomatis di-generate ulang.  
+        🔒 **Role**: `guru`, `super_admin`
       operationId: updateArticle
       security:
         - BearerAuth: []
@@ -577,7 +624,9 @@ paths:
     delete:
       tags: [Articles]
       summary: Delete article (soft delete)
-      description: Mengubah `is_active` menjadi `false`.
+      description: |
+        Mengubah `is_active` menjadi `false`.  
+        🔒 **Role**: `guru`, `super_admin`
       operationId: deleteArticle
       security:
         - BearerAuth: []
@@ -609,7 +658,8 @@ paths:
         - Format yang didukung: **jpg, jpeg, png, webp, gif**  
         - Ukuran maksimal: **5MB**  
         - File disimpan di `uploads/YYYY/MM/<uuid>.ext`  
-        - URL yang dikembalikan bisa langsung diakses via `GET /uploads/...`
+        - URL yang dikembalikan bisa langsung diakses via `GET /uploads/...`  
+        🔒 **Role**: `guru`, `super_admin`
       operationId: uploadImage
       security:
         - BearerAuth: []
@@ -677,6 +727,8 @@ paths:
     get:
       tags: [Puzzles]
       summary: Get all puzzles
+      description: |
+        🔒 **Role**: `member`, `guru`, `super_admin`
       operationId: getAllPuzzles
       parameters:
         - name: page
@@ -714,6 +766,8 @@ paths:
     post:
       tags: [Puzzles]
       summary: Create puzzle
+      description: |
+        🔒 **Role**: `guru`, `super_admin`
       operationId: createPuzzle
       security:
         - BearerAuth: []
@@ -754,6 +808,8 @@ paths:
     get:
       tags: [Puzzles]
       summary: Get puzzle by ID
+      description: |
+        🔒 **Role**: `member`, `guru`, `super_admin`
       operationId: getPuzzleById
       security:
         - BearerAuth: []
@@ -773,6 +829,8 @@ paths:
     put:
       tags: [Puzzles]
       summary: Update puzzle
+      description: |
+        🔒 **Role**: `guru`, `super_admin`
       operationId: updatePuzzle
       security:
         - BearerAuth: []
@@ -804,6 +862,8 @@ paths:
     delete:
       tags: [Puzzles]
       summary: Delete puzzle
+      description: |
+        🔒 **Role**: `guru`, `super_admin`
       operationId: deletePuzzle
       security:
         - BearerAuth: []
@@ -830,6 +890,8 @@ paths:
     get:
       tags: [Quizzes]
       summary: Get all quizzes
+      description: |
+        🔒 **Role**: `member`, `guru`, `super_admin`
       operationId: getAllQuizzes
       parameters:
         - name: page
@@ -867,7 +929,9 @@ paths:
     post:
       tags: [Quizzes]
       summary: Create quiz
-      description: Membuat kuis baru beserta soal dan pilihan gandanya.
+      description: |
+        Membuat kuis baru beserta soal dan pilihan gandanya.  
+        🔒 **Role**: `guru`, `super_admin`
       operationId: createQuiz
       security:
         - BearerAuth: []
@@ -908,7 +972,9 @@ paths:
     get:
       tags: [Quizzes]
       summary: Get quiz by ID
-      description: Get kuis lengkap beserta pertanyaan dan pilihan ganda.
+      description: |
+        Get kuis lengkap beserta pertanyaan dan pilihan ganda.  
+        🔒 **Role**: `member`, `guru`, `super_admin`
       operationId: getQuizById
       security:
         - BearerAuth: []
@@ -928,7 +994,9 @@ paths:
     put:
       tags: [Quizzes]
       summary: Update quiz
-      description: Update kuis, pertanyaan, dan pilihan ganda. Ini akan me-replace pertanyaan dan pilihan lama.
+      description: |
+        Update kuis, pertanyaan, dan pilihan ganda. Ini akan me-replace pertanyaan dan pilihan lama.  
+        🔒 **Role**: `guru`, `super_admin`
       operationId: updateQuiz
       security:
         - BearerAuth: []
@@ -960,6 +1028,8 @@ paths:
     delete:
       tags: [Quizzes]
       summary: Delete quiz
+      description: |
+        🔒 **Role**: `guru`, `super_admin`
       operationId: deleteQuiz
       security:
         - BearerAuth: []
@@ -981,8 +1051,200 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  # ── STORIES (CERITA INTERAKTIF) ───────────────────────────
+  /api/v1/stories:
+    get:
+      tags: [Stories]
+      summary: Get all stories
+      description: |
+        Mengambil semua cerita interaktif.  
+        🔒 **Role**: `member`, `guru`, `super_admin`
+      operationId: getAllStories
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Daftar cerita interaktif
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StoryListWrapper"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      tags: [Stories]
+      summary: Create story
+      description: |
+        Membuat cerita interaktif baru beserta scene-scene-nya.  
+        🔒 **Role**: `guru`, `super_admin`
+      operationId: createStory
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoryRequest"
+      responses:
+        "200":
+          description: Cerita berhasil dibuat
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StoryWrapper"
+        "400":
+          description: Validasi gagal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/stories/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: ID cerita interaktif
+    get:
+      tags: [Stories]
+      summary: Get story by ID
+      description: |
+        Mengambil detail cerita interaktif beserta scene-scene-nya.  
+        🔒 **Role**: `member`, `guru`, `super_admin`
+      operationId: getStoryById
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Detail cerita
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StoryWrapper"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "500":
+          description: Cerita tidak ditemukan atau error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      tags: [Stories]
+      summary: Update story
+      description: |
+        Update cerita interaktif beserta scene-scene-nya.  
+        🔒 **Role**: `guru`, `super_admin`
+      operationId: updateStory
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StoryRequest"
+      responses:
+        "200":
+          description: Cerita berhasil diupdate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StoryWrapper"
+        "400":
+          description: Validasi gagal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      tags: [Stories]
+      summary: Delete story
+      description: |
+        🔒 **Role**: `guru`, `super_admin`
+      operationId: deleteStory
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Cerita berhasil dihapus
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: string
+                    example: "story deleted successfully"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 # ───────────────────── COMPONENTS ───────────────────────
 components:
+  # ── Reusable Responses ──
+  responses:
+    UnauthorizedResponse:
+      description: Token tidak valid, expired, atau tidak diberikan
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              errors:
+                type: string
+                example: "invalid or expired token"
+    ForbiddenResponse:
+      description: Role tidak memiliki izin untuk mengakses resource ini
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              errors:
+                type: string
+                example: "forbidden: insufficient role"
+
   securitySchemes:
     BearerAuth:
       type: http
@@ -990,7 +1252,8 @@ components:
       bearerFormat: JWT
       description: |
         Gunakan access token dari response login.  
-        Format: `Authorization: Bearer <token>`
+        Format: `Authorization: Bearer <token>`  
+        Token berisi claims: `user_id`, `email`, `username`, `role`
 
   schemas:
     # ── Request Schemas ──
@@ -1029,8 +1292,8 @@ components:
           example: secret123
         role:
           type: string
-          description: "Role user: `admin` atau `guru`"
-          enum: [admin, guru]
+          description: "Role user: `member`, `guru`, atau `super_admin`"
+          enum: [member, guru, super_admin]
           example: guru
 
     # ── Response Schemas ──
@@ -1048,7 +1311,7 @@ components:
           format: email
         role:
           type: string
-          enum: [admin, guru]
+          enum: [member, guru, super_admin]
         created_at:
           type: string
           format: date-time
@@ -1462,5 +1725,171 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/QuizResponse"
+        paging:
+          $ref: "#/components/schemas/PageMetaData"
+
+    # ── Story / Cerita Interaktif Schemas ──
+    SceneChoice:
+      type: object
+      properties:
+        text:
+          type: string
+          description: Teks pilihan
+          example: "Pergi ke hutan"
+        next:
+          type: string
+          description: scene_key tujuan
+          example: "scene_hutan"
+
+    SceneRequest:
+      type: object
+      required: [scene_key, scene_text]
+      properties:
+        scene_key:
+          type: string
+          description: Kunci unik scene (untuk navigasi)
+          example: "scene_awal"
+        scene_image:
+          type: string
+          description: Path gambar scene
+          example: "/uploads/2026/03/scene-awal.jpg"
+        scene_text:
+          type: string
+          description: Narasi / teks scene
+          example: "Kamu berada di sebuah persimpangan jalan..."
+        scene_choices:
+          type: array
+          items:
+            $ref: "#/components/schemas/SceneChoice"
+        is_ending:
+          type: boolean
+          description: Apakah scene ini adalah ending
+          example: false
+        ending_point:
+          type: integer
+          description: Poin yang didapat jika ini ending
+          example: 0
+        ending_type:
+          type: string
+          description: Tipe ending (good/bad/neutral)
+          example: ""
+        urutan:
+          type: integer
+          description: Urutan scene
+          example: 1
+
+    SceneResponse:
+      type: object
+      properties:
+        scene_id:
+          type: integer
+          example: 1
+        cerita_id:
+          type: integer
+          example: 1
+        scene_key:
+          type: string
+          example: "scene_awal"
+        scene_image:
+          type: string
+          example: "/uploads/2026/03/scene-awal.jpg"
+        scene_text:
+          type: string
+          example: "Kamu berada di sebuah persimpangan jalan..."
+        scene_choices:
+          type: array
+          items:
+            $ref: "#/components/schemas/SceneChoice"
+        is_ending:
+          type: boolean
+          example: false
+        ending_point:
+          type: integer
+          example: 0
+        ending_type:
+          type: string
+          example: ""
+        urutan:
+          type: integer
+          example: 1
+
+    StoryRequest:
+      type: object
+      required: [judul, kategori_id]
+      properties:
+        judul:
+          type: string
+          description: Judul cerita interaktif
+          example: "Petualangan di Hutan Rimba"
+        thumbnail:
+          type: string
+          description: Path thumbnail cerita
+          example: "/uploads/2026/03/cerita-thumb.jpg"
+        deskripsi:
+          type: string
+          description: Deskripsi singkat cerita
+          example: "Cerita tentang petualangan di hutan rimba Kalimantan."
+        kategori_id:
+          type: integer
+          example: 1
+        xp_reward:
+          type: integer
+          example: 50
+        is_published:
+          type: boolean
+          example: true
+        scenes:
+          type: array
+          items:
+            $ref: "#/components/schemas/SceneRequest"
+
+    StoryResponse:
+      type: object
+      properties:
+        cerita_id:
+          type: integer
+          example: 1
+        judul:
+          type: string
+          example: "Petualangan di Hutan Rimba"
+        thumbnail:
+          type: string
+          example: "/uploads/2026/03/cerita-thumb.jpg"
+        deskripsi:
+          type: string
+          example: "Cerita tentang petualangan di hutan rimba Kalimantan."
+        kategori_id:
+          type: integer
+          example: 1
+        xp_reward:
+          type: integer
+          example: 50
+        scenes:
+          type: array
+          items:
+            $ref: "#/components/schemas/SceneResponse"
+        created_at:
+          type: string
+          format: date-time
+          example: "2026-03-26T10:00:00Z"
+        created_by:
+          $ref: "#/components/schemas/UserResponse"
+        is_published:
+          type: boolean
+          example: true
+
+    StoryWrapper:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/StoryResponse"
+
+    StoryListWrapper:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/StoryResponse"
         paging:
           $ref: "#/components/schemas/PageMetaData"
