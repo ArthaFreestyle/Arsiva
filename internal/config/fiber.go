@@ -1,6 +1,8 @@
 package config
 
 import (
+	"ArthaFreestyle/Arsiva/internal/model"
+
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/cors"
 	"github.com/spf13/viper"
@@ -10,6 +12,7 @@ func NewFiber(config *viper.Viper) *fiber.App {
 	var app = fiber.New(
 		fiber.Config{
 			AppName : config.GetString("app.name"),
+			ErrorHandler: NewErrorHandler(),
 		},
 	)
 
@@ -30,8 +33,10 @@ func NewErrorHandler() fiber.ErrorHandler{
 			code = e.Code
 		}
 
-		return c.Status(code).JSON(fiber.Map{
-			"error" : err.Error(),
-		})
+		res := model.WebResponse[string]{
+			Errors: err.Error(),
+		}
+
+		return c.Status(code).JSON(res)
 	}
 }
