@@ -9,9 +9,8 @@ COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-
-RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o server_app ./cmd/web/main.go
-
+# KUNCI 1: Hapus GOARCH, dan tambahin flag -extldflags "-static" biar C library-nya dibungkus mati ke dalam binary
+RUN CGO_ENABLED=1 GOOS=linux go build -a -ldflags '-linkmode external -extldflags "-static" -s -w' -trimpath -o server_app ./cmd/web/main.go
 FROM alpine:latest
 
 RUN apk add --no-cache ca-certificates tzdata
