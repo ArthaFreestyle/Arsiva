@@ -1,5 +1,6 @@
 name: Deploy Go Backend
 
+
 # Trigger pipeline setiap ada push ke branch 'main'
 on:
   push:
@@ -15,6 +16,8 @@ jobs:
     steps:
       - name: Tarik Kode Terbaru (Checkout)
         uses: actions/checkout@v4
+        with:
+            clean: false
 
       - name: Build & Restart Docker Compose
         run: |

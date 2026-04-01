@@ -22,7 +22,7 @@ services:
     image: arsiva-backend:latest
     container_name: arsiva-backend
     volumes:
-      - ./config.json:/config.json:ro
+      - /home/artha/arsiva_configs/config.json:/config.json:ro
     depends_on:
       postgres-db:
         condition: service_healthy
