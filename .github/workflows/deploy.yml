@@ -1,0 +1,28 @@
+name: Deploy Go Backend
+
+# Trigger pipeline setiap ada push ke branch 'main'
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    # KUNCI UTAMA: Gunakan self-hosted runner yang barusan kamu jalankan
+    runs-on: self-hosted 
+
+    steps:
+      - name: Tarik Kode Terbaru (Checkout)
+        uses: actions/checkout@v4
+
+      - name: Build & Restart Docker Compose
+        run: |
+          
+          echo "Mematikan container lama..."
+          docker compose down
+          
+          echo "Mem-build dan menyalakan container baru..."
+          docker compose up -d --build
+          
+          echo "Membersihkan sisa image Docker lama agar disk tidak penuh..."
+          docker image prune -f
