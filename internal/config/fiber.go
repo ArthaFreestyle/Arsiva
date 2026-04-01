@@ -15,13 +15,14 @@ func NewFiber(config *viper.Viper) *fiber.App {
 		fiber.Config{
 			AppName : config.GetString("app.name"),
 			ErrorHandler: NewErrorHandler(),
+			
 		},
 	)
 
 	app.Get("/docs/*", static.New("./docs"))
 
 	cfg := swaggerui.Config{
-		BasePath: "/",                   
+		BasePath: "",                   
 		FilePath: "docs/openapi.yaml", 
 		Path:     "/",            
 		Title:    "Dokumentasi API",     
