@@ -5,6 +5,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/cors"
+	"github.com/gofiber/fiber/v3/middleware/static"
 	"github.com/gofiber/contrib/v3/swaggerui"
 	"github.com/spf13/viper"
 )
@@ -16,6 +17,8 @@ func NewFiber(config *viper.Viper) *fiber.App {
 			ErrorHandler: NewErrorHandler(),
 		},
 	)
+
+	app.Get("/docs/*", static.New("./docs"))
 
 	cfg := swaggerui.Config{
 		BasePath: "/",                   
