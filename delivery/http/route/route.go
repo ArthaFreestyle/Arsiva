@@ -27,13 +27,13 @@ func (c *RouteConfig) SetupRoutes() {
 }
 
 func (c *RouteConfig) SetupGuestRoutes() {
-	c.App.Post("/api/v1/login",c.AuthController.Login)
+	c.App.Post("/v1/login",c.AuthController.Login)
 	c.App.Get("uploads/*",c.UploadController.GetFile)
 }
 
 func (c *RouteConfig) SetupAuthRoutes() {
 	// Group with auth middleware
-	auth := c.App.Group("/api/v1", c.AuthMiddleware)
+	auth := c.App.Group("/v1", c.AuthMiddleware)
 
 	// ==========================================
 	// SUPERADMIN ONLY
