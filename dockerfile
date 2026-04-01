@@ -1,8 +1,8 @@
 FROM golang:1.25-alpine AS builder
 
-WORKDIR /app
+RUN apk update && apk add --no-cache build-base gcc musl-dev
 
-RUN apk update && apk add --no-cache git ca-certificates tzdata && update-ca-certificates
+WORKDIR /app
 
 COPY go.mod go.sum ./
 
@@ -14,12 +14,11 @@ RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o
 
 FROM alpine:latest
 
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-
-COPY --from=builder /usr/share/zoneinfo /usr/share/zoneinfo
-ENV TZ=Asia/Jakarta
+RUN apk add --no-cache ca-certificates tzdata
 
 COPY --from=builder /app/server_app /server_app
+
+ENV TZ=Asia/Jakarta
 
 EXPOSE 3000
 
