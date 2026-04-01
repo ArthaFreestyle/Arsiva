@@ -22,8 +22,8 @@ func NewFiber(config *viper.Viper) *fiber.App {
 	app.Get("/docs/*", static.New("./docs"))
 
 	cfg := swaggerui.Config{
-		BasePath: "",                   
-		FilePath: "docs/openapi.yaml", 
+		BasePath: "/",                   
+		FilePath: "./docs/openapi.yaml", 
 		Path:     "/",            
 		Title:    "Dokumentasi API",     
 	}
