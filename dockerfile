@@ -24,4 +24,4 @@ ENV TZ=Asia/Jakarta
 
 EXPOSE 3000
 
-ENTRYPOINT ["/server_app"]
+ENTRYPOINT ["./server_app"]
