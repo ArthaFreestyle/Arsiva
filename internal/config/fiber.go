@@ -18,10 +18,10 @@ func NewFiber(config *viper.Viper) *fiber.App {
 	)
 
 	cfg := swaggerui.Config{
-		BasePath: "/",                   // Base path URL aplikasi lu
-		FilePath: "./docs/openapi.yaml", // Path langsung ke file YAML lu
-		Path:     "",             // Nama endpoint (nantinya jadi /swagger)
-		Title:    "Dokumentasi API",     // Judul tab di browser
+		BasePath: "/",                   
+		FilePath: "./docs/openapi.yaml", 
+		Path:     "/",            
+		Title:    "Dokumentasi API",     
 	}
 
 	app.Use(cors.New(cors.Config{
