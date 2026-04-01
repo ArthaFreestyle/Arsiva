@@ -16,6 +16,8 @@ FROM alpine:latest
 
 RUN apk add --no-cache ca-certificates tzdata
 
+WORKDIR /app
+
 COPY --from=builder /app/server_app /server_app
 COPY --from=builder /app/docs ./docs
 
