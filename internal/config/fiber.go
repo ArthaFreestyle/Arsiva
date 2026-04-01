@@ -5,6 +5,7 @@ import (
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/cors"
+	"github.com/gofiber/contrib/v3/swaggerui"
 	"github.com/spf13/viper"
 )
 
@@ -16,11 +17,20 @@ func NewFiber(config *viper.Viper) *fiber.App {
 		},
 	)
 
+	cfg := swaggerui.Config{
+		BasePath: "/",                   // Base path URL aplikasi lu
+		FilePath: "./docs/openapi.yaml", // Path langsung ke file YAML lu
+		Path:     "",             // Nama endpoint (nantinya jadi /swagger)
+		Title:    "Dokumentasi API",     // Judul tab di browser
+	}
+
 	app.Use(cors.New(cors.Config{
 		AllowOrigins: config.GetStringSlice("app.allowance"),
 		AllowHeaders: []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		AllowMethods: []string{"GET", "POST", "HEAD", "PUT", "DELETE", "PATCH", "OPTIONS"},
 	}))
+
+	app.Use(swaggerui.New(cfg))
 
 	return app
 	
