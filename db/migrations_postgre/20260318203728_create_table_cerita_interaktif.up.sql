@@ -1,7 +1,7 @@
 CREATE TABLE cerita_interaktif (
     cerita_id SERIAL NOT NULL,
     judul VARCHAR(100) NOT NULL,
-    thumbnail VARCHAR(200) NULL,
+    thumbnail_asset_id INTEGER NULL,
     deskripsi TEXT NULL,
     kategori_id INTEGER NOT NULL DEFAULT 1,
     xp_reward INTEGER NOT NULL DEFAULT 150,

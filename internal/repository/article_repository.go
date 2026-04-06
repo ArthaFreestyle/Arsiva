@@ -149,29 +149,18 @@ WHERE a.artikel_id = $1`
 }
 
 func (r *articleRepositoryImpl) CreateArticle(ctx context.Context, article *entity.Article) (*entity.Article, error) {
-	SQL := `INSERT INTO artikel (slug,judul,kategori_id,created_by) VALUES ($1,$2,$3,$4) RETURNING artikel_id,slug,judul,konten,kategori_id,status,excerpt,created_by,created_at,thumbnail_asset_id`
-	err := r.DB.QueryRow(ctx, SQL, article.Slug, article.Judul, article.KategoriId, article.CreatedBy.UserId).Scan(
-        &article.ArticleId,
-        &article.Slug,
-        &article.Judul,
-        &article.Konten,
-        &article.KategoriId,
-        &article.Status,
-        &article.Excerpt,
-        &article.CreatedBy.UserId, // <--- String dari DB langsung dipetakan ke property UserId di dalam nested struct
-        &article.CreatedAt,
-        &article.ThumbnailAssetId,
-    )
+	SQL := `INSERT INTO artikel (slug,judul,kategori_id,created_by,thumbnail_asset_id) VALUES ($1,$2,$3,$4,$5) RETURNING artikel_id`
+    var id string
+	err := r.DB.QueryRow(ctx, SQL, article.Slug, article.Judul, article.KategoriId, article.CreatedBy.UserId, article.ThumbnailAssetId).Scan(&id)
 	if err != nil {
 		return nil, err
 	}
-	return article, nil
+	return r.GetArticleById(ctx, id)
 }
 
 func (r *articleRepositoryImpl) UpdateArticle(ctx context.Context, article *entity.Article) (*entity.Article, error) {
-	SQL := `UPDATE artikel SET slug = $1,judul = $2,konten = $3,kategori_id = $4,status = $5,excerpt = $6,thumbnail_asset_id = $7 WHERE artikel_id = $8 RETURNING artikel_id,slug,judul,konten,kategori_id,status,excerpt,created_by,created_at,thumbnail_asset_id`
-	var createdByID string // (Ubah ke tipe UUID jika database kamu pakai UUID)
-
+	SQL := `UPDATE artikel SET slug = $1,judul = $2,konten = $3,kategori_id = $4,status = $5,excerpt = $6,thumbnail_asset_id = $7 WHERE artikel_id = $8 RETURNING artikel_id`
+    var id string
 	err := r.DB.QueryRow(ctx, SQL, 
 		article.Slug, 
 		article.Judul, 
@@ -181,24 +170,11 @@ func (r *articleRepositoryImpl) UpdateArticle(ctx context.Context, article *enti
 		article.Excerpt, 
 		article.ThumbnailAssetId, 
 		article.ArticleId,
-	).Scan(
-		&article.ArticleId,
-		&article.Slug,
-		&article.Judul,
-		&article.Konten,
-		&article.KategoriId,
-		&article.Status,
-		&article.Excerpt,
-		&createdByID, // <--- Masuk ke variabel sementara dulu, biar gak panic!
-		&article.CreatedAt,
-		&article.ThumbnailAssetId,
-	)
+	).Scan(&id)
 	if err != nil {
 		return nil, err
 	}
-
-	article.CreatedBy.UserId = createdByID
-	return article, nil
+	return r.GetArticleById(ctx, id)
 }
 
 func (r *articleRepositoryImpl) DeleteArticle(ctx context.Context, ArticleId string) error {

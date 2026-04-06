@@ -9,7 +9,7 @@ CREATE TABLE artikel (
     created_by INTEGER NULL,
     created_at TIMESTAMP(0) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    thumbnail VARCHAR(255) NULL,
+    thumbnail_asset_id INTEGER NULL,
 
     CONSTRAINT artikel_pkey PRIMARY KEY (artikel_id),
     CONSTRAINT articles_slug_key UNIQUE (slug)

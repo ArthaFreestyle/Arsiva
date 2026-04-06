@@ -49,7 +49,7 @@ func (r *ceritaRepositoryImpl) FindAll(ctx context.Context, page int, size int, 
 		COALESCE(c.deskripsi,'') AS deskripsi, c.kategori_id, c.xp_reward,
 		c.created_at, c.is_published,
 		JSON_BUILD_OBJECT(
-			'user_id', u.user_id,
+			'user_id', u.user_id::text,
 			'username', u.username
 		) AS "user"
 		FROM cerita_interaktif c
@@ -78,7 +78,7 @@ func (r *ceritaRepositoryImpl) FindById(ctx context.Context, ceritaId int) (*ent
 		COALESCE(c.deskripsi,'') AS deskripsi, c.kategori_id, c.xp_reward,
 		c.created_at, c.is_published,
 		JSON_BUILD_OBJECT(
-			'user_id', u.user_id,
+			'user_id', u.user_id::text,
 			'username', u.username
 		) AS "user"
 		FROM cerita_interaktif c
@@ -182,7 +182,7 @@ func (r *ceritaRepositoryImpl) Create(ctx context.Context, cerita *entity.Cerita
 		return nil, err
 	}
 
-	return cerita, nil
+	return r.FindById(ctx, cerita.CeritaId)
 }
 
 // Update updates cerita metadata and replaces all scenes.
@@ -245,7 +245,7 @@ func (r *ceritaRepositoryImpl) Update(ctx context.Context, cerita *entity.Cerita
 		return nil, err
 	}
 
-	return cerita, nil
+	return r.FindById(ctx, cerita.CeritaId)
 }
 
 // Delete removes a cerita interaktif (CASCADE handles scenes).

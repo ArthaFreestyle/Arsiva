@@ -1,8 +1,8 @@
 CREATE TABLE puzzles (
     puzzle_id SERIAL NOT NULL,
     judul VARCHAR(100) NOT NULL,
-    gambar VARCHAR(255) NOT NULL,
-    thumbnail VARCHAR(255) NOT NULL,
+    gambar_asset_id INTEGER NOT NULL,
+    thumbnail_asset_id INTEGER NOT NULL,
     kategori kategori_puzzle_enum NOT NULL,
     xp_reward INTEGER NOT NULL DEFAULT 80,
     created_by INTEGER NULL,

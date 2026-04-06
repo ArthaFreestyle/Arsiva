@@ -6,8 +6,8 @@ CREATE TABLE kuis (
     created_by INTEGER NULL,
     created_at TIMESTAMP(0) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     is_published BOOLEAN NOT NULL DEFAULT false,
-    thumbnail VARCHAR(200) NULL,
-    gambar VARCHAR(200) NULL,
+    thumbnail_asset_id INTEGER NULL,
+    gambar_asset_id INTEGER NULL,
 
     CONSTRAINT kuis_pkey PRIMARY KEY (kuis_id)
 );

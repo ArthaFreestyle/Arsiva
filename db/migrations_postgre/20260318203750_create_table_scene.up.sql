@@ -2,7 +2,7 @@ CREATE TABLE scene (
     scene_id SERIAL NOT NULL,
     cerita_id INTEGER NULL,
     scene_key VARCHAR(50) NOT NULL,
-    scene_image VARCHAR(200) NULL,
+    scene_image_asset_id INTEGER NULL,
     scene_text TEXT NOT NULL,
     scene_choices JSONB NULL,
     is_ending BOOLEAN NOT NULL DEFAULT false,

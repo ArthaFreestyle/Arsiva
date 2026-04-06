@@ -50,7 +50,7 @@ func (r *quizRepositoryImpl) GetAll(ctx context.Context, page int, size int, sea
 		COALESCE(kk.nama_kategori, '') AS kategori,
 		k.created_at, k.is_published,
 		JSON_BUILD_OBJECT(
-			'user_id', u.user_id,
+			'user_id', u.user_id::text,
 			'username', u.username
 		) AS "user"
 		FROM kuis k
@@ -82,7 +82,7 @@ func (r *quizRepositoryImpl) GetByID(ctx context.Context, quizId int) (*entity.Q
 		COALESCE(kk.nama_kategori, '') AS kategori,
 		k.created_at, k.is_published,
 		JSON_BUILD_OBJECT(
-			'user_id', u.user_id,
+			'user_id', u.user_id::text,
 			'username', u.username
 		) AS "user"
 		FROM kuis k
@@ -272,7 +272,7 @@ func (r *quizRepositoryImpl) Create(ctx context.Context, quiz *entity.Quiz) (*en
 		return nil, err
 	}
 
-	return quiz, nil
+	return r.GetByID(ctx, quiz.QuizId)
 }
 
 // Update updates quiz metadata and replaces all questions+options.
@@ -360,7 +360,7 @@ func (r *quizRepositoryImpl) Update(ctx context.Context, quiz *entity.Quiz) (*en
 		return nil, err
 	}
 
-	return quiz, nil
+	return r.GetByID(ctx, quiz.QuizId)
 }
 
 // Delete removes a quiz (CASCADE deletes questions and options).
