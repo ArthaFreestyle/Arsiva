@@ -23,13 +23,15 @@ type CeritaUseCase interface {
 
 type ceritaUseCaseImpl struct {
 	CeritaRepository repository.CeritaRepository
+	AssetRepository  repository.AssetRepository
 	Log              *logrus.Logger
 	Validator        *validator.Validate
 }
 
-func NewCeritaUseCase(ceritaRepository repository.CeritaRepository, log *logrus.Logger, validator *validator.Validate) CeritaUseCase {
+func NewCeritaUseCase(ceritaRepository repository.CeritaRepository, assetRepository repository.AssetRepository, log *logrus.Logger, validator *validator.Validate) CeritaUseCase {
 	return &ceritaUseCaseImpl{
 		CeritaRepository: ceritaRepository,
+		AssetRepository:  assetRepository,
 		Log:              log,
 		Validator:        validator,
 	}
@@ -90,9 +92,9 @@ func (u *ceritaUseCaseImpl) CreateCerita(ctx context.Context, cerita *model.Ceri
 		}
 
 		scenes = append(scenes, &entity.Scene{
-			SceneKey:     s.SceneKey,
-			SceneImage:   s.SceneImage,
-			SceneText:    s.SceneText,
+			SceneKey:          s.SceneKey,
+			SceneImageAssetId: s.SceneImageAssetId,
+			SceneText:         s.SceneText,
 			SceneChoices: choices,
 			IsEnding:     s.IsEnding,
 			EndingPoint:  s.EndingPoint,
@@ -103,7 +105,7 @@ func (u *ceritaUseCaseImpl) CreateCerita(ctx context.Context, cerita *model.Ceri
 
 	newCerita := &entity.CeritaInteraktif{
 		Judul:     cerita.Judul,
-		Thumbnail: cerita.Thumbnail,
+		ThumbnailAssetId: cerita.ThumbnailAssetId,
 		Deskripsi: cerita.Deskripsi,
 		KategoriId: cerita.KategoriId,
 		XpReward:  cerita.XpReward,
@@ -118,6 +120,21 @@ func (u *ceritaUseCaseImpl) CreateCerita(ctx context.Context, cerita *model.Ceri
 	if err != nil {
 		u.Log.Warnf("error when create cerita: %v", err)
 		return nil, fiber.ErrInternalServerError
+	}
+
+	var assetIds []int
+	if cerita.ThumbnailAssetId != nil {
+		assetIds = append(assetIds, *cerita.ThumbnailAssetId)
+	}
+	for _, s := range cerita.Scenes {
+		if s.SceneImageAssetId != nil {
+			assetIds = append(assetIds, *s.SceneImageAssetId)
+		}
+	}
+	if len(assetIds) > 0 {
+		if err := u.AssetRepository.MarkAsUsed(ctx, assetIds); err != nil {
+			u.Log.Warnf("failed to mark asset as used: %v", err)
+		}
 	}
 
 	res := converter.ToCeritaResponse(createdCerita)
@@ -148,9 +165,9 @@ func (u *ceritaUseCaseImpl) UpdateCerita(ctx context.Context, cerita *model.Ceri
 		}
 
 		scenes = append(scenes, &entity.Scene{
-			SceneKey:     s.SceneKey,
-			SceneImage:   s.SceneImage,
-			SceneText:    s.SceneText,
+			SceneKey:          s.SceneKey,
+			SceneImageAssetId: s.SceneImageAssetId,
+			SceneText:         s.SceneText,
 			SceneChoices: choices,
 			IsEnding:     s.IsEnding,
 			EndingPoint:  s.EndingPoint,
@@ -162,7 +179,7 @@ func (u *ceritaUseCaseImpl) UpdateCerita(ctx context.Context, cerita *model.Ceri
 	updatedCerita := &entity.CeritaInteraktif{
 		CeritaId:    ceritaId,
 		Judul:       cerita.Judul,
-		Thumbnail:   cerita.Thumbnail,
+		ThumbnailAssetId: cerita.ThumbnailAssetId,
 		Deskripsi:   cerita.Deskripsi,
 		KategoriId:  cerita.KategoriId,
 		XpReward:    cerita.XpReward,
@@ -174,6 +191,21 @@ func (u *ceritaUseCaseImpl) UpdateCerita(ctx context.Context, cerita *model.Ceri
 	if err != nil {
 		u.Log.Warnf("error when update cerita: %v", err)
 		return nil, fiber.ErrInternalServerError
+	}
+
+	var assetIds []int
+	if cerita.ThumbnailAssetId != nil {
+		assetIds = append(assetIds, *cerita.ThumbnailAssetId)
+	}
+	for _, s := range cerita.Scenes {
+		if s.SceneImageAssetId != nil {
+			assetIds = append(assetIds, *s.SceneImageAssetId)
+		}
+	}
+	if len(assetIds) > 0 {
+		if err := u.AssetRepository.MarkAsUsed(ctx, assetIds); err != nil {
+			u.Log.Warnf("failed to mark asset as used: %v", err)
+		}
 	}
 
 	res := converter.ToCeritaResponse(result)

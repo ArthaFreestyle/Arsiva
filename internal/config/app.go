@@ -11,6 +11,8 @@ import (
 	"github.com/spf13/viper"
 	"github.com/gofiber/fiber/v3"
 	"ArthaFreestyle/Arsiva/delivery/http/route"
+	"context"
+	"time"
 )
 
 type BootstrapConfig struct{
@@ -31,22 +33,27 @@ func Bootstrap(cfg BootstrapConfig) {
 	ceritaRepo := repository.NewCeritaRepository(cfg.DB,cfg.Log)
 	storyCategoryRepo := repository.NewStoryCategoryRepository(cfg.DB,cfg.Log)
 	quizCategoryRepo := repository.NewQuizCategoryRepository(cfg.DB,cfg.Log)
+	assetRepo := repository.NewAssetRepository(cfg.DB,cfg.Log)
 
 	AuthUseCase := usecase.NewAuthUseCase(userRepo,cfg.Secret,cfg.Validate,cfg.Log,cfg.DB)
 	UserUseCase := usecase.NewUserUseCase(userRepo,cfg.Log,cfg.DB,cfg.Validate)
 	ArticleCategoryUseCase := usecase.NewArticleCategoryUseCase(articleCategoryRepo,cfg.Log,cfg.Validate)
-	ArticleUseCase := usecase.NewArticleUseCase(articleRepo,cfg.Log,cfg.Validate)
-	PuzzleUseCase := usecase.NewPuzzleUseCase(puzzleRepo,cfg.Log,cfg.Validate)
-	QuizUseCase := usecase.NewQuizUseCase(quizRepo,cfg.Log,cfg.Validate)
-	CeritaUseCase := usecase.NewCeritaUseCase(ceritaRepo,cfg.Log,cfg.Validate)
+	ArticleUseCase := usecase.NewArticleUseCase(articleRepo,assetRepo,cfg.Log,cfg.Validate)
+	PuzzleUseCase := usecase.NewPuzzleUseCase(puzzleRepo, assetRepo, cfg.Log,cfg.Validate)
+	QuizUseCase := usecase.NewQuizUseCase(quizRepo, assetRepo, cfg.Log,cfg.Validate)
+	CeritaUseCase := usecase.NewCeritaUseCase(ceritaRepo, assetRepo, cfg.Log,cfg.Validate)
 	StoryCategoryUseCase := usecase.NewStoryCategoryUseCase(storyCategoryRepo,cfg.Log,cfg.Validate)
 	QuizCategoryUseCase := usecase.NewQuizCategoryUseCase(quizCategoryRepo,cfg.Log,cfg.Validate)
+	AssetUseCase := usecase.NewAssetUsecase(assetRepo,cfg.Log, "./uploads")
+	
+	// Start cleanup cron
+	go startAssetCleanupCron(AssetUseCase, cfg.Log)
 
 	AuthController := http.NewAuthController(cfg.Log,AuthUseCase)
 	UserController := http.NewUserController(UserUseCase,cfg.Log)
 	ArticleCategoryController := http.NewArticleCategoryController(ArticleCategoryUseCase,cfg.Log)
 	ArticleController := http.NewArticleController(ArticleUseCase,cfg.Log)
-	UploadController := http.NewUploadController(cfg.Log,"./uploads")
+	UploadController := http.NewUploadController(cfg.Log,"./uploads", AssetUseCase)
 	PuzzleController := http.NewPuzzleController(PuzzleUseCase,cfg.Log)
 	QuizController := http.NewQuizController(QuizUseCase,cfg.Log)
 	CeritaController := http.NewCeritaController(CeritaUseCase,cfg.Log)
@@ -73,4 +80,22 @@ func Bootstrap(cfg BootstrapConfig) {
 
 	routeConfig.SetupRoutes()
 	
+}
+
+func startAssetCleanupCron(u usecase.AssetUsecase, log *logrus.Logger) {
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+
+	// Run once at start
+	ctx := context.Background()
+	if err := u.CleanupOrphanedAssets(ctx); err != nil {
+		log.Errorf("Initial asset cleanup failed: %v", err)
+	}
+
+	for range ticker.C {
+		log.Info("Running scheduled asset cleanup...")
+		if err := u.CleanupOrphanedAssets(ctx); err != nil {
+			log.Errorf("Scheduled asset cleanup failed: %v", err)
+		}
+	}
 }

@@ -22,13 +22,15 @@ type PuzzleUseCase interface {
 
 type puzzleUseCaseImpl struct {
 	PuzzleRepository repository.PuzzleRepository
+	AssetRepository repository.AssetRepository
 	Log *logrus.Logger
 	Validator *validator.Validate
 }
 
-func NewPuzzleUseCase(puzzleRepository repository.PuzzleRepository,log *logrus.Logger,validator *validator.Validate) PuzzleUseCase {
+func NewPuzzleUseCase(puzzleRepository repository.PuzzleRepository, assetRepository repository.AssetRepository, log *logrus.Logger,validator *validator.Validate) PuzzleUseCase {
 	return &puzzleUseCaseImpl{
 		PuzzleRepository: puzzleRepository,
+		AssetRepository: assetRepository,
 		Log: log,
 		Validator: validator,
 	}
@@ -72,8 +74,8 @@ func (u *puzzleUseCaseImpl) CreatePuzzle(ctx context.Context, puzzle *model.Puzz
 
 	NewPuzzle := &entity.Puzzle{
 		Judul: puzzle.Judul,
-		Gambar: puzzle.Gambar,
-		Thumbnail: puzzle.Thumbnail,
+		GambarAssetId: puzzle.GambarAssetId,
+		ThumbnailAssetId: puzzle.ThumbnailAssetId,
 		Kategori: puzzle.Kategori,
 		XpReward: puzzle.XpReward,
 		CreatedBy: entity.User{
@@ -86,6 +88,19 @@ func (u *puzzleUseCaseImpl) CreatePuzzle(ctx context.Context, puzzle *model.Puzz
 	if err != nil {
 		u.Log.Warnf("error when create puzzle: %v",err)
 		return nil,fiber.ErrInternalServerError
+	}
+
+	var assetIds []int
+	if puzzle.GambarAssetId != nil {
+		assetIds = append(assetIds, *puzzle.GambarAssetId)
+	}
+	if puzzle.ThumbnailAssetId != nil {
+		assetIds = append(assetIds, *puzzle.ThumbnailAssetId)
+	}
+	if len(assetIds) > 0 {
+		if err := u.AssetRepository.MarkAsUsed(ctx, assetIds); err != nil {
+			u.Log.Warnf("failed to mark asset as used: %v", err)
+		}
 	}
 
 	res := converter.ToPuzzleResponse(createdPuzzle)
@@ -102,8 +117,8 @@ func (u *puzzleUseCaseImpl) UpdatePuzzle(ctx context.Context, puzzle *model.Puzz
 	UpdatedPuzzle := &entity.Puzzle{
 		PuzzleId: puzzleId,
 		Judul: puzzle.Judul,
-		Gambar: puzzle.Gambar,
-		Thumbnail: puzzle.Thumbnail,
+		GambarAssetId: puzzle.GambarAssetId,
+		ThumbnailAssetId: puzzle.ThumbnailAssetId,
 		Kategori: puzzle.Kategori,
 		XpReward: puzzle.XpReward,
 		IsPublished: puzzle.IsPublished,
@@ -113,6 +128,19 @@ func (u *puzzleUseCaseImpl) UpdatePuzzle(ctx context.Context, puzzle *model.Puzz
 	if err != nil {
 		u.Log.Warnf("error when update puzzle: %v",err)
 		return nil,fiber.ErrInternalServerError
+	}
+
+	var assetIds []int
+	if puzzle.GambarAssetId != nil {
+		assetIds = append(assetIds, *puzzle.GambarAssetId)
+	}
+	if puzzle.ThumbnailAssetId != nil {
+		assetIds = append(assetIds, *puzzle.ThumbnailAssetId)
+	}
+	if len(assetIds) > 0 {
+		if err := u.AssetRepository.MarkAsUsed(ctx, assetIds); err != nil {
+			u.Log.Warnf("failed to mark asset as used: %v", err)
+		}
 	}
 
 	res := converter.ToPuzzleResponse(updatedPuzzle)

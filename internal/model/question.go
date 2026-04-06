@@ -2,7 +2,7 @@ package model
 
 type QuestionRequest struct {
 	TeksPertanyaan string           `json:"teks_pertanyaan" validate:"required"`
-	Image          string           `json:"image"`
+	ImageAssetId   *int             `json:"image_asset_id"`
 	Tipe           string           `json:"tipe" validate:"required"`
 	Poin           int              `json:"poin" validate:"required,min=1"`
 	Urutan         int              `json:"urutan" validate:"required,min=1"`

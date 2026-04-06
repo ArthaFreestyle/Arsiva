@@ -21,16 +21,18 @@ type QuizUseCase interface {
 }
 
 type quizUseCaseImpl struct {
-	QuizRepository repository.QuizRepository
-	Log            *logrus.Logger
-	Validator      *validator.Validate
+	QuizRepository  repository.QuizRepository
+	AssetRepository repository.AssetRepository
+	Log             *logrus.Logger
+	Validator       *validator.Validate
 }
 
-func NewQuizUseCase(quizRepository repository.QuizRepository, log *logrus.Logger, validator *validator.Validate) QuizUseCase {
+func NewQuizUseCase(quizRepository repository.QuizRepository, assetRepository repository.AssetRepository, log *logrus.Logger, validator *validator.Validate) QuizUseCase {
 	return &quizUseCaseImpl{
-		QuizRepository: quizRepository,
-		Log:            log,
-		Validator:      validator,
+		QuizRepository:  quizRepository,
+		AssetRepository: assetRepository,
+		Log:             log,
+		Validator:       validator,
 	}
 }
 
@@ -70,9 +72,9 @@ func (u *quizUseCaseImpl) Create(ctx context.Context, quiz *model.QuizRequest, u
 
 	// Map request to entity
 	quizEntity := &entity.Quiz{
-		Judul:       quiz.Judul,
-		Gambar:      quiz.Gambar,
-		Thumbnail:   quiz.Thumbnail,
+		Judul:            quiz.Judul,
+		GambarAssetId:    quiz.GambarAssetId,
+		ThumbnailAssetId: quiz.ThumbnailAssetId,
 		KategoriId:  quiz.KategoriId,
 		XpReward:    quiz.XpReward,
 		IsPublished: quiz.IsPublished,
@@ -85,7 +87,7 @@ func (u *quizUseCaseImpl) Create(ctx context.Context, quiz *model.QuizRequest, u
 	for _, q := range quiz.Soal {
 		question := &entity.Question{
 			TeksPertanyaan: q.TeksPertanyaan,
-			Image:          q.Image,
+			ImageAssetId:   q.ImageAssetId,
 			Tipe:           q.Tipe,
 			Poin:           q.Poin,
 			Urutan:         q.Urutan,
@@ -105,6 +107,24 @@ func (u *quizUseCaseImpl) Create(ctx context.Context, quiz *model.QuizRequest, u
 		return nil, fiber.ErrInternalServerError
 	}
 
+	var assetIds []int
+	if quiz.GambarAssetId != nil {
+		assetIds = append(assetIds, *quiz.GambarAssetId)
+	}
+	if quiz.ThumbnailAssetId != nil {
+		assetIds = append(assetIds, *quiz.ThumbnailAssetId)
+	}
+	for _, q := range quiz.Soal {
+		if q.ImageAssetId != nil {
+			assetIds = append(assetIds, *q.ImageAssetId)
+		}
+	}
+	if len(assetIds) > 0 {
+		if err := u.AssetRepository.MarkAsUsed(ctx, assetIds); err != nil {
+			u.Log.Warnf("failed to mark asset as used: %v", err)
+		}
+	}
+
 	return converter.ToQuizResponse(createdQuiz), nil
 }
 
@@ -116,10 +136,10 @@ func (u *quizUseCaseImpl) Update(ctx context.Context, quiz *model.QuizRequest, i
 	}
 
 	quizEntity := &entity.Quiz{
-		QuizId:      id,
-		Judul:       quiz.Judul,
-		Gambar:      quiz.Gambar,
-		Thumbnail:   quiz.Thumbnail,
+		QuizId:           id,
+		Judul:            quiz.Judul,
+		GambarAssetId:    quiz.GambarAssetId,
+		ThumbnailAssetId: quiz.ThumbnailAssetId,
 		KategoriId:  quiz.KategoriId,
 		XpReward:    quiz.XpReward,
 		IsPublished: quiz.IsPublished,
@@ -128,7 +148,7 @@ func (u *quizUseCaseImpl) Update(ctx context.Context, quiz *model.QuizRequest, i
 	for _, q := range quiz.Soal {
 		question := &entity.Question{
 			TeksPertanyaan: q.TeksPertanyaan,
-			Image:          q.Image,
+			ImageAssetId:   q.ImageAssetId,
 			Tipe:           q.Tipe,
 			Poin:           q.Poin,
 			Urutan:         q.Urutan,
@@ -146,6 +166,24 @@ func (u *quizUseCaseImpl) Update(ctx context.Context, quiz *model.QuizRequest, i
 	if err != nil {
 		u.Log.Warnf("error when update quiz: %v", err)
 		return nil, fiber.ErrInternalServerError
+	}
+
+	var assetIds []int
+	if quiz.GambarAssetId != nil {
+		assetIds = append(assetIds, *quiz.GambarAssetId)
+	}
+	if quiz.ThumbnailAssetId != nil {
+		assetIds = append(assetIds, *quiz.ThumbnailAssetId)
+	}
+	for _, q := range quiz.Soal {
+		if q.ImageAssetId != nil {
+			assetIds = append(assetIds, *q.ImageAssetId)
+		}
+	}
+	if len(assetIds) > 0 {
+		if err := u.AssetRepository.MarkAsUsed(ctx, assetIds); err != nil {
+			u.Log.Warnf("failed to mark asset as used: %v", err)
+		}
 	}
 
 	return converter.ToQuizResponse(updatedQuiz), nil

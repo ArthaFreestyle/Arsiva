@@ -13,5 +13,6 @@ type Article struct {
 	Status			string			`db:"status"`
 	CreatedBy		User			`db:"user"`
 	CreatedAt		*time.Time		`db:"created_at"`
+	ThumbnailAssetId *int			`db:"thumbnail_asset_id"`
 	Thumbnail		*string			`db:"thumbnail"`
 }

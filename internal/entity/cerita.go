@@ -5,8 +5,9 @@ import "time"
 type CeritaInteraktif struct {
 	CeritaId    int        `db:"cerita_id"`
 	Judul       string     `db:"judul"`
-	Thumbnail   string     `db:"thumbnail"`
-	Deskripsi   string     `db:"deskripsi"`
+	ThumbnailAssetId *int      `db:"thumbnail_asset_id"`
+	Thumbnail   	 string     `db:"thumbnail"`
+	Deskripsi   	 string     `db:"deskripsi"`
 	KategoriId  int        `db:"kategori_id"`
 	XpReward    int        `db:"xp_reward"`
 	CreatedBy   User       `db:"user"`
@@ -19,8 +20,9 @@ type Scene struct {
 	SceneId      int                      `db:"scene_id"`
 	CeritaId     int                      `db:"cerita_id"`
 	SceneKey     string                   `db:"scene_key"`
-	SceneImage   string                   `db:"scene_image"`
-	SceneText    string                   `db:"scene_text"`
+	SceneImageAssetId *int                  `db:"scene_image_asset_id"`
+	SceneImage   	  string                `db:"scene_image"`
+	SceneText         string                `db:"scene_text"`
 	SceneChoices []map[string]interface{} `db:"scene_choices"`
 	IsEnding     bool                     `db:"is_ending"`
 	EndingPoint  int                      `db:"ending_point"`

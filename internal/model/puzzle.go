@@ -4,8 +4,8 @@ import "time"
 
 type PuzzleRequest struct {
 	Judul		string	`json:"judul"`
-	Gambar		string	`json:"gambar"`
-	Thumbnail	string	`json:"thumbnail"`
+	GambarAssetId    *int	`json:"gambar_asset_id"`
+	ThumbnailAssetId *int	`json:"thumbnail_asset_id"`
 	Kategori	string	`json:"kategori"`
 	XpReward	int		`json:"xp_reward"`
 	IsPublished	bool	`json:"is_published"`

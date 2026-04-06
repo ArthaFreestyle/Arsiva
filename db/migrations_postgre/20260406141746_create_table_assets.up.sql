@@ -1,0 +1,7 @@
+CREATE TABLE assets (
+    asset_id SERIAL PRIMARY KEY,
+    url VARCHAR(500) NOT NULL,
+    is_used BOOLEAN NOT NULL DEFAULT false,
+    created_at TIMESTAMP(0) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TIMESTAMP(0) NULL
+);

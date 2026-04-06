@@ -8,9 +8,9 @@ type SceneChoice struct {
 }
 
 type SceneRequest struct {
-	SceneKey     string        `json:"scene_key" validate:"required"`
-	SceneImage   string        `json:"scene_image"`
-	SceneText    string        `json:"scene_text" validate:"required"`
+	SceneKey          string        `json:"scene_key" validate:"required"`
+	SceneImageAssetId *int          `json:"scene_image_asset_id"`
+	SceneText         string        `json:"scene_text" validate:"required"`
 	SceneChoices []SceneChoice `json:"scene_choices"`
 	IsEnding     bool          `json:"is_ending"`
 	EndingPoint  int           `json:"ending_point"`
@@ -32,9 +32,9 @@ type SceneResponse struct {
 }
 
 type CeritaRequest struct {
-	Judul       string          `json:"judul" validate:"required"`
-	Thumbnail   string          `json:"thumbnail"`
-	Deskripsi   string          `json:"deskripsi"`
+	Judul            string          `json:"judul" validate:"required"`
+	ThumbnailAssetId *int            `json:"thumbnail_asset_id"`
+	Deskripsi        string          `json:"deskripsi"`
 	KategoriId  int             `json:"kategori_id" validate:"required"`
 	XpReward    int             `json:"xp_reward"`
 	IsPublished bool            `json:"is_published"`

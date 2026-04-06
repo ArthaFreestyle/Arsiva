@@ -2,6 +2,7 @@ package http
 
 import (
 	"ArthaFreestyle/Arsiva/internal/model"
+	"ArthaFreestyle/Arsiva/internal/usecase"
 	"fmt"
 	"image"
 	_ "image/jpeg"
@@ -25,12 +26,14 @@ type UploadController interface {
 type uploadControllerImpl struct {
 	Log       *logrus.Logger
 	UploadDir string
+	AssetUseCase usecase.AssetUsecase
 }
 
-func NewUploadController(log *logrus.Logger, uploadDir string) UploadController {
+func NewUploadController(log *logrus.Logger, uploadDir string, assetUseCase usecase.AssetUsecase) UploadController {
 	return &uploadControllerImpl{
 		Log:       log,
 		UploadDir: uploadDir,
+		AssetUseCase: assetUseCase,
 	}
 }
 
@@ -91,9 +94,16 @@ func (c *uploadControllerImpl) UploadImage(ctx fiber.Ctx) error {
 	fileInfo, _ := out.Stat()
 	url := fmt.Sprintf("/uploads/%s/%s", subDir, filename)
 
+	assetResp, err := c.AssetUseCase.CreateAsset(ctx.Context(), url)
+	if err != nil {
+		c.Log.Warnf("Failed to create asset usage: %+v", err)
+		return fiber.ErrInternalServerError
+	}
+
 	res := model.WebResponse[any]{
 		Data: fiber.Map{
-			"url":      url,
+			"asset_id": assetResp.AssetId,
+			"url":      assetResp.Url,
 			"filename": filename,
 			"old_size": file.Size,
 			"new_size": fileInfo.Size(),

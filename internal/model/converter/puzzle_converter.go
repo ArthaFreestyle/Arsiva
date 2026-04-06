@@ -9,6 +9,7 @@ func ToPuzzleResponse(puzzle *entity.Puzzle) *model.PuzzleResponse {
 	return &model.PuzzleResponse{
 		PuzzleId: puzzle.PuzzleId,
 		Judul: puzzle.Judul,
+		Thumbnail: puzzle.Thumbnail,
 		Gambar: puzzle.Gambar,
 		Kategori: puzzle.Kategori,
 		XpReward: puzzle.XpReward,

@@ -41,7 +41,7 @@ func (r *puzzleRepositoryImpl) FindAll(ctx context.Context, page int, size int, 
 		return nil, 0, err
 	}
 
-	SQL := `SELECT p.puzzle_id,p.judul,p.thumbnail,p.kategori,p.xp_reward,
+	SQL := `SELECT p.puzzle_id,p.judul,COALESCE(ass_t.url, '') AS thumbnail, p.thumbnail_asset_id, p.kategori,p.xp_reward,
 	JSON_BUILD_OBJECT(
 		'user_id',u.user_id,
 		'username',u.username
@@ -49,6 +49,7 @@ func (r *puzzleRepositoryImpl) FindAll(ctx context.Context, page int, size int, 
 	p.created_at,p.is_published
 	FROM puzzles p 
 	JOIN users u ON p.created_by = u.user_id 
+	LEFT JOIN assets ass_t ON p.thumbnail_asset_id = ass_t.asset_id
 	WHERE p.is_published = true AND p.judul ILIKE $1
 	ORDER BY p.created_at DESC
 	LIMIT $2 OFFSET $3`
@@ -66,9 +67,11 @@ func (r *puzzleRepositoryImpl) FindAll(ctx context.Context, page int, size int, 
 }
 
 func (r *puzzleRepositoryImpl) FindById(ctx context.Context, puzzleId string) (*entity.Puzzle, error) {
-	SQL := `SELECT p.puzzle_id,p.judul,p.gambar,p.kategori,p.xp_reward,
+	SQL := `SELECT p.puzzle_id,p.judul,COALESCE(ass_g.url, '') AS gambar, p.gambar_asset_id, COALESCE(ass_t.url, '') AS thumbnail, p.thumbnail_asset_id, p.kategori,p.xp_reward,
 	p.created_at,p.is_published
 	FROM puzzles p 
+	LEFT JOIN assets ass_g ON p.gambar_asset_id = ass_g.asset_id
+	LEFT JOIN assets ass_t ON p.thumbnail_asset_id = ass_t.asset_id
 	WHERE p.is_published = true 
 	AND p.puzzle_id = $1`
 
@@ -85,9 +88,9 @@ func (r *puzzleRepositoryImpl) FindById(ctx context.Context, puzzleId string) (*
 }
 
 func (r *puzzleRepositoryImpl) Create(ctx context.Context, puzzle *entity.Puzzle) (*entity.Puzzle, error) {
-	SQL := `INSERT INTO puzzles (judul,gambar,thumbnail,kategori,xp_reward,created_by,is_published) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING puzzle_id`
+	SQL := `INSERT INTO puzzles (judul,gambar_asset_id,thumbnail_asset_id,kategori,xp_reward,created_by,is_published) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING puzzle_id`
 	
-	rows,err := r.DB.Query(ctx,SQL,puzzle.Judul,puzzle.Gambar,puzzle.Thumbnail,puzzle.Kategori,puzzle.XpReward,puzzle.CreatedBy.UserId,puzzle.IsPublished)
+	rows,err := r.DB.Query(ctx,SQL,puzzle.Judul,puzzle.GambarAssetId,puzzle.ThumbnailAssetId,puzzle.Kategori,puzzle.XpReward,puzzle.CreatedBy.UserId,puzzle.IsPublished)
 	if err != nil {
 		return nil,err
 	}
@@ -100,9 +103,9 @@ func (r *puzzleRepositoryImpl) Create(ctx context.Context, puzzle *entity.Puzzle
 }
 
 func (r *puzzleRepositoryImpl) Update(ctx context.Context, puzzle *entity.Puzzle) (*entity.Puzzle, error) {
-	SQL := `UPDATE puzzles SET judul = $1,gambar = $2,thumbnail = $3,kategori = $4,xp_reward = $5,is_published = $6 WHERE puzzle_id = $7 RETURNING puzzle_id`
+	SQL := `UPDATE puzzles SET judul = $1,gambar_asset_id = $2,thumbnail_asset_id = $3,kategori = $4,xp_reward = $5,is_published = $6 WHERE puzzle_id = $7 RETURNING puzzle_id`
 	
-	rows,err := r.DB.Query(ctx,SQL,puzzle.Judul,puzzle.Gambar,puzzle.Thumbnail,puzzle.Kategori,puzzle.XpReward,puzzle.IsPublished,puzzle.PuzzleId)
+	rows,err := r.DB.Query(ctx,SQL,puzzle.Judul,puzzle.GambarAssetId,puzzle.ThumbnailAssetId,puzzle.Kategori,puzzle.XpReward,puzzle.IsPublished,puzzle.PuzzleId)
 	if err != nil {
 		return nil,err
 	}

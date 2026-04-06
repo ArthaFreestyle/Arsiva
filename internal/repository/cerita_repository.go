@@ -45,7 +45,7 @@ func (r *ceritaRepositoryImpl) FindAll(ctx context.Context, page int, size int, 
 		return nil, 0, err
 	}
 
-	SQL := `SELECT c.cerita_id, c.judul, COALESCE(c.thumbnail,'') AS thumbnail,
+	SQL := `SELECT c.cerita_id, c.judul, COALESCE(ass.url,'') AS thumbnail, c.thumbnail_asset_id,
 		COALESCE(c.deskripsi,'') AS deskripsi, c.kategori_id, c.xp_reward,
 		c.created_at, c.is_published,
 		JSON_BUILD_OBJECT(
@@ -54,6 +54,7 @@ func (r *ceritaRepositoryImpl) FindAll(ctx context.Context, page int, size int, 
 		) AS "user"
 		FROM cerita_interaktif c
 		LEFT JOIN users u ON c.created_by = u.user_id
+		LEFT JOIN assets ass ON c.thumbnail_asset_id = ass.asset_id
 		WHERE c.is_published = true AND c.judul ILIKE $1
 		ORDER BY c.created_at DESC
 		LIMIT $2 OFFSET $3`
@@ -73,7 +74,7 @@ func (r *ceritaRepositoryImpl) FindAll(ctx context.Context, page int, size int, 
 // FindById returns a cerita interaktif with all its scenes.
 func (r *ceritaRepositoryImpl) FindById(ctx context.Context, ceritaId int) (*entity.CeritaInteraktif, error) {
 	// 1. Fetch the cerita
-	ceritaSQL := `SELECT c.cerita_id, c.judul, COALESCE(c.thumbnail,'') AS thumbnail,
+	ceritaSQL := `SELECT c.cerita_id, c.judul, COALESCE(ass.url,'') AS thumbnail, c.thumbnail_asset_id,
 		COALESCE(c.deskripsi,'') AS deskripsi, c.kategori_id, c.xp_reward,
 		c.created_at, c.is_published,
 		JSON_BUILD_OBJECT(
@@ -82,6 +83,7 @@ func (r *ceritaRepositoryImpl) FindById(ctx context.Context, ceritaId int) (*ent
 		) AS "user"
 		FROM cerita_interaktif c
 		LEFT JOIN users u ON c.created_by = u.user_id
+		LEFT JOIN assets ass ON c.thumbnail_asset_id = ass.asset_id
 		WHERE c.cerita_id = $1`
 
 	rows, err := r.DB.Query(ctx, ceritaSQL, ceritaId)
@@ -94,10 +96,12 @@ func (r *ceritaRepositoryImpl) FindById(ctx context.Context, ceritaId int) (*ent
 	}
 
 	// 2. Fetch scenes
-	sceneSQL := `SELECT scene_id, cerita_id, scene_key, COALESCE(scene_image,'') AS scene_image,
-		scene_text, COALESCE(scene_choices, '[]'::jsonb) AS scene_choices,
-		is_ending, ending_point, COALESCE(ending_type,'') AS ending_type, COALESCE(urutan,0) AS urutan
-		FROM scene WHERE cerita_id = $1 ORDER BY urutan`
+	sceneSQL := `SELECT s.scene_id, s.cerita_id, s.scene_key, COALESCE(ass.url,'') AS scene_image, s.scene_image_asset_id,
+		s.scene_text, COALESCE(s.scene_choices, '[]'::jsonb) AS scene_choices,
+		s.is_ending, s.ending_point, COALESCE(s.ending_type,'') AS ending_type, COALESCE(s.urutan,0) AS urutan
+		FROM scene s
+		LEFT JOIN assets ass ON s.scene_image_asset_id = ass.asset_id
+		WHERE s.cerita_id = $1 ORDER BY s.urutan`
 
 	sRows, err := r.DB.Query(ctx, sceneSQL, ceritaId)
 	if err != nil {
@@ -121,12 +125,12 @@ func (r *ceritaRepositoryImpl) Create(ctx context.Context, cerita *entity.Cerita
 	defer tx.Rollback(ctx)
 
 	// 1. Insert cerita
-	ceritaSQL := `INSERT INTO cerita_interaktif (judul, thumbnail, deskripsi, kategori_id, xp_reward, created_by, is_published)
+	ceritaSQL := `INSERT INTO cerita_interaktif (judul, thumbnail_asset_id, deskripsi, kategori_id, xp_reward, created_by, is_published)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING cerita_id, created_at`
 
 	err = tx.QueryRow(ctx, ceritaSQL,
-		cerita.Judul, cerita.Thumbnail, cerita.Deskripsi,
+		cerita.Judul, cerita.ThumbnailAssetId, cerita.Deskripsi,
 		cerita.KategoriId, cerita.XpReward,
 		cerita.CreatedBy.UserId, cerita.IsPublished,
 	).Scan(&cerita.CeritaId, &cerita.CreatedAt)
@@ -148,13 +152,13 @@ func (r *ceritaRepositoryImpl) Create(ctx context.Context, cerita *entity.Cerita
 			choicesJSON, _ := json.Marshal(s.SceneChoices)
 
 			sceneArgs = append(sceneArgs,
-				cerita.CeritaId, s.SceneKey, s.SceneImage, s.SceneText,
+				cerita.CeritaId, s.SceneKey, s.SceneImageAssetId, s.SceneText,
 				choicesJSON, s.IsEnding, s.EndingPoint, s.EndingType, s.Urutan)
 			argIdx += 9
 		}
 
 		sceneSQL := fmt.Sprintf(
-			`INSERT INTO scene (cerita_id, scene_key, scene_image, scene_text, scene_choices, is_ending, ending_point, ending_type, urutan)
+			`INSERT INTO scene (cerita_id, scene_key, scene_image_asset_id, scene_text, scene_choices, is_ending, ending_point, ending_type, urutan)
 			VALUES %s RETURNING scene_id`, strings.Join(sceneValues, ", "))
 
 		sRows, err := tx.Query(ctx, sceneSQL, sceneArgs...)
@@ -190,12 +194,12 @@ func (r *ceritaRepositoryImpl) Update(ctx context.Context, cerita *entity.Cerita
 	defer tx.Rollback(ctx)
 
 	// 1. Update cerita metadata
-	updateSQL := `UPDATE cerita_interaktif SET judul = $1, thumbnail = $2, deskripsi = $3,
+	updateSQL := `UPDATE cerita_interaktif SET judul = $1, thumbnail_asset_id = $2, deskripsi = $3,
 		kategori_id = $4, xp_reward = $5, is_published = $6
 		WHERE cerita_id = $7`
 
 	_, err = tx.Exec(ctx, updateSQL,
-		cerita.Judul, cerita.Thumbnail, cerita.Deskripsi,
+		cerita.Judul, cerita.ThumbnailAssetId, cerita.Deskripsi,
 		cerita.KategoriId, cerita.XpReward, cerita.IsPublished, cerita.CeritaId)
 	if err != nil {
 		return nil, err
@@ -221,13 +225,13 @@ func (r *ceritaRepositoryImpl) Update(ctx context.Context, cerita *entity.Cerita
 			choicesJSON, _ := json.Marshal(s.SceneChoices)
 
 			sceneArgs = append(sceneArgs,
-				cerita.CeritaId, s.SceneKey, s.SceneImage, s.SceneText,
+				cerita.CeritaId, s.SceneKey, s.SceneImageAssetId, s.SceneText,
 				choicesJSON, s.IsEnding, s.EndingPoint, s.EndingType, s.Urutan)
 			argIdx += 9
 		}
 
 		sceneSQL := fmt.Sprintf(
-			`INSERT INTO scene (cerita_id, scene_key, scene_image, scene_text, scene_choices, is_ending, ending_point, ending_type, urutan)
+			`INSERT INTO scene (cerita_id, scene_key, scene_image_asset_id, scene_text, scene_choices, is_ending, ending_point, ending_type, urutan)
 			VALUES %s`, strings.Join(sceneValues, ", "))
 
 		_, err = tx.Exec(ctx, sceneSQL, sceneArgs...)

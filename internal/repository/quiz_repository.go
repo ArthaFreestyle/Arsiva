@@ -45,7 +45,7 @@ func (r *quizRepositoryImpl) GetAll(ctx context.Context, page int, size int, sea
 		return nil, 0, err
 	}
 
-	SQL := `SELECT k.kuis_id, k.judul, k.thumbnail, k.gambar, k.xp_reward,
+	SQL := `SELECT k.kuis_id, k.judul, COALESCE(ass_t.url, '') AS thumbnail, k.thumbnail_asset_id, COALESCE(ass_g.url, '') AS gambar, k.gambar_asset_id, k.xp_reward,
 		k.kategori_id,
 		COALESCE(kk.nama_kategori, '') AS kategori,
 		k.created_at, k.is_published,
@@ -56,6 +56,8 @@ func (r *quizRepositoryImpl) GetAll(ctx context.Context, page int, size int, sea
 		FROM kuis k
 		LEFT JOIN users u ON k.created_by = u.user_id
 		LEFT JOIN kategori_kuis kk ON k.kategori_id = kk.kategori_id
+		LEFT JOIN assets ass_t ON k.thumbnail_asset_id = ass_t.asset_id
+		LEFT JOIN assets ass_g ON k.gambar_asset_id = ass_g.asset_id
 		WHERE k.is_published = true AND k.judul ILIKE $1
 		ORDER BY k.created_at DESC
 		LIMIT $2 OFFSET $3`
@@ -75,7 +77,7 @@ func (r *quizRepositoryImpl) GetAll(ctx context.Context, page int, size int, sea
 // GetByID returns a quiz with its questions and options.
 func (r *quizRepositoryImpl) GetByID(ctx context.Context, quizId int) (*entity.Quiz, error) {
 	// 1. Fetch the quiz
-	quizSQL := `SELECT k.kuis_id, k.judul, k.gambar, k.thumbnail, k.xp_reward,
+	quizSQL := `SELECT k.kuis_id, k.judul, COALESCE(ass_g.url, '') AS gambar, k.gambar_asset_id, COALESCE(ass_t.url, '') AS thumbnail, k.thumbnail_asset_id, k.xp_reward,
 		k.kategori_id,
 		COALESCE(kk.nama_kategori, '') AS kategori,
 		k.created_at, k.is_published,
@@ -86,6 +88,8 @@ func (r *quizRepositoryImpl) GetByID(ctx context.Context, quizId int) (*entity.Q
 		FROM kuis k
 		LEFT JOIN users u ON k.created_by = u.user_id
 		LEFT JOIN kategori_kuis kk ON k.kategori_id = kk.kategori_id
+		LEFT JOIN assets ass_t ON k.thumbnail_asset_id = ass_t.asset_id
+		LEFT JOIN assets ass_g ON k.gambar_asset_id = ass_g.asset_id
 		WHERE k.kuis_id = $1`
 
 	rows, err := r.DB.Query(ctx, quizSQL, quizId)
@@ -98,8 +102,10 @@ func (r *quizRepositoryImpl) GetByID(ctx context.Context, quizId int) (*entity.Q
 	}
 
 	// 2. Fetch questions
-	questionSQL := `SELECT pertanyaan_id, kuis_id, teks_pertanyaan, COALESCE(image,'') AS image, tipe, poin, urutan
-		FROM pertanyaan_kuis WHERE kuis_id = $1 ORDER BY urutan`
+	questionSQL := `SELECT p.pertanyaan_id, p.kuis_id, p.teks_pertanyaan, COALESCE(ass.url,'') AS image, p.image_asset_id, p.tipe, p.poin, p.urutan
+		FROM pertanyaan_kuis p
+		LEFT JOIN assets ass ON p.image_asset_id = ass.asset_id
+		WHERE p.kuis_id = $1 ORDER BY p.urutan`
 
 	qRows, err := r.DB.Query(ctx, questionSQL, quizId)
 	if err != nil {
@@ -152,12 +158,12 @@ func (r *quizRepositoryImpl) Create(ctx context.Context, quiz *entity.Quiz) (*en
 	defer tx.Rollback(ctx)
 
 	// 1. Insert quiz
-	quizSQL := `INSERT INTO kuis (judul, gambar, thumbnail, kategori_id, xp_reward, created_by, is_published)
+	quizSQL := `INSERT INTO kuis (judul, gambar_asset_id, thumbnail_asset_id, kategori_id, xp_reward, created_by, is_published)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING kuis_id, created_at`
 
 	err = tx.QueryRow(ctx, quizSQL,
-		quiz.Judul, quiz.Gambar, quiz.Thumbnail,
+		quiz.Judul, quiz.GambarAssetId, quiz.ThumbnailAssetId,
 		quiz.KategoriId, quiz.XpReward,
 		quiz.CreatedBy.UserId, quiz.IsPublished,
 	).Scan(&quiz.QuizId, &quiz.CreatedAt)
@@ -174,12 +180,12 @@ func (r *quizRepositoryImpl) Create(ctx context.Context, quiz *entity.Quiz) (*en
 		for _, q := range quiz.Soal {
 			questionValues = append(questionValues,
 				fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d)", argIdx, argIdx+1, argIdx+2, argIdx+3, argIdx+4, argIdx+5))
-			questionArgs = append(questionArgs, quiz.QuizId, q.TeksPertanyaan, q.Image, q.Tipe, q.Poin, q.Urutan)
+			questionArgs = append(questionArgs, quiz.QuizId, q.TeksPertanyaan, q.ImageAssetId, q.Tipe, q.Poin, q.Urutan)
 			argIdx += 6
 		}
 
 		questionSQL := fmt.Sprintf(
-			`INSERT INTO pertanyaan_kuis (kuis_id, teks_pertanyaan, image, tipe, poin, urutan)
+			`INSERT INTO pertanyaan_kuis (kuis_id, teks_pertanyaan, image_asset_id, tipe, poin, urutan)
 			VALUES %s RETURNING pertanyaan_id`, strings.Join(questionValues, ", "))
 
 		qRows, err := tx.Query(ctx, questionSQL, questionArgs...)
@@ -278,11 +284,11 @@ func (r *quizRepositoryImpl) Update(ctx context.Context, quiz *entity.Quiz) (*en
 	defer tx.Rollback(ctx)
 
 	// 1. Update quiz metadata
-	updateSQL := `UPDATE kuis SET judul = $1, gambar = $2, thumbnail = $3, kategori_id = $4,
+	updateSQL := `UPDATE kuis SET judul = $1, gambar_asset_id = $2, thumbnail_asset_id = $3, kategori_id = $4,
 		xp_reward = $5, is_published = $6 WHERE kuis_id = $7`
 
 	_, err = tx.Exec(ctx, updateSQL,
-		quiz.Judul, quiz.Gambar, quiz.Thumbnail,
+		quiz.Judul, quiz.GambarAssetId, quiz.ThumbnailAssetId,
 		quiz.KategoriId, quiz.XpReward, quiz.IsPublished, quiz.QuizId)
 	if err != nil {
 		return nil, err
@@ -303,12 +309,12 @@ func (r *quizRepositoryImpl) Update(ctx context.Context, quiz *entity.Quiz) (*en
 		for _, q := range quiz.Soal {
 			questionValues = append(questionValues,
 				fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d)", argIdx, argIdx+1, argIdx+2, argIdx+3, argIdx+4, argIdx+5))
-			questionArgs = append(questionArgs, quiz.QuizId, q.TeksPertanyaan, q.Image, q.Tipe, q.Poin, q.Urutan)
+			questionArgs = append(questionArgs, quiz.QuizId, q.TeksPertanyaan, q.ImageAssetId, q.Tipe, q.Poin, q.Urutan)
 			argIdx += 6
 		}
 
 		questionSQL := fmt.Sprintf(
-			`INSERT INTO pertanyaan_kuis (kuis_id, teks_pertanyaan, image, tipe, poin, urutan)
+			`INSERT INTO pertanyaan_kuis (kuis_id, teks_pertanyaan, image_asset_id, tipe, poin, urutan)
 			VALUES %s RETURNING pertanyaan_id`, strings.Join(questionValues, ", "))
 
 		qRows, err := tx.Query(ctx, questionSQL, questionArgs...)

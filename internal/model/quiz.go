@@ -4,9 +4,9 @@ import "time"
 
 type QuizRequest struct {
 	Judul       string             `json:"judul" validate:"required"`
-	Gambar      string             `json:"gambar"`
-	Thumbnail   string             `json:"thumbnail"`
-	KategoriId  string                `json:"kategori_id" validate:"required"`
+	GambarAssetId    *int               `json:"gambar_asset_id"`
+	ThumbnailAssetId *int               `json:"thumbnail_asset_id"`
+	KategoriId       string             `json:"kategori_id" validate:"required"`
 	XpReward    int                `json:"xp_reward"`
 	IsPublished bool               `json:"is_published"`
 	Soal        []*QuestionRequest `json:"soal" validate:"required,dive"`

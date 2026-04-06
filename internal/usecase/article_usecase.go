@@ -24,13 +24,15 @@ type ArticleUseCase interface {
 
 type articleUseCaseImpl struct {
 	ArticleRepository repository.ArticleRepository
+	AssetRepository   repository.AssetRepository
 	Log *logrus.Logger
 	Validator *validator.Validate
 }
 
-func NewArticleUseCase(articleRepository repository.ArticleRepository,log *logrus.Logger,validator *validator.Validate) ArticleUseCase {
+func NewArticleUseCase(articleRepository repository.ArticleRepository, assetRepository repository.AssetRepository, log *logrus.Logger,validator *validator.Validate) ArticleUseCase {
 	return &articleUseCaseImpl{
 		ArticleRepository: articleRepository,
+		AssetRepository:   assetRepository,
 		Log: log,
 		Validator: validator,
 	}
@@ -131,13 +133,20 @@ func (u *articleUseCaseImpl) UpdateArticle(ctx context.Context, article *model.A
 			ArticleCategoryId: article.CategoryId,
 		},
 		Status: article.Status,
-		Thumbnail: &article.Thumbnail,
+		ThumbnailAssetId: article.ThumbnailAssetId,
 	}
 
 	updatedArticle,err := u.ArticleRepository.UpdateArticle(ctx,UpdatedArticle)
 	if err != nil {
 		u.Log.Warnf("error when update article: %v",err)
 		return nil,fiber.ErrInternalServerError
+	}
+
+	if article.ThumbnailAssetId != nil {
+		err := u.AssetRepository.MarkAsUsed(ctx, []int{*article.ThumbnailAssetId})
+		if err != nil {
+			u.Log.Warnf("failed to mark asset as used: %v", err)
+		}
 	}
 
 	res := converter.ToArticleResponse(updatedArticle)

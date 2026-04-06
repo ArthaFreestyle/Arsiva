@@ -57,10 +57,12 @@ func (r *articleRepositoryImpl) GetAllArticle(ctx context.Context, page int, siz
         'Username', u.username
     ) AS "user",
     a.created_at,
-    a.thumbnail 
+    COALESCE(ass.url, '') AS thumbnail,
+    a.thumbnail_asset_id
 FROM artikel a
 LEFT JOIN kategori_artikel k ON a.kategori_id = k.kategori_artikel_id
 LEFT JOIN users u ON a.created_by = u.user_id
+LEFT JOIN assets ass ON a.thumbnail_asset_id = ass.asset_id
 WHERE a.judul ILIKE $1
 ORDER BY a.created_at DESC
 LIMIT $2 OFFSET $3`
@@ -93,10 +95,12 @@ func (r *articleRepositoryImpl) GetArticleBySlug(ctx context.Context, slug strin
         'Username', u.username
     ) AS "user",
     a.created_at,
-    a.thumbnail 
+    COALESCE(ass.url, '') AS thumbnail,
+    a.thumbnail_asset_id
 FROM artikel a
 LEFT JOIN kategori_artikel k ON a.kategori_id = k.kategori_artikel_id
 LEFT JOIN users u ON a.created_by = u.user_id
+LEFT JOIN assets ass ON a.thumbnail_asset_id = ass.asset_id
 WHERE a.slug = $1`
 	rows, err := r.DB.Query(ctx, SQL, slug)
 	if err != nil {
@@ -126,10 +130,12 @@ func (r *articleRepositoryImpl) GetArticleById(ctx context.Context, articleId st
         'Username', u.username
     ) AS "user",
     a.created_at,
-    a.thumbnail 
+    COALESCE(ass.url, '') AS thumbnail,
+    a.thumbnail_asset_id
 FROM artikel a
 LEFT JOIN kategori_artikel k ON a.kategori_id = k.kategori_artikel_id
 LEFT JOIN users u ON a.created_by = u.user_id
+LEFT JOIN assets ass ON a.thumbnail_asset_id = ass.asset_id
 WHERE a.artikel_id = $1`
 	rows, err := r.DB.Query(ctx, SQL, articleId)
 	if err != nil {
@@ -143,7 +149,7 @@ WHERE a.artikel_id = $1`
 }
 
 func (r *articleRepositoryImpl) CreateArticle(ctx context.Context, article *entity.Article) (*entity.Article, error) {
-	SQL := `INSERT INTO artikel (slug,judul,kategori_id,created_by) VALUES ($1,$2,$3,$4) RETURNING artikel_id,slug,judul,konten,kategori_id,status,excerpt,created_by,created_at,thumbnail`
+	SQL := `INSERT INTO artikel (slug,judul,kategori_id,created_by) VALUES ($1,$2,$3,$4) RETURNING artikel_id,slug,judul,konten,kategori_id,status,excerpt,created_by,created_at,thumbnail_asset_id`
 	err := r.DB.QueryRow(ctx, SQL, article.Slug, article.Judul, article.KategoriId, article.CreatedBy.UserId).Scan(
         &article.ArticleId,
         &article.Slug,
@@ -154,7 +160,7 @@ func (r *articleRepositoryImpl) CreateArticle(ctx context.Context, article *enti
         &article.Excerpt,
         &article.CreatedBy.UserId, // <--- String dari DB langsung dipetakan ke property UserId di dalam nested struct
         &article.CreatedAt,
-        &article.Thumbnail,
+        &article.ThumbnailAssetId,
     )
 	if err != nil {
 		return nil, err
@@ -163,7 +169,7 @@ func (r *articleRepositoryImpl) CreateArticle(ctx context.Context, article *enti
 }
 
 func (r *articleRepositoryImpl) UpdateArticle(ctx context.Context, article *entity.Article) (*entity.Article, error) {
-	SQL := `UPDATE artikel SET slug = $1,judul = $2,konten = $3,kategori_id = $4,status = $5,excerpt = $6,thumbnail = $7 WHERE artikel_id = $8 RETURNING artikel_id,slug,judul,konten,kategori_id,status,excerpt,created_by,created_at,thumbnail`
+	SQL := `UPDATE artikel SET slug = $1,judul = $2,konten = $3,kategori_id = $4,status = $5,excerpt = $6,thumbnail_asset_id = $7 WHERE artikel_id = $8 RETURNING artikel_id,slug,judul,konten,kategori_id,status,excerpt,created_by,created_at,thumbnail_asset_id`
 	var createdByID string // (Ubah ke tipe UUID jika database kamu pakai UUID)
 
 	err := r.DB.QueryRow(ctx, SQL, 
@@ -173,7 +179,7 @@ func (r *articleRepositoryImpl) UpdateArticle(ctx context.Context, article *enti
 		article.KategoriId, 
 		article.Status, 
 		article.Excerpt, 
-		article.Thumbnail, 
+		article.ThumbnailAssetId, 
 		article.ArticleId,
 	).Scan(
 		&article.ArticleId,
@@ -185,7 +191,7 @@ func (r *articleRepositoryImpl) UpdateArticle(ctx context.Context, article *enti
 		&article.Excerpt,
 		&createdByID, // <--- Masuk ke variabel sementara dulu, biar gak panic!
 		&article.CreatedAt,
-		&article.Thumbnail,
+		&article.ThumbnailAssetId,
 	)
 	if err != nil {
 		return nil, err

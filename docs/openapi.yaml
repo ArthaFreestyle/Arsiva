@@ -1794,9 +1794,9 @@ components:
         content:
           type: string
           description: Konten BSON dari Block-Based Editor
-        thumbnail:
-          type: string
-          description: Path thumbnail (opsional)
+        thumbnail_asset_id:
+          type: integer
+          description: ID asset thumbnail (opsional)
 
     ArticleResponse:
       type: object
@@ -1845,10 +1845,14 @@ components:
     UploadResponse:
       type: object
       properties:
+        asset_id:
+          type: integer
+          description: ID asset yang baru dibuat
+          example: 1
         url:
           type: string
           description: URL akses gambar (relative path)
-          example: "/uploads/2026/03/uuid.jpg"
+          example: "/uploads/2026/03/uuid.webp"
         filename:
           type: string
           description: Nama file asli
@@ -1871,10 +1875,10 @@ components:
       properties:
         judul:
           type: string
-        gambar:
-          type: string
-        thumbnail:
-          type: string
+        gambar_asset_id:
+          type: integer
+        thumbnail_asset_id:
+          type: integer
         kategori:
           type: string
         xp_reward:
@@ -1951,9 +1955,9 @@ components:
         poin:
           type: integer
           example: 10
-        pertanyaan_gambar:
-          type: string
-          example: "/uploads/2026/03/peta-indonesia.jpg"
+        image_asset_id:
+          type: integer
+          example: 1
         pilihan:
           type: array
           items:
@@ -1967,12 +1971,12 @@ components:
         judul:
           type: string
           example: "Kuis Geografi Indonesia"
-        gambar:
-          type: string
-          example: "/uploads/2026/03/geografi-bg.jpg"
-        thumbnail:
-          type: string
-          example: "/uploads/2026/03/geografi-thumb.jpg"
+        gambar_asset_id:
+          type: integer
+          example: 1
+        thumbnail_asset_id:
+          type: integer
+          example: 2
         xp_reward:
           type: integer
           example: 100
@@ -2107,10 +2111,10 @@ components:
           type: string
           description: Kunci unik scene (untuk navigasi)
           example: "scene_awal"
-        scene_image:
-          type: string
-          description: Path gambar scene
-          example: "/uploads/2026/03/scene-awal.jpg"
+        scene_image_asset_id:
+          type: integer
+          description: ID asset gambar scene
+          example: 1
         scene_text:
           type: string
           description: Narasi / teks scene
@@ -2179,10 +2183,10 @@ components:
           type: string
           description: Judul cerita interaktif
           example: "Petualangan di Hutan Rimba"
-        thumbnail:
-          type: string
-          description: Path thumbnail cerita
-          example: "/uploads/2026/03/cerita-thumb.jpg"
+        thumbnail_asset_id:
+          type: integer
+          description: ID asset thumbnail cerita
+          example: 1
         deskripsi:
           type: string
           description: Deskripsi singkat cerita

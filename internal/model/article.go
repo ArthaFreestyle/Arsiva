@@ -10,7 +10,7 @@ type ArticleUpdateRequest struct {
 	CategoryId string `json:"category_id" validate:"required"`
 	Status string `json:"status" validate:"required"`
 	Content string `json:"content" validate:"required"`
-	Thumbnail string `json:"thumbnail"`
+	ThumbnailAssetId *int `json:"thumbnail_asset_id"`
 }
 
 type ArticleResponse struct {
