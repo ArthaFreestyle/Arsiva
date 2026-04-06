@@ -1776,6 +1776,10 @@ components:
           type: string
           description: ID kategori artikel
           example: "1"
+        thumbnail_asset_id:
+          type: integer
+          description: ID asset thumbnail (opsional)
+          example: 1
 
     ArticleUpdateRequest:
       type: object
@@ -1871,14 +1875,16 @@ components:
     # ── Puzzle Schemas ──
     PuzzleRequest:
       type: object
-      required: [judul, gambar, thumbnail, kategori, xp_reward, is_published]
+      required: [judul, kategori, xp_reward, is_published]
       properties:
         judul:
           type: string
         gambar_asset_id:
           type: integer
+          description: ID asset untuk gambar puzzle
         thumbnail_asset_id:
           type: integer
+          description: ID asset untuk thumbnail puzzle
         kategori:
           type: string
         xp_reward:
@@ -1940,7 +1946,7 @@ components:
 
     QuestionRequest:
       type: object
-      required: [teks_pertanyaan, tipe, poin, pertanyaan_gambar, pilihan]
+      required: [teks_pertanyaan, tipe, poin, pilihan]
       properties:
         urutan:
           type: integer
@@ -1966,7 +1972,7 @@ components:
     QuizRequest:
       type: object
       required:
-        [judul, gambar, thumbnail, xp_reward, kategori_id, is_published, soal]
+        [judul, xp_reward, kategori_id, is_published, soal]
       properties:
         judul:
           type: string
