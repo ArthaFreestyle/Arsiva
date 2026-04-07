@@ -1354,7 +1354,7 @@ paths:
       tags: [Stories]
       summary: Create story
       description: |
-        Membuat cerita interaktif baru beserta scene-scene-nya.  
+        Membuat cerita interaktif baru (draft) hanya dengan metadata cerita.  
         🔒 **Role**: `guru`, `super_admin`
       operationId: createStory
       security:
@@ -1427,7 +1427,7 @@ paths:
       tags: [Stories]
       summary: Update story
       description: |
-        Update cerita interaktif beserta scene-scene-nya.  
+        Update metadata cerita interaktif (termasuk status publish).  
         🔒 **Role**: `guru`, `super_admin`
       operationId: updateStory
       security:
@@ -1451,6 +1451,136 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/stories/{id}/scenes:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: ID cerita interaktif
+    post:
+      tags: [Stories]
+      summary: Create scene
+      description: |
+        Menambahkan satu scene ke cerita interaktif.  
+        🔒 **Role**: `guru`, `super_admin`
+      operationId: createStoryScene
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SceneRequest"
+      responses:
+        "200":
+          description: Scene berhasil dibuat
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SceneWrapper"
+        "400":
+          description: Validasi gagal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/stories/{id}/scenes/{scene_id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: ID cerita interaktif
+      - name: scene_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: ID scene
+    put:
+      tags: [Stories]
+      summary: Update scene
+      description: |
+        Update satu scene pada cerita interaktif.  
+        🔒 **Role**: `guru`, `super_admin`
+      operationId: updateStoryScene
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SceneRequest"
+      responses:
+        "200":
+          description: Scene berhasil diupdate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SceneWrapper"
+        "400":
+          description: Validasi gagal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      tags: [Stories]
+      summary: Delete scene
+      description: |
+        Hapus satu scene pada cerita interaktif.  
+        🔒 **Role**: `guru`, `super_admin`
+      operationId: deleteStoryScene
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Scene berhasil dihapus
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: string
+                    example: "scene deleted successfully"
         "401":
           $ref: "#/components/responses/UnauthorizedResponse"
         "403":
@@ -2206,10 +2336,6 @@ components:
         is_published:
           type: boolean
           example: true
-        scenes:
-          type: array
-          items:
-            $ref: "#/components/schemas/SceneRequest"
 
     StoryResponse:
       type: object
@@ -2251,6 +2377,12 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/StoryResponse"
+
+    SceneWrapper:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/SceneResponse"
 
     StoryListWrapper:
       type: object

@@ -14,6 +14,9 @@ type CeritaController interface {
 	GetCeritaById(ctx fiber.Ctx) error
 	CreateCerita(ctx fiber.Ctx) error
 	UpdateCerita(ctx fiber.Ctx) error
+	CreateScene(ctx fiber.Ctx) error
+	UpdateScene(ctx fiber.Ctx) error
+	DeleteScene(ctx fiber.Ctx) error
 	DeleteCerita(ctx fiber.Ctx) error
 }
 
@@ -135,5 +138,79 @@ func (c *ceritaControllerImpl) DeleteCerita(ctx fiber.Ctx) error {
 		Data: "cerita deleted successfully",
 	}
 
+	return ctx.Status(fiber.StatusOK).JSON(res)
+}
+
+func (c *ceritaControllerImpl) CreateScene(ctx fiber.Ctx) error {
+	var scene model.SceneRequest
+	if err := ctx.Bind().Body(&scene); err != nil {
+		c.Log.Warnf("error when bind scene: %v", err)
+		return fiber.NewError(fiber.StatusBadRequest, "bad request")
+	}
+
+	ceritaId, err := strconv.Atoi(ctx.Params("id"))
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid cerita id")
+	}
+
+	createdScene, err := c.CeritaUseCase.CreateScene(ctx, ceritaId, &scene)
+	if err != nil {
+		c.Log.Warnf("error when create scene: %v", err)
+		return fiber.NewError(fiber.StatusInternalServerError, "internal server error")
+	}
+
+	res := model.WebResponse[*model.SceneResponse]{
+		Data: createdScene,
+	}
+	return ctx.Status(fiber.StatusOK).JSON(res)
+}
+
+func (c *ceritaControllerImpl) UpdateScene(ctx fiber.Ctx) error {
+	var scene model.SceneRequest
+	if err := ctx.Bind().Body(&scene); err != nil {
+		c.Log.Warnf("error when bind scene: %v", err)
+		return fiber.NewError(fiber.StatusBadRequest, "bad request")
+	}
+
+	ceritaId, err := strconv.Atoi(ctx.Params("id"))
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid cerita id")
+	}
+	sceneId, err := strconv.Atoi(ctx.Params("scene_id"))
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid scene id")
+	}
+
+	updatedScene, err := c.CeritaUseCase.UpdateScene(ctx, ceritaId, sceneId, &scene)
+	if err != nil {
+		c.Log.Warnf("error when update scene: %v", err)
+		return fiber.NewError(fiber.StatusInternalServerError, "internal server error")
+	}
+
+	res := model.WebResponse[*model.SceneResponse]{
+		Data: updatedScene,
+	}
+	return ctx.Status(fiber.StatusOK).JSON(res)
+}
+
+func (c *ceritaControllerImpl) DeleteScene(ctx fiber.Ctx) error {
+	ceritaId, err := strconv.Atoi(ctx.Params("id"))
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid cerita id")
+	}
+	sceneId, err := strconv.Atoi(ctx.Params("scene_id"))
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid scene id")
+	}
+
+	err = c.CeritaUseCase.DeleteScene(ctx, ceritaId, sceneId)
+	if err != nil {
+		c.Log.Warnf("error when delete scene: %v", err)
+		return fiber.NewError(fiber.StatusInternalServerError, "internal server error")
+	}
+
+	res := model.WebResponse[any]{
+		Data: "scene deleted successfully",
+	}
 	return ctx.Status(fiber.StatusOK).JSON(res)
 }

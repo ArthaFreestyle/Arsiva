@@ -18,6 +18,9 @@ type CeritaUseCase interface {
 	GetCeritaById(ctx context.Context, ceritaId int) (*model.CeritaResponse, error)
 	CreateCerita(ctx context.Context, cerita *model.CeritaRequest, userId string) (*model.CeritaResponse, error)
 	UpdateCerita(ctx context.Context, cerita *model.CeritaRequest, ceritaId int) (*model.CeritaResponse, error)
+	CreateScene(ctx context.Context, ceritaId int, scene *model.SceneRequest) (*model.SceneResponse, error)
+	UpdateScene(ctx context.Context, ceritaId int, sceneId int, scene *model.SceneRequest) (*model.SceneResponse, error)
+	DeleteScene(ctx context.Context, ceritaId int, sceneId int) error
 	DeleteCerita(ctx context.Context, ceritaId int) error
 }
 
@@ -75,45 +78,16 @@ func (u *ceritaUseCaseImpl) CreateCerita(ctx context.Context, cerita *model.Ceri
 
 	userIdInt, _ := strconv.Atoi(userId)
 
-	// Build scenes
-	scenes := make([]*entity.Scene, 0, len(cerita.Scenes))
-	for i, s := range cerita.Scenes {
-		choices := make([]map[string]interface{}, 0, len(s.SceneChoices))
-		for _, c := range s.SceneChoices {
-			choices = append(choices, map[string]interface{}{
-				"text": c.Text,
-				"next": c.Next,
-			})
-		}
-
-		urutan := s.Urutan
-		if urutan == 0 {
-			urutan = i + 1
-		}
-
-		scenes = append(scenes, &entity.Scene{
-			SceneKey:          s.SceneKey,
-			SceneImageAssetId: s.SceneImageAssetId,
-			SceneText:         s.SceneText,
-			SceneChoices: choices,
-			IsEnding:     s.IsEnding,
-			EndingPoint:  s.EndingPoint,
-			EndingType:   s.EndingType,
-			Urutan:       urutan,
-		})
-	}
-
 	newCerita := &entity.CeritaInteraktif{
-		Judul:     cerita.Judul,
+		Judul:            cerita.Judul,
 		ThumbnailAssetId: cerita.ThumbnailAssetId,
-		Deskripsi: cerita.Deskripsi,
-		KategoriId: cerita.KategoriId,
-		XpReward:  cerita.XpReward,
+		Deskripsi:        cerita.Deskripsi,
+		KategoriId:       cerita.KategoriId,
+		XpReward:         cerita.XpReward,
 		CreatedBy: entity.User{
 			UserId: strconv.Itoa(userIdInt),
 		},
-		IsPublished: cerita.IsPublished,
-		Scenes:      scenes,
+		IsPublished: false,
 	}
 
 	createdCerita, err := u.CeritaRepository.Create(ctx, newCerita)
@@ -125,11 +99,6 @@ func (u *ceritaUseCaseImpl) CreateCerita(ctx context.Context, cerita *model.Ceri
 	var assetIds []int
 	if cerita.ThumbnailAssetId != nil {
 		assetIds = append(assetIds, *cerita.ThumbnailAssetId)
-	}
-	for _, s := range cerita.Scenes {
-		if s.SceneImageAssetId != nil {
-			assetIds = append(assetIds, *s.SceneImageAssetId)
-		}
 	}
 	if len(assetIds) > 0 {
 		if err := u.AssetRepository.MarkAsUsed(ctx, assetIds); err != nil {
@@ -148,43 +117,14 @@ func (u *ceritaUseCaseImpl) UpdateCerita(ctx context.Context, cerita *model.Ceri
 		return nil, fiber.ErrBadRequest
 	}
 
-	// Build scenes
-	scenes := make([]*entity.Scene, 0, len(cerita.Scenes))
-	for i, s := range cerita.Scenes {
-		choices := make([]map[string]interface{}, 0, len(s.SceneChoices))
-		for _, c := range s.SceneChoices {
-			choices = append(choices, map[string]interface{}{
-				"text": c.Text,
-				"next": c.Next,
-			})
-		}
-
-		urutan := s.Urutan
-		if urutan == 0 {
-			urutan = i + 1
-		}
-
-		scenes = append(scenes, &entity.Scene{
-			SceneKey:          s.SceneKey,
-			SceneImageAssetId: s.SceneImageAssetId,
-			SceneText:         s.SceneText,
-			SceneChoices: choices,
-			IsEnding:     s.IsEnding,
-			EndingPoint:  s.EndingPoint,
-			EndingType:   s.EndingType,
-			Urutan:       urutan,
-		})
-	}
-
 	updatedCerita := &entity.CeritaInteraktif{
-		CeritaId:    ceritaId,
-		Judul:       cerita.Judul,
+		CeritaId:         ceritaId,
+		Judul:            cerita.Judul,
 		ThumbnailAssetId: cerita.ThumbnailAssetId,
-		Deskripsi:   cerita.Deskripsi,
-		KategoriId:  cerita.KategoriId,
-		XpReward:    cerita.XpReward,
-		IsPublished: cerita.IsPublished,
-		Scenes:      scenes,
+		Deskripsi:        cerita.Deskripsi,
+		KategoriId:       cerita.KategoriId,
+		XpReward:         cerita.XpReward,
+		IsPublished:      cerita.IsPublished,
 	}
 
 	result, err := u.CeritaRepository.Update(ctx, updatedCerita)
@@ -197,11 +137,6 @@ func (u *ceritaUseCaseImpl) UpdateCerita(ctx context.Context, cerita *model.Ceri
 	if cerita.ThumbnailAssetId != nil {
 		assetIds = append(assetIds, *cerita.ThumbnailAssetId)
 	}
-	for _, s := range cerita.Scenes {
-		if s.SceneImageAssetId != nil {
-			assetIds = append(assetIds, *s.SceneImageAssetId)
-		}
-	}
 	if len(assetIds) > 0 {
 		if err := u.AssetRepository.MarkAsUsed(ctx, assetIds); err != nil {
 			u.Log.Warnf("failed to mark asset as used: %v", err)
@@ -212,6 +147,59 @@ func (u *ceritaUseCaseImpl) UpdateCerita(ctx context.Context, cerita *model.Ceri
 	return res, nil
 }
 
+func (u *ceritaUseCaseImpl) CreateScene(ctx context.Context, ceritaId int, scene *model.SceneRequest) (*model.SceneResponse, error) {
+	err := u.Validator.Struct(scene)
+	if err != nil {
+		u.Log.Warnf("error when validate scene: %v", err)
+		return nil, fiber.ErrBadRequest
+	}
+
+	result, err := u.CeritaRepository.CreateScene(ctx, ceritaId, toSceneEntity(scene))
+	if err != nil {
+		u.Log.Warnf("error when create scene: %v", err)
+		return nil, fiber.ErrInternalServerError
+	}
+
+	if scene.SceneImageAssetId != nil {
+		if err := u.AssetRepository.MarkAsUsed(ctx, []int{*scene.SceneImageAssetId}); err != nil {
+			u.Log.Warnf("failed to mark asset as used: %v", err)
+		}
+	}
+
+	return converter.ToSceneResponse(result), nil
+}
+
+func (u *ceritaUseCaseImpl) UpdateScene(ctx context.Context, ceritaId int, sceneId int, scene *model.SceneRequest) (*model.SceneResponse, error) {
+	err := u.Validator.Struct(scene)
+	if err != nil {
+		u.Log.Warnf("error when validate scene: %v", err)
+		return nil, fiber.ErrBadRequest
+	}
+
+	result, err := u.CeritaRepository.UpdateScene(ctx, ceritaId, sceneId, toSceneEntity(scene))
+	if err != nil {
+		u.Log.Warnf("error when update scene: %v", err)
+		return nil, fiber.ErrInternalServerError
+	}
+
+	if scene.SceneImageAssetId != nil {
+		if err := u.AssetRepository.MarkAsUsed(ctx, []int{*scene.SceneImageAssetId}); err != nil {
+			u.Log.Warnf("failed to mark asset as used: %v", err)
+		}
+	}
+
+	return converter.ToSceneResponse(result), nil
+}
+
+func (u *ceritaUseCaseImpl) DeleteScene(ctx context.Context, ceritaId int, sceneId int) error {
+	err := u.CeritaRepository.DeleteScene(ctx, ceritaId, sceneId)
+	if err != nil {
+		u.Log.Warnf("error when delete scene: %v", err)
+		return fiber.ErrInternalServerError
+	}
+	return nil
+}
+
 func (u *ceritaUseCaseImpl) DeleteCerita(ctx context.Context, ceritaId int) error {
 	err := u.CeritaRepository.Delete(ctx, ceritaId)
 	if err != nil {
@@ -219,4 +207,25 @@ func (u *ceritaUseCaseImpl) DeleteCerita(ctx context.Context, ceritaId int) erro
 		return fiber.ErrInternalServerError
 	}
 	return nil
+}
+
+func toSceneEntity(scene *model.SceneRequest) *entity.Scene {
+	choices := make([]map[string]interface{}, 0, len(scene.SceneChoices))
+	for _, c := range scene.SceneChoices {
+		choices = append(choices, map[string]interface{}{
+			"text": c.Text,
+			"next": c.Next,
+		})
+	}
+
+	return &entity.Scene{
+		SceneKey:          scene.SceneKey,
+		SceneImageAssetId: scene.SceneImageAssetId,
+		SceneText:         scene.SceneText,
+		SceneChoices:      choices,
+		IsEnding:          scene.IsEnding,
+		EndingPoint:       scene.EndingPoint,
+		EndingType:        scene.EndingType,
+		Urutan:            scene.Urutan,
+	}
 }
