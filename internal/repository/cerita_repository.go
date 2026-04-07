@@ -17,6 +17,9 @@ type CeritaRepository interface {
 	FindById(ctx context.Context, ceritaId int) (*entity.CeritaInteraktif, error)
 	Create(ctx context.Context, cerita *entity.CeritaInteraktif) (*entity.CeritaInteraktif, error)
 	Update(ctx context.Context, cerita *entity.CeritaInteraktif) (*entity.CeritaInteraktif, error)
+	CreateScene(ctx context.Context, ceritaId int, scene *entity.Scene) (*entity.Scene, error)
+	UpdateScene(ctx context.Context, ceritaId int, sceneId int, scene *entity.Scene) (*entity.Scene, error)
+	DeleteScene(ctx context.Context, ceritaId int, sceneId int) error
 	Delete(ctx context.Context, ceritaId int) error
 }
 
@@ -185,62 +188,15 @@ func (r *ceritaRepositoryImpl) Create(ctx context.Context, cerita *entity.Cerita
 	return r.FindById(ctx, cerita.CeritaId)
 }
 
-// Update updates cerita metadata and replaces all scenes.
+// Update updates cerita metadata.
 func (r *ceritaRepositoryImpl) Update(ctx context.Context, cerita *entity.CeritaInteraktif) (*entity.CeritaInteraktif, error) {
-	tx, err := r.DB.Begin(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback(ctx)
-
-	// 1. Update cerita metadata
 	updateSQL := `UPDATE cerita_interaktif SET judul = $1, thumbnail_asset_id = $2, deskripsi = $3,
 		kategori_id = $4, xp_reward = $5, is_published = $6
 		WHERE cerita_id = $7`
 
-	_, err = tx.Exec(ctx, updateSQL,
+	_, err := r.DB.Exec(ctx, updateSQL,
 		cerita.Judul, cerita.ThumbnailAssetId, cerita.Deskripsi,
 		cerita.KategoriId, cerita.XpReward, cerita.IsPublished, cerita.CeritaId)
-	if err != nil {
-		return nil, err
-	}
-
-	// 2. Delete existing scenes (will be replaced)
-	_, err = tx.Exec(ctx, `DELETE FROM scene WHERE cerita_id = $1`, cerita.CeritaId)
-	if err != nil {
-		return nil, err
-	}
-
-	// 3. Re-insert scenes
-	if len(cerita.Scenes) > 0 {
-		sceneValues := make([]string, 0, len(cerita.Scenes))
-		sceneArgs := make([]interface{}, 0, len(cerita.Scenes)*9)
-		argIdx := 1
-
-		for _, s := range cerita.Scenes {
-			sceneValues = append(sceneValues,
-				fmt.Sprintf("($%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d, $%d)",
-					argIdx, argIdx+1, argIdx+2, argIdx+3, argIdx+4, argIdx+5, argIdx+6, argIdx+7, argIdx+8))
-
-			choicesJSON, _ := json.Marshal(s.SceneChoices)
-
-			sceneArgs = append(sceneArgs,
-				cerita.CeritaId, s.SceneKey, s.SceneImageAssetId, s.SceneText,
-				choicesJSON, s.IsEnding, s.EndingPoint, s.EndingType, s.Urutan)
-			argIdx += 9
-		}
-
-		sceneSQL := fmt.Sprintf(
-			`INSERT INTO scene (cerita_id, scene_key, scene_image_asset_id, scene_text, scene_choices, is_ending, ending_point, ending_type, urutan)
-			VALUES %s`, strings.Join(sceneValues, ", "))
-
-		_, err = tx.Exec(ctx, sceneSQL, sceneArgs...)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	err = tx.Commit(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -248,8 +204,63 @@ func (r *ceritaRepositoryImpl) Update(ctx context.Context, cerita *entity.Cerita
 	return r.FindById(ctx, cerita.CeritaId)
 }
 
+func (r *ceritaRepositoryImpl) CreateScene(ctx context.Context, ceritaId int, scene *entity.Scene) (*entity.Scene, error) {
+	choicesJSON, _ := json.Marshal(scene.SceneChoices)
+	insertSQL := `INSERT INTO scene (cerita_id, scene_key, scene_image_asset_id, scene_text, scene_choices, is_ending, ending_point, ending_type, urutan)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		RETURNING scene_id`
+
+	err := r.DB.QueryRow(ctx, insertSQL,
+		ceritaId, scene.SceneKey, scene.SceneImageAssetId, scene.SceneText, choicesJSON,
+		scene.IsEnding, scene.EndingPoint, scene.EndingType, scene.Urutan,
+	).Scan(&scene.SceneId)
+	if err != nil {
+		return nil, err
+	}
+
+	return r.findSceneById(ctx, ceritaId, scene.SceneId)
+}
+
+func (r *ceritaRepositoryImpl) UpdateScene(ctx context.Context, ceritaId int, sceneId int, scene *entity.Scene) (*entity.Scene, error) {
+	choicesJSON, _ := json.Marshal(scene.SceneChoices)
+	updateSQL := `UPDATE scene
+		SET scene_key = $1, scene_image_asset_id = $2, scene_text = $3, scene_choices = $4,
+			is_ending = $5, ending_point = $6, ending_type = $7, urutan = $8
+		WHERE scene_id = $9 AND cerita_id = $10`
+
+	_, err := r.DB.Exec(ctx, updateSQL,
+		scene.SceneKey, scene.SceneImageAssetId, scene.SceneText, choicesJSON,
+		scene.IsEnding, scene.EndingPoint, scene.EndingType, scene.Urutan, sceneId, ceritaId,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return r.findSceneById(ctx, ceritaId, sceneId)
+}
+
+func (r *ceritaRepositoryImpl) DeleteScene(ctx context.Context, ceritaId int, sceneId int) error {
+	_, err := r.DB.Exec(ctx, `DELETE FROM scene WHERE scene_id = $1 AND cerita_id = $2`, sceneId, ceritaId)
+	return err
+}
+
 // Delete removes a cerita interaktif (CASCADE handles scenes).
 func (r *ceritaRepositoryImpl) Delete(ctx context.Context, ceritaId int) error {
 	_, err := r.DB.Exec(ctx, `DELETE FROM cerita_interaktif WHERE cerita_id = $1`, ceritaId)
 	return err
+}
+
+func (r *ceritaRepositoryImpl) findSceneById(ctx context.Context, ceritaId int, sceneId int) (*entity.Scene, error) {
+	sceneSQL := `SELECT s.scene_id, s.cerita_id, s.scene_key, COALESCE(ass.url,'') AS scene_image, s.scene_image_asset_id,
+		s.scene_text, COALESCE(s.scene_choices, '[]'::jsonb) AS scene_choices,
+		s.is_ending, s.ending_point, COALESCE(s.ending_type,'') AS ending_type, COALESCE(s.urutan,0) AS urutan
+		FROM scene s
+		LEFT JOIN assets ass ON s.scene_image_asset_id = ass.asset_id
+		WHERE s.cerita_id = $1 AND s.scene_id = $2`
+
+	rows, err := r.DB.Query(ctx, sceneSQL, ceritaId, sceneId)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectOneRow(rows, pgx.RowToAddrOfStructByNameLax[entity.Scene])
 }

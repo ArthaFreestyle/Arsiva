@@ -11,11 +11,11 @@ type SceneRequest struct {
 	SceneKey          string        `json:"scene_key" validate:"required"`
 	SceneImageAssetId *int          `json:"scene_image_asset_id"`
 	SceneText         string        `json:"scene_text" validate:"required"`
-	SceneChoices []SceneChoice `json:"scene_choices"`
-	IsEnding     bool          `json:"is_ending"`
-	EndingPoint  int           `json:"ending_point"`
-	EndingType   string        `json:"ending_type"`
-	Urutan       int           `json:"urutan"`
+	SceneChoices      []SceneChoice `json:"scene_choices"`
+	IsEnding          bool          `json:"is_ending"`
+	EndingPoint       int           `json:"ending_point"`
+	EndingType        string        `json:"ending_type"`
+	Urutan            int           `json:"urutan"`
 }
 
 type SceneResponse struct {
@@ -32,13 +32,12 @@ type SceneResponse struct {
 }
 
 type CeritaRequest struct {
-	Judul            string          `json:"judul" validate:"required"`
-	ThumbnailAssetId *int            `json:"thumbnail_asset_id"`
-	Deskripsi        string          `json:"deskripsi"`
-	KategoriId  int             `json:"kategori_id" validate:"required"`
-	XpReward    int             `json:"xp_reward"`
-	IsPublished bool            `json:"is_published"`
-	Scenes      []*SceneRequest `json:"scenes"`
+	Judul            string `json:"judul" validate:"required"`
+	ThumbnailAssetId *int   `json:"thumbnail_asset_id"`
+	Deskripsi        string `json:"deskripsi"`
+	KategoriId       int    `json:"kategori_id" validate:"required"`
+	XpReward         int    `json:"xp_reward"`
+	IsPublished      bool   `json:"is_published"`
 }
 
 type CeritaResponse struct {
