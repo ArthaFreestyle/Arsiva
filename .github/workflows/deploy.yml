@@ -30,7 +30,7 @@ jobs:
         run: |
           echo "Menjalankan testing..."
           # Kita jalankan test di dalam container sementara agar environment-nya sama
-          docker run --rm -v $(pwd):/app -w /app golang:1.23-alpine go test ./...
+          docker run --rm -v $(pwd):/app -w /app golang:1.25-alpine go test ./...
 
 
   deploy:
