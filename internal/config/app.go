@@ -48,8 +48,10 @@ func Bootstrap(cfg BootstrapConfig) {
 	QuizCategoryUseCase := usecase.NewQuizCategoryUseCase(quizCategoryRepo, cfg.Log, cfg.Validate)
 	AssetUseCase := usecase.NewAssetUsecase(assetRepo, cfg.Log, "./uploads")
 
-	// Start cleanup cron
-	go startAssetCleanupCron(AssetUseCase, cfg.Log)
+	if !fiber.IsChild() {
+		cfg.Log.Info("Starting asset cleanup worker on master process...")
+		go startAssetCleanupCron(AssetUseCase, cfg.Log)
+	}
 
 	AuthController := http.NewAuthController(cfg.Log, AuthUseCase)
 	UserController := http.NewUserController(UserUseCase, cfg.Log)
@@ -85,14 +87,16 @@ func Bootstrap(cfg BootstrapConfig) {
 }
 
 func startAssetCleanupCron(u usecase.AssetUsecase, log *logrus.Logger) {
+	ctx := context.Background()
 	ticker := time.NewTicker(24 * time.Hour)
 	defer ticker.Stop()
 
-	// Run once at start
-	ctx := context.Background()
-	if err := u.CleanupOrphanedAssets(ctx); err != nil {
-		log.Errorf("Initial asset cleanup failed: %v", err)
-	}
+	go func() {
+		log.Info("Executing initial orphaned assets cleanup...")
+		if err := u.CleanupOrphanedAssets(ctx); err != nil {
+			log.Errorf("Initial asset cleanup failed: %v", err)
+		}
+	}()
 
 	for range ticker.C {
 		log.Info("Running scheduled asset cleanup...")
