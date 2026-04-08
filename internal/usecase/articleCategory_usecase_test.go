@@ -12,6 +12,8 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+const testArticleCategoriesListCacheKey = "arsiva:article_categories:list"
+
 func TestNewArticleCategoryUseCase(t *testing.T) {
 	uc := NewArticleCategoryUseCase(nil, nil, nil, validator.New())
 	if uc == nil {
@@ -21,21 +23,21 @@ func TestNewArticleCategoryUseCase(t *testing.T) {
 
 type articleCategoryRepoStub struct {
 	getAllFn  func(ctx context.Context) ([]*entity.ArticleCategory, error)
-	getByIdFn func(ctx context.Context, articleCategoryId string) (*entity.ArticleCategory, error)
+	getByIDFn func(ctx context.Context, articleCategoryID string) (*entity.ArticleCategory, error)
 	createFn  func(ctx context.Context, articleCategory *entity.ArticleCategory) (*entity.ArticleCategory, error)
 	updateFn  func(ctx context.Context, articleCategory *entity.ArticleCategory) (*entity.ArticleCategory, error)
-	deleteFn  func(ctx context.Context, articleCategoryId string) error
+	deleteFn  func(ctx context.Context, articleCategoryID string) error
 }
 
 func (r *articleCategoryRepoStub) GetAllArticleCategories(ctx context.Context) ([]*entity.ArticleCategory, error) {
 	return r.getAllFn(ctx)
 }
 
-func (r *articleCategoryRepoStub) GetArticleCategoryById(ctx context.Context, articleCategoryId string) (*entity.ArticleCategory, error) {
-	if r.getByIdFn == nil {
+func (r *articleCategoryRepoStub) GetArticleCategoryById(ctx context.Context, articleCategoryID string) (*entity.ArticleCategory, error) {
+	if r.getByIDFn == nil {
 		return nil, nil
 	}
-	return r.getByIdFn(ctx, articleCategoryId)
+	return r.getByIDFn(ctx, articleCategoryID)
 }
 
 func (r *articleCategoryRepoStub) CreateArticleCategory(ctx context.Context, articleCategory *entity.ArticleCategory) (*entity.ArticleCategory, error) {
@@ -46,8 +48,8 @@ func (r *articleCategoryRepoStub) UpdateArticleCategory(ctx context.Context, art
 	return r.updateFn(ctx, articleCategory)
 }
 
-func (r *articleCategoryRepoStub) DeleteArticleCategory(ctx context.Context, articleCategoryId string) error {
-	return r.deleteFn(ctx, articleCategoryId)
+func (r *articleCategoryRepoStub) DeleteArticleCategory(ctx context.Context, articleCategoryID string) error {
+	return r.deleteFn(ctx, articleCategoryID)
 }
 
 type articleCategoryCacheStub struct {
@@ -123,7 +125,7 @@ func TestGetAllArticleCategoriesCacheMissThenCacheSet(t *testing.T) {
 			return "", redis.Nil
 		},
 		setFn: func(ctx context.Context, key string, value interface{}, expiration time.Duration) error {
-			if key != articleCategoriesListCacheKey {
+			if key != testArticleCategoriesListCacheKey {
 				t.Fatalf("unexpected cache key: %s", key)
 			}
 			setCalled = true
@@ -181,7 +183,7 @@ func TestArticleCategoryWriteOperationsInvalidateCache(t *testing.T) {
 	cache := &articleCategoryCacheStub{
 		delFn: func(ctx context.Context, keys ...string) error {
 			delCalled++
-			if len(keys) != 1 || keys[0] != articleCategoriesListCacheKey {
+			if len(keys) != 1 || keys[0] != testArticleCategoriesListCacheKey {
 				t.Fatalf("unexpected keys invalidated: %v", keys)
 			}
 			return nil

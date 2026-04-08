@@ -16,6 +16,7 @@ import (
 )
 
 const articleCategoriesListCacheKey = "arsiva:article_categories:list"
+const articleCategoriesListCacheTTL = 24 * time.Hour
 
 type ArticleCategoryCache interface {
 	Get(ctx context.Context, key string) *redis.StringCmd
@@ -25,10 +26,10 @@ type ArticleCategoryCache interface {
 
 type ArticleCategoryUseCase interface {
 	GetAllArticleCategories(ctx context.Context) ([]*model.ArticleCategoryResponse, error)
-	GetArticleCategoryById(ctx context.Context, ArticleCategoryId string) (*model.ArticleCategoryResponse, error)
+	GetArticleCategoryById(ctx context.Context, articleCategoryID string) (*model.ArticleCategoryResponse, error)
 	CreateArticleCategory(ctx context.Context, articleCategory *model.ArticleCategoryRequest) (*model.ArticleCategoryResponse, error)
-	UpdateArticleCategory(ctx context.Context, articleCategory *model.ArticleCategoryRequest, ArticleCategoryId string) (*model.ArticleCategoryResponse, error)
-	DeleteArticleCategory(ctx context.Context, ArticleCategoryId string) error
+	UpdateArticleCategory(ctx context.Context, articleCategory *model.ArticleCategoryRequest, articleCategoryID string) (*model.ArticleCategoryResponse, error)
+	DeleteArticleCategory(ctx context.Context, articleCategoryID string) error
 }
 
 type ArticleCategoryUseCaseImpl struct {
@@ -52,13 +53,13 @@ func (u *ArticleCategoryUseCaseImpl) GetAllArticleCategories(ctx context.Context
 		cachedCategories, err := u.ArticleCategoryCache.Get(ctx, articleCategoriesListCacheKey).Result()
 		if err == nil {
 			var response []*model.ArticleCategoryResponse
-			if unmarshalErr := json.Unmarshal([]byte(cachedCategories), &response); unmarshalErr == nil {
+			unmarshalErr := json.Unmarshal([]byte(cachedCategories), &response)
+			if unmarshalErr == nil {
 				return response, nil
-			} else {
-				u.warnf("error when unmarshal article categories from cache: %v", unmarshalErr)
 			}
+			u.warnf("error unmarshaling article categories from cache: %v", unmarshalErr)
 		} else if err != redis.Nil {
-			u.warnf("error when get article categories from cache: %v", err)
+			u.warnf("error getting article categories from cache: %v", err)
 		}
 	}
 
@@ -71,16 +72,16 @@ func (u *ArticleCategoryUseCaseImpl) GetAllArticleCategories(ctx context.Context
 	if u.ArticleCategoryCache != nil {
 		cachedResponse, marshalErr := json.Marshal(response)
 		if marshalErr != nil {
-			u.warnf("error when marshal article categories for cache: %v", marshalErr)
-		} else if cacheErr := u.ArticleCategoryCache.Set(ctx, articleCategoriesListCacheKey, cachedResponse, 24*time.Hour).Err(); cacheErr != nil {
-			u.warnf("error when set article categories cache: %v", cacheErr)
+			u.warnf("error marshaling article categories for cache: %v", marshalErr)
+		} else if cacheErr := u.ArticleCategoryCache.Set(ctx, articleCategoriesListCacheKey, cachedResponse, articleCategoriesListCacheTTL).Err(); cacheErr != nil {
+			u.warnf("error setting article categories cache: %v", cacheErr)
 		}
 	}
 	return response, nil
 }
 
-func (u *ArticleCategoryUseCaseImpl) GetArticleCategoryById(ctx context.Context, ArticleCategoryId string) (*model.ArticleCategoryResponse, error) {
-	articleCategory, err := u.ArticleCategoryRepository.GetArticleCategoryById(ctx, ArticleCategoryId)
+func (u *ArticleCategoryUseCaseImpl) GetArticleCategoryById(ctx context.Context, articleCategoryID string) (*model.ArticleCategoryResponse, error) {
+	articleCategory, err := u.ArticleCategoryRepository.GetArticleCategoryById(ctx, articleCategoryID)
 	if err != nil {
 		return nil, err
 	}
@@ -105,13 +106,13 @@ func (u *ArticleCategoryUseCaseImpl) CreateArticleCategory(ctx context.Context, 
 	return response, nil
 }
 
-func (u *ArticleCategoryUseCaseImpl) UpdateArticleCategory(ctx context.Context, articleCategory *model.ArticleCategoryRequest, ArticleCategoryId string) (*model.ArticleCategoryResponse, error) {
+func (u *ArticleCategoryUseCaseImpl) UpdateArticleCategory(ctx context.Context, articleCategory *model.ArticleCategoryRequest, articleCategoryID string) (*model.ArticleCategoryResponse, error) {
 	err := u.Validate.Struct(articleCategory)
 	if err != nil {
 		return nil, fiber.ErrBadRequest
 	}
 	articleCategoryEntity := &entity.ArticleCategory{
-		ArticleCategoryId: ArticleCategoryId,
+		ArticleCategoryId: articleCategoryID,
 		NamaKategori:      articleCategory.NamaKategori,
 	}
 	category, err := u.ArticleCategoryRepository.UpdateArticleCategory(ctx, articleCategoryEntity)
@@ -123,8 +124,8 @@ func (u *ArticleCategoryUseCaseImpl) UpdateArticleCategory(ctx context.Context, 
 	return response, nil
 }
 
-func (u *ArticleCategoryUseCaseImpl) DeleteArticleCategory(ctx context.Context, ArticleCategoryId string) error {
-	err := u.ArticleCategoryRepository.DeleteArticleCategory(ctx, ArticleCategoryId)
+func (u *ArticleCategoryUseCaseImpl) DeleteArticleCategory(ctx context.Context, articleCategoryID string) error {
+	err := u.ArticleCategoryRepository.DeleteArticleCategory(ctx, articleCategoryID)
 	if err != nil {
 		return err
 	}
@@ -138,7 +139,7 @@ func (u *ArticleCategoryUseCaseImpl) invalidateArticleCategoriesCache(ctx contex
 	}
 
 	if err := u.ArticleCategoryCache.Del(ctx, articleCategoriesListCacheKey).Err(); err != nil {
-		u.warnf("error when invalidate article categories cache: %v", err)
+		u.warnf("error invalidating article categories cache: %v", err)
 	}
 }
 
