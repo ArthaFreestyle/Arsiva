@@ -28,9 +28,10 @@ jobs:
 
       - name: Run Unit Tests
         run: |
-          echo "Menjalankan testing..."
-          # Kita jalankan test di dalam container sementara agar environment-nya sama
-          docker run --rm -v $(pwd):/app -w /app golang:1.25-alpine go test ./...
+          docker run --rm -v $(pwd):/app -w /app \
+            -e CGO_ENABLED=1 \
+            golang:1.25-alpine \
+            sh -c "apk add --no-cache build-base gcc musl-dev && go test ./..."
 
 
   deploy:
