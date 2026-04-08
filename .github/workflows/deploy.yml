@@ -1,32 +1,49 @@
 name: Deploy Go Backend
 
-
-# Trigger pipeline setiap ada push ke branch 'main'
 on:
   push:
     branches:
       - main
-  workflow_dispatch: #
+  workflow_dispatch:
 
 jobs:
-  deploy:
-    # KUNCI UTAMA: Gunakan self-hosted runner yang barusan kamu jalankan
-    runs-on: self-hosted 
 
+  build:
+    runs-on: self-hosted
     steps:
-      - name: Tarik Kode Terbaru (Checkout)
+      - name: Tarik Kode Terbaru
         uses: actions/checkout@v4
-        with:
-            clean: false
 
-      - name: Build & Restart Docker Compose
+      - name: Build Docker Image
         run: |
+          echo "Memulai proses build image..."
+          docker compose build api-server
+
+  test:
+    runs-on: self-hosted
+    needs: build
+    steps:
+      - name: Tarik Kode Terbaru
+        uses: actions/checkout@v4
+
+      - name: Run Unit Tests
+        run: |
+          echo "Menjalankan testing..."
+          # Kita jalankan test di dalam container sementara agar environment-nya sama
+          docker run --rm -v $(pwd):/app -w /app golang:1.23-alpine go test ./...
+
+
+  deploy:
+    runs-on: self-hosted
+    needs: test
+    steps:
+      - name: Tarik Kode Terbaru
+        uses: actions/checkout@v4
+
+      - name: Deploy to Production
+        run: |
+          echo "Semua tes aman, memulai deployment..."
+          docker compose up -d
           
-          echo "Mematikan container lama..."
-          docker compose down
-          
-          echo "Mem-build dan menyalakan container baru..."
-          docker compose up -d --build
-          
-          echo "Membersihkan sisa image Docker lama agar disk tidak penuh..."
+          echo "Membersihkan image sampah..."
           docker image prune -f
