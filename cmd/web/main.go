@@ -37,6 +37,6 @@ func main() {
 	})
 
 	if err != nil {
-		panic(err)
+		log.Fatalf("Failed to start server: %v", err)
 	}
 }
