@@ -22,6 +22,6 @@ COPY --from=builder /app/docs ./docs
 
 ENV TZ=Asia/Jakarta
 
-EXPOSE 3000
+EXPOSE 8080
 
 ENTRYPOINT ["./server_app"]
