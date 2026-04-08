@@ -68,6 +68,7 @@ services:
 # ==========================================
 networks:
   app-network:
+    name: arsiva-network
     driver: bridge
 
 volumes:
