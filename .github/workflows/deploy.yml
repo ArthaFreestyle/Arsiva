@@ -13,10 +13,11 @@ jobs:
     steps:
       - name: Tarik Kode Terbaru
         uses: actions/checkout@v4
+        with:
+          clean: false # <--- Balik lagi nih, biar gak kena Permission Denied!
 
       - name: Build Docker Image
         run: |
-          echo "Memulai proses build image..."
           docker compose build api-server
 
   test:
@@ -25,9 +26,12 @@ jobs:
     steps:
       - name: Tarik Kode Terbaru
         uses: actions/checkout@v4
+        with:
+          clean: false
 
       - name: Run Unit Tests
         run: |
+          # Pakai image golang 1.25 dan install gcc buat handle webp (CGO)
           docker run --rm -v $(pwd):/app -w /app \
             -e CGO_ENABLED=1 \
             golang:1.25-alpine \
@@ -40,11 +44,13 @@ jobs:
     steps:
       - name: Tarik Kode Terbaru
         uses: actions/checkout@v4
+        with:
+          clean: false
 
       - name: Deploy to Production
         run: |
-          echo "Semua tes aman, memulai deployment..."
+          # Langsung up tanpa down biar zero downtime
           docker compose up -d
           
-          echo "Membersihkan image sampah..."
+          echo "Bersihin sampah image..."
           docker image prune -f
