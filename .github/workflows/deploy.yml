@@ -50,7 +50,7 @@ jobs:
       - name: Deploy to Production
         run: |
           # Langsung up tanpa down biar zero downtime
-          docker compose up -d --scale api-server=3
+          docker compose up -d
           
           echo "Bersihin sampah image..."
           docker image prune -f
