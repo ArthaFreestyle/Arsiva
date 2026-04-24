@@ -17,6 +17,9 @@ type QuizRepository interface {
 	Create(ctx context.Context, quiz *entity.Quiz) (*entity.Quiz, error)
 	Update(ctx context.Context, quiz *entity.Quiz) (*entity.Quiz, error)
 	Delete(ctx context.Context, quizId int) error
+
+	GetAllManage(ctx context.Context, page int, size int, search string, userId string, role string) ([]*entity.Quiz, int, error)
+	GetByIDManage(ctx context.Context, quizId int, userId string, role string) (*entity.Quiz, error)
 }
 
 type quizRepositoryImpl struct {
@@ -367,4 +370,140 @@ func (r *quizRepositoryImpl) Update(ctx context.Context, quiz *entity.Quiz) (*en
 func (r *quizRepositoryImpl) Delete(ctx context.Context, quizId int) error {
 	_, err := r.DB.Exec(ctx, `DELETE FROM kuis WHERE kuis_id = $1`, quizId)
 	return err
+}
+
+func (r *quizRepositoryImpl) GetAllManage(ctx context.Context, page int, size int, search string, userId string, role string) ([]*entity.Quiz, int, error) {
+	offset := (page - 1) * size
+	searchPattern := "%" + search + "%"
+
+	var whereClause string
+	var countArgs, queryArgs []interface{}
+
+	if role == "super_admin" {
+		whereClause = "WHERE k.judul ILIKE $1"
+		countArgs = []interface{}{searchPattern}
+		queryArgs = []interface{}{searchPattern, size, offset}
+	} else {
+		whereClause = "WHERE k.created_by = $1 AND k.judul ILIKE $2"
+		countArgs = []interface{}{userId, searchPattern}
+		queryArgs = []interface{}{userId, searchPattern, size, offset}
+	}
+
+	var total int
+	countSQL := fmt.Sprintf(`SELECT COUNT(*) FROM kuis k %s`, whereClause)
+	err := r.DB.QueryRow(ctx, countSQL, countArgs...).Scan(&total)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	limitOffset := fmt.Sprintf("LIMIT $%d OFFSET $%d", len(countArgs)+1, len(countArgs)+2)
+
+	SQL := fmt.Sprintf(`SELECT k.kuis_id, k.judul, COALESCE(ass_t.url, '') AS thumbnail, k.thumbnail_asset_id, COALESCE(ass_g.url, '') AS gambar, k.gambar_asset_id, k.xp_reward,
+		k.kategori_id,
+		COALESCE(kk.nama_kategori, '') AS kategori,
+		k.created_at, k.is_published,
+		JSON_BUILD_OBJECT(
+			'user_id', u.user_id::text,
+			'username', u.username
+		) AS "user"
+		FROM kuis k
+		LEFT JOIN users u ON k.created_by = u.user_id
+		LEFT JOIN kategori_kuis kk ON k.kategori_id = kk.kategori_id
+		LEFT JOIN assets ass_t ON k.thumbnail_asset_id = ass_t.asset_id
+		LEFT JOIN assets ass_g ON k.gambar_asset_id = ass_g.asset_id
+		%s
+		ORDER BY k.created_at DESC
+		%s`, whereClause, limitOffset)
+
+	rows, err := r.DB.Query(ctx, SQL, queryArgs...)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	quizzes, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByNameLax[entity.Quiz])
+	if err != nil {
+		return nil, 0, err
+	}
+	return quizzes, total, nil
+}
+
+func (r *quizRepositoryImpl) GetByIDManage(ctx context.Context, quizId int, userId string, role string) (*entity.Quiz, error) {
+	var whereClause string
+	var args []interface{}
+
+	if role == "super_admin" {
+		whereClause = "WHERE k.kuis_id = $1"
+		args = []interface{}{quizId}
+	} else {
+		whereClause = "WHERE k.kuis_id = $1 AND k.created_by = $2"
+		args = []interface{}{quizId, userId}
+	}
+
+	quizSQL := fmt.Sprintf(`SELECT k.kuis_id, k.judul, COALESCE(ass_g.url, '') AS gambar, k.gambar_asset_id, COALESCE(ass_t.url, '') AS thumbnail, k.thumbnail_asset_id, k.xp_reward,
+		k.kategori_id,
+		COALESCE(kk.nama_kategori, '') AS kategori,
+		k.created_at, k.is_published,
+		JSON_BUILD_OBJECT(
+			'user_id', u.user_id::text,
+			'username', u.username
+		) AS "user"
+		FROM kuis k
+		LEFT JOIN users u ON k.created_by = u.user_id
+		LEFT JOIN kategori_kuis kk ON k.kategori_id = kk.kategori_id
+		LEFT JOIN assets ass_t ON k.thumbnail_asset_id = ass_t.asset_id
+		LEFT JOIN assets ass_g ON k.gambar_asset_id = ass_g.asset_id
+		%s`, whereClause)
+
+	rows, err := r.DB.Query(ctx, quizSQL, args...)
+	if err != nil {
+		return nil, err
+	}
+	quiz, err := pgx.CollectOneRow(rows, pgx.RowToAddrOfStructByNameLax[entity.Quiz])
+	if err != nil {
+		return nil, err
+	}
+
+	questionSQL := `SELECT p.pertanyaan_id, p.kuis_id, p.teks_pertanyaan, COALESCE(ass.url,'') AS image, p.image_asset_id, p.tipe, p.poin, p.urutan
+		FROM pertanyaan_kuis p
+		LEFT JOIN assets ass ON p.image_asset_id = ass.asset_id
+		WHERE p.kuis_id = $1 ORDER BY p.urutan`
+
+	qRows, err := r.DB.Query(ctx, questionSQL, quizId)
+	if err != nil {
+		return nil, err
+	}
+	questions, err := pgx.CollectRows(qRows, pgx.RowToAddrOfStructByNameLax[entity.Question])
+	if err != nil {
+		return nil, err
+	}
+
+	if len(questions) > 0 {
+		pertanyaanIds := make([]int, len(questions))
+		questionMap := make(map[int]*entity.Question, len(questions))
+		for i, q := range questions {
+			pertanyaanIds[i] = q.PertanyaanId
+			questionMap[q.PertanyaanId] = q
+		}
+
+		optionSQL := `SELECT jawaban_id, pertanyaan_id, teks_jawaban, score
+			FROM pilihan_kuis WHERE pertanyaan_id = ANY($1) ORDER BY jawaban_id`
+
+		oRows, err := r.DB.Query(ctx, optionSQL, pertanyaanIds)
+		if err != nil {
+			return nil, err
+		}
+		options, err := pgx.CollectRows(oRows, pgx.RowToAddrOfStructByNameLax[entity.Option])
+		if err != nil {
+			return nil, err
+		}
+
+		for _, o := range options {
+			if q, ok := questionMap[o.PertanyaanId]; ok {
+				q.Pilihan = append(q.Pilihan, o)
+			}
+		}
+	}
+
+	quiz.Soal = questions
+	return quiz, nil
 }

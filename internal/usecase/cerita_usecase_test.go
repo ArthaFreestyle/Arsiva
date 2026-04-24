@@ -33,6 +33,14 @@ func (r *ceritaRepositoryStub) FindById(ctx context.Context, ceritaId int) (*ent
 	return &entity.CeritaInteraktif{CeritaId: ceritaId}, nil
 }
 
+func (r *ceritaRepositoryStub) FindAllManage(ctx context.Context, page int, size int, search string, userId string, role string) ([]*entity.CeritaInteraktif, int, error) {
+	return nil, 0, nil
+}
+
+func (r *ceritaRepositoryStub) FindByIdManage(ctx context.Context, ceritaId int, userId string, role string) (*entity.CeritaInteraktif, error) {
+	return &entity.CeritaInteraktif{CeritaId: ceritaId}, nil
+}
+
 func (r *ceritaRepositoryStub) Create(ctx context.Context, cerita *entity.CeritaInteraktif) (*entity.CeritaInteraktif, error) {
 	return r.createFn(ctx, cerita)
 }

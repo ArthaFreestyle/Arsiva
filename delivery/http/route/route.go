@@ -86,6 +86,14 @@ func (c *RouteConfig) SetupAuthRoutes() {
 	// ==========================================
 	guruAdmin := auth.Group("", middleware.RoleMiddleware("guru", "super_admin"))
 
+	// --- NEW: Management READ endpoints (role-aware) ---
+	guruAdmin.Get("/manage/puzzles", c.PuzzleController.GetAllPuzzleManage)
+	guruAdmin.Get("/manage/puzzles/:id", c.PuzzleController.GetPuzzleByIdManage)
+	guruAdmin.Get("/manage/quizzes", c.QuizController.GetAllQuizManage)
+	guruAdmin.Get("/manage/quizzes/:id", c.QuizController.GetQuizByIdManage)
+	guruAdmin.Get("/manage/stories", c.CeritaController.GetAllCeritaManage)
+	guruAdmin.Get("/manage/stories/:id", c.CeritaController.GetCeritaByIdManage)
+
 	//article category - write
 	guruAdmin.Post("/categories/article", c.ArticleCategoryController.CreateArticleCategory)
 	guruAdmin.Put("/categories/article/:id", c.ArticleCategoryController.UpdateArticleCategory)

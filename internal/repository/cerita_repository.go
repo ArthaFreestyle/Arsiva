@@ -21,6 +21,9 @@ type CeritaRepository interface {
 	UpdateScene(ctx context.Context, ceritaId int, sceneId int, scene *entity.Scene) (*entity.Scene, error)
 	DeleteScene(ctx context.Context, ceritaId int, sceneId int) error
 	Delete(ctx context.Context, ceritaId int) error
+
+	FindAllManage(ctx context.Context, page int, size int, search string, userId string, role string) ([]*entity.CeritaInteraktif, int, error)
+	FindByIdManage(ctx context.Context, ceritaId int, userId string, role string) (*entity.CeritaInteraktif, error)
 }
 
 type ceritaRepositoryImpl struct {
@@ -263,4 +266,110 @@ func (r *ceritaRepositoryImpl) findSceneById(ctx context.Context, ceritaId int, 
 		return nil, err
 	}
 	return pgx.CollectOneRow(rows, pgx.RowToAddrOfStructByNameLax[entity.Scene])
+}
+
+func (r *ceritaRepositoryImpl) FindAllManage(ctx context.Context, page int, size int, search string, userId string, role string) ([]*entity.CeritaInteraktif, int, error) {
+	offset := (page - 1) * size
+	searchPattern := "%" + search + "%"
+
+	var whereClause string
+	var countArgs, queryArgs []interface{}
+
+	if role == "super_admin" {
+		whereClause = "WHERE c.judul ILIKE $1"
+		countArgs = []interface{}{searchPattern}
+		queryArgs = []interface{}{searchPattern, size, offset}
+	} else {
+		whereClause = "WHERE c.created_by = $1 AND c.judul ILIKE $2"
+		countArgs = []interface{}{userId, searchPattern}
+		queryArgs = []interface{}{userId, searchPattern, size, offset}
+	}
+
+	var total int
+	countSQL := fmt.Sprintf(`SELECT COUNT(*) FROM cerita_interaktif c %s`, whereClause)
+	err := r.DB.QueryRow(ctx, countSQL, countArgs...).Scan(&total)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	limitOffset := fmt.Sprintf("LIMIT $%d OFFSET $%d", len(countArgs)+1, len(countArgs)+2)
+
+	SQL := fmt.Sprintf(`SELECT c.cerita_id, c.judul, COALESCE(ass.url,'') AS thumbnail, c.thumbnail_asset_id,
+		COALESCE(c.deskripsi,'') AS deskripsi, c.kategori_id, c.xp_reward,
+		c.created_at, c.is_published,
+		JSON_BUILD_OBJECT(
+			'user_id', u.user_id::text,
+			'username', u.username
+		) AS "user"
+		FROM cerita_interaktif c
+		LEFT JOIN users u ON c.created_by = u.user_id
+		LEFT JOIN assets ass ON c.thumbnail_asset_id = ass.asset_id
+		%s
+		ORDER BY c.created_at DESC
+		%s`, whereClause, limitOffset)
+
+	rows, err := r.DB.Query(ctx, SQL, queryArgs...)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	ceritas, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByNameLax[entity.CeritaInteraktif])
+	if err != nil {
+		return nil, 0, err
+	}
+	return ceritas, total, nil
+}
+
+func (r *ceritaRepositoryImpl) FindByIdManage(ctx context.Context, ceritaId int, userId string, role string) (*entity.CeritaInteraktif, error) {
+	var whereClause string
+	var args []interface{}
+
+	if role == "super_admin" {
+		whereClause = "WHERE c.cerita_id = $1"
+		args = []interface{}{ceritaId}
+	} else {
+		whereClause = "WHERE c.cerita_id = $1 AND c.created_by = $2"
+		args = []interface{}{ceritaId, userId}
+	}
+
+	ceritaSQL := fmt.Sprintf(`SELECT c.cerita_id, c.judul, COALESCE(ass.url,'') AS thumbnail, c.thumbnail_asset_id,
+		COALESCE(c.deskripsi,'') AS deskripsi, c.kategori_id, c.xp_reward,
+		c.created_at, c.is_published,
+		JSON_BUILD_OBJECT(
+			'user_id', u.user_id::text,
+			'username', u.username
+		) AS "user"
+		FROM cerita_interaktif c
+		LEFT JOIN users u ON c.created_by = u.user_id
+		LEFT JOIN assets ass ON c.thumbnail_asset_id = ass.asset_id
+		%s`, whereClause)
+
+	rows, err := r.DB.Query(ctx, ceritaSQL, args...)
+	if err != nil {
+		return nil, err
+	}
+	cerita, err := pgx.CollectOneRow(rows, pgx.RowToAddrOfStructByNameLax[entity.CeritaInteraktif])
+	if err != nil {
+		return nil, err
+	}
+
+	// Fetch scenes
+	sceneSQL := `SELECT s.scene_id, s.cerita_id, s.scene_key, COALESCE(ass.url,'') AS scene_image, s.scene_image_asset_id,
+		s.scene_text, COALESCE(s.scene_choices, '[]'::jsonb) AS scene_choices,
+		s.is_ending, s.ending_point, COALESCE(s.ending_type,'') AS ending_type, COALESCE(s.urutan,0) AS urutan
+		FROM scene s
+		LEFT JOIN assets ass ON s.scene_image_asset_id = ass.asset_id
+		WHERE s.cerita_id = $1 ORDER BY s.urutan`
+
+	sRows, err := r.DB.Query(ctx, sceneSQL, ceritaId)
+	if err != nil {
+		return nil, err
+	}
+	scenes, err := pgx.CollectRows(sRows, pgx.RowToAddrOfStructByNameLax[entity.Scene])
+	if err != nil {
+		return nil, err
+	}
+
+	cerita.Scenes = scenes
+	return cerita, nil
 }

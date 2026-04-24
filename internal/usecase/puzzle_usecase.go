@@ -18,6 +18,11 @@ type PuzzleUseCase interface {
 	CreatePuzzle(ctx context.Context, puzzle *model.PuzzleRequest,userId string) (*model.PuzzleResponse, error)
 	UpdatePuzzle(ctx context.Context, puzzle *model.PuzzleRequest, puzzleId string) (*model.PuzzleResponse, error)
 	DeletePuzzle(ctx context.Context, puzzleId string) (error)
+
+	GetAllPuzzleManage(ctx context.Context, page int, size int, search string, userId string, role string) ([]*model.PuzzleResponse, int, error)
+	GetPuzzleByIdManage(ctx context.Context, puzzleId string, userId string, role string) (*model.PuzzleResponse, error)
+	UpdatePuzzleManage(ctx context.Context, puzzle *model.PuzzleRequest, puzzleId string, userId string, role string) (*model.PuzzleResponse, error)
+	DeletePuzzleManage(ctx context.Context, puzzleId string, userId string, role string) error
 }
 
 type puzzleUseCaseImpl struct {
@@ -151,6 +156,96 @@ func (u *puzzleUseCaseImpl) DeletePuzzle(ctx context.Context, puzzleId string) (
 	err := u.PuzzleRepository.Delete(ctx,puzzleId)
 	if err != nil {
 		u.Log.Warnf("error when delete puzzle: %v",err)
+		return fiber.ErrInternalServerError
+	}
+	return nil
+}
+
+func (u *puzzleUseCaseImpl) GetAllPuzzleManage(ctx context.Context, page int, size int, search string, userId string, role string) ([]*model.PuzzleResponse, int, error) {
+	if page < 1 {
+		page = 1
+	}
+	if size < 1 || size > 50 {
+		size = 10
+	}
+
+	puzzles, total, err := u.PuzzleRepository.FindAllManage(ctx, page, size, search, userId, role)
+	if err != nil {
+		u.Log.Warnf("error when get all puzzle manage: %v", err)
+		return nil, 0, fiber.ErrInternalServerError
+	}
+
+	res := converter.ToPuzzleResponses(puzzles)
+	return res, total, nil
+}
+
+func (u *puzzleUseCaseImpl) GetPuzzleByIdManage(ctx context.Context, puzzleId string, userId string, role string) (*model.PuzzleResponse, error) {
+	puzzle, err := u.PuzzleRepository.FindByIdManage(ctx, puzzleId, userId, role)
+	if err != nil {
+		u.Log.Warnf("error when get puzzle by id manage: %v", err)
+		return nil, fiber.ErrNotFound
+	}
+
+	res := converter.ToPuzzleResponse(puzzle)
+	return res, nil
+}
+
+func (u *puzzleUseCaseImpl) UpdatePuzzleManage(ctx context.Context, puzzle *model.PuzzleRequest, puzzleId string, userId string, role string) (*model.PuzzleResponse, error) {
+	err := u.Validator.Struct(puzzle)
+	if err != nil {
+		u.Log.Warnf("error when validate puzzle: %v", err)
+		return nil, fiber.ErrBadRequest
+	}
+
+	_, err = u.PuzzleRepository.FindByIdManage(ctx, puzzleId, userId, role)
+	if err != nil {
+		u.Log.Warnf("puzzle not found or access denied: %v", err)
+		return nil, fiber.ErrForbidden
+	}
+
+	UpdatedPuzzle := &entity.Puzzle{
+		PuzzleId:         puzzleId,
+		Judul:            puzzle.Judul,
+		GambarAssetId:    puzzle.GambarAssetId,
+		ThumbnailAssetId: puzzle.ThumbnailAssetId,
+		Kategori:         puzzle.Kategori,
+		XpReward:         puzzle.XpReward,
+		IsPublished:      puzzle.IsPublished,
+	}
+
+	updatedPuzzle, err := u.PuzzleRepository.Update(ctx, UpdatedPuzzle)
+	if err != nil {
+		u.Log.Warnf("error when update puzzle: %v", err)
+		return nil, fiber.ErrInternalServerError
+	}
+
+	var assetIds []int
+	if puzzle.GambarAssetId != nil {
+		assetIds = append(assetIds, *puzzle.GambarAssetId)
+	}
+	if puzzle.ThumbnailAssetId != nil {
+		assetIds = append(assetIds, *puzzle.ThumbnailAssetId)
+	}
+	if len(assetIds) > 0 {
+		if err := u.AssetRepository.MarkAsUsed(ctx, assetIds); err != nil {
+			u.Log.Warnf("failed to mark asset as used: %v", err)
+		}
+	}
+
+	res := converter.ToPuzzleResponse(updatedPuzzle)
+	return res, nil
+}
+
+func (u *puzzleUseCaseImpl) DeletePuzzleManage(ctx context.Context, puzzleId string, userId string, role string) error {
+	_, err := u.PuzzleRepository.FindByIdManage(ctx, puzzleId, userId, role)
+	if err != nil {
+		u.Log.Warnf("puzzle not found or access denied: %v", err)
+		return fiber.ErrForbidden
+	}
+
+	err = u.PuzzleRepository.Delete(ctx, puzzleId)
+	if err != nil {
+		u.Log.Warnf("error when delete puzzle: %v", err)
 		return fiber.ErrInternalServerError
 	}
 	return nil

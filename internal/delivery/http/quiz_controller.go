@@ -15,6 +15,9 @@ type QuizController interface {
 	CreateQuiz(ctx fiber.Ctx) error
 	UpdateQuiz(ctx fiber.Ctx) error
 	DeleteQuiz(ctx fiber.Ctx) error
+
+	GetAllQuizManage(ctx fiber.Ctx) error
+	GetQuizByIdManage(ctx fiber.Ctx) error
 }
 
 type quizControllerImpl struct {
@@ -103,7 +106,11 @@ func (c *quizControllerImpl) UpdateQuiz(ctx fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "bad request")
 	}
 
-	updatedQuiz, err := c.QuizUseCase.Update(ctx, &quiz, id)
+	claims := ctx.Locals("user").(*model.Claims)
+	userId := ctx.Locals("userId").(string)
+	role := claims.Role
+
+	updatedQuiz, err := c.QuizUseCase.UpdateManage(ctx, &quiz, id, userId, role)
 	if err != nil {
 		c.Log.Warnf("error when update quiz: %v", err)
 		return err
@@ -121,7 +128,11 @@ func (c *quizControllerImpl) DeleteQuiz(ctx fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "invalid quiz id")
 	}
 
-	err = c.QuizUseCase.Delete(ctx, id)
+	claims := ctx.Locals("user").(*model.Claims)
+	userId := ctx.Locals("userId").(string)
+	role := claims.Role
+
+	err = c.QuizUseCase.DeleteManage(ctx, id, userId, role)
 	if err != nil {
 		c.Log.Warnf("error when delete quiz: %v", err)
 		return err
@@ -129,6 +140,55 @@ func (c *quizControllerImpl) DeleteQuiz(ctx fiber.Ctx) error {
 
 	res := model.WebResponse[any]{
 		Data: "quiz deleted successfully",
+	}
+	return ctx.Status(fiber.StatusOK).JSON(res)
+}
+
+func (c *quizControllerImpl) GetAllQuizManage(ctx fiber.Ctx) error {
+	page, _ := strconv.Atoi(ctx.Query("page", "1"))
+	size, _ := strconv.Atoi(ctx.Query("size", "10"))
+	search := ctx.Query("search", "")
+
+	claims := ctx.Locals("user").(*model.Claims)
+	userId := ctx.Locals("userId").(string)
+	role := claims.Role
+
+	quizzes, total, err := c.QuizUseCase.GetAllManage(ctx, page, size, search, userId, role)
+	if err != nil {
+		c.Log.Warnf("error when get all quiz manage: %v", err)
+		return err
+	}
+
+	totalPages := (total + size - 1) / size
+
+	res := model.WebResponse[[]*model.QuizResponse]{
+		Data: quizzes,
+		Paging: &model.PageMetaData{
+			Page:  page,
+			Size:  totalPages,
+		},
+	}
+	return ctx.Status(fiber.StatusOK).JSON(res)
+}
+
+func (c *quizControllerImpl) GetQuizByIdManage(ctx fiber.Ctx) error {
+	id, err := strconv.Atoi(ctx.Params("id"))
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "invalid quiz id")
+	}
+
+	claims := ctx.Locals("user").(*model.Claims)
+	userId := ctx.Locals("userId").(string)
+	role := claims.Role
+
+	quiz, err := c.QuizUseCase.GetByIDManage(ctx, id, userId, role)
+	if err != nil {
+		c.Log.Warnf("error when get quiz by id manage: %v", err)
+		return err
+	}
+
+	res := model.WebResponse[*model.QuizResponse]{
+		Data: quiz,
 	}
 	return ctx.Status(fiber.StatusOK).JSON(res)
 }

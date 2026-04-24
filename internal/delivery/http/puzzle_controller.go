@@ -15,6 +15,9 @@ type PuzzleController interface {
 	CreatePuzzle(ctx fiber.Ctx) (error)
 	UpdatePuzzle(ctx fiber.Ctx) (error)
 	DeletePuzzle(ctx fiber.Ctx) (error)
+
+	GetAllPuzzleManage(ctx fiber.Ctx) error
+	GetPuzzleByIdManage(ctx fiber.Ctx) error
 }
 
 type puzzleControllerImpl struct {
@@ -99,11 +102,14 @@ func (c *puzzleControllerImpl) UpdatePuzzle(ctx fiber.Ctx) (error) {
 	}
 
 	puzzleId := ctx.Params("id")
+	claims := ctx.Locals("user").(*model.Claims)
+	userId := ctx.Locals("userId").(string)
+	role := claims.Role
 
-	updatedPuzzle,err := c.PuzzleUseCase.UpdatePuzzle(ctx,&puzzle,puzzleId)
+	updatedPuzzle,err := c.PuzzleUseCase.UpdatePuzzleManage(ctx,&puzzle,puzzleId, userId, role)
 	if err != nil {
 		c.Log.Warnf("error when update puzzle: %v",err)
-		return fiber.NewError(fiber.StatusInternalServerError,"internal server error")
+		return err
 	}
 
 	res := model.WebResponse[*model.PuzzleResponse]{
@@ -115,16 +121,64 @@ func (c *puzzleControllerImpl) UpdatePuzzle(ctx fiber.Ctx) (error) {
 
 func (c *puzzleControllerImpl) DeletePuzzle(ctx fiber.Ctx) (error) {
 	puzzleId := ctx.Params("id")
+	claims := ctx.Locals("user").(*model.Claims)
+	userId := ctx.Locals("userId").(string)
+	role := claims.Role
 
-	err := c.PuzzleUseCase.DeletePuzzle(ctx,puzzleId)
+	err := c.PuzzleUseCase.DeletePuzzleManage(ctx,puzzleId, userId, role)
 	if err != nil {
 		c.Log.Warnf("error when delete puzzle: %v",err)
-		return fiber.NewError(fiber.StatusInternalServerError,"internal server error")
+		return err
 	}
 
 	res := model.WebResponse[any]{
 		Data: "puzzle deleted successfully",
 	}
 
+	return ctx.Status(fiber.StatusOK).JSON(res)
+}
+
+func (c *puzzleControllerImpl) GetAllPuzzleManage(ctx fiber.Ctx) error {
+	page, _ := strconv.Atoi(ctx.Query("page", "1"))
+	size, _ := strconv.Atoi(ctx.Query("size", "10"))
+	search := ctx.Query("search", "")
+
+	claims := ctx.Locals("user").(*model.Claims)
+	userId := ctx.Locals("userId").(string)
+	role := claims.Role
+
+	puzzles, total, err := c.PuzzleUseCase.GetAllPuzzleManage(ctx, page, size, search, userId, role)
+	if err != nil {
+		c.Log.Warnf("error when get all puzzle manage: %v", err)
+		return err
+	}
+
+	totalPages := (total + size - 1) / size
+
+	res := model.WebResponse[[]*model.PuzzleResponse]{
+		Data: puzzles,
+		Paging: &model.PageMetaData{
+			Page: page,
+			Size: totalPages,
+		},
+	}
+	return ctx.Status(fiber.StatusOK).JSON(res)
+}
+
+func (c *puzzleControllerImpl) GetPuzzleByIdManage(ctx fiber.Ctx) error {
+	puzzleId := ctx.Params("id")
+	claims := ctx.Locals("user").(*model.Claims)
+	userId := ctx.Locals("userId").(string)
+	role := claims.Role
+
+	puzzle, err := c.PuzzleUseCase.GetPuzzleByIdManage(ctx, puzzleId, userId, role)
+	if err != nil {
+		c.Log.Warnf("error when get puzzle by id manage: %v", err)
+		return err
+	}
+
+	res := model.WebResponse[*model.PuzzleResponse]{
+		Data: puzzle,
+	}
 	return ctx.Status(fiber.StatusOK).JSON(res)
 }
