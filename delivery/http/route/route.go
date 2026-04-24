@@ -18,6 +18,7 @@ type RouteConfig struct {
 	CeritaController          http.CeritaController
 	StoryCategoryController   http.StoryCategoryController
 	QuizCategoryController    http.QuizCategoryController
+	GroupController           http.GroupController
 	AuthMiddleware            fiber.Handler
 }
 
@@ -134,4 +135,28 @@ func (c *RouteConfig) SetupAuthRoutes() {
 
 	//upload
 	guruAdmin.Post("/upload/image", c.UploadController.UploadImage)
+
+	// ==========================================
+	// GURU ONLY (group management)
+	// ==========================================
+	guruOnly := auth.Group("", middleware.RoleMiddleware("guru"))
+
+	// Group CRUD
+	guruOnly.Post("/groups", c.GroupController.CreateGroup)
+	guruOnly.Get("/groups", c.GroupController.GetAllGroups)
+	guruOnly.Get("/groups/:id", c.GroupController.GetGroupDetail)
+	guruOnly.Put("/groups/:id", c.GroupController.UpdateGroup)
+	guruOnly.Delete("/groups/:id", c.GroupController.DeleteGroup)
+
+	// Group Member Management (Guru)
+	guruOnly.Post("/groups/:id/invite", c.GroupController.InviteMembersByEmail)
+	guruOnly.Get("/groups/:id/invite-link", c.GroupController.GenerateInviteLink)
+	guruOnly.Get("/groups/:id/members", c.GroupController.GetGroupMembers)
+	guruOnly.Delete("/groups/:id/members/:member_id", c.GroupController.RemoveMember)
+
+	// ==========================================
+	// MEMBER ONLY (join group)
+	// ==========================================
+	memberOnly := auth.Group("", middleware.RoleMiddleware("member"))
+	memberOnly.Post("/groups/join", c.GroupController.JoinGroup)
 }

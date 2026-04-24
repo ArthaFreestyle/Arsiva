@@ -36,6 +36,7 @@ func Bootstrap(cfg BootstrapConfig) {
 	storyCategoryRepo := repository.NewStoryCategoryRepository(cfg.DB, cfg.Log)
 	quizCategoryRepo := repository.NewQuizCategoryRepository(cfg.DB, cfg.Log)
 	assetRepo := repository.NewAssetRepository(cfg.DB, cfg.Log)
+	groupRepo := repository.NewGroupRepository(cfg.DB, cfg.Log)
 
 	AuthUseCase := usecase.NewAuthUseCase(userRepo, cfg.Secret, cfg.Validate, cfg.Log, cfg.DB)
 	UserUseCase := usecase.NewUserUseCase(userRepo, cfg.Log, cfg.DB, cfg.Validate)
@@ -47,6 +48,7 @@ func Bootstrap(cfg BootstrapConfig) {
 	StoryCategoryUseCase := usecase.NewStoryCategoryUseCase(storyCategoryRepo, cfg.Log, cfg.Validate)
 	QuizCategoryUseCase := usecase.NewQuizCategoryUseCase(quizCategoryRepo, cfg.Log, cfg.Validate)
 	AssetUseCase := usecase.NewAssetUsecase(assetRepo, cfg.Log, "./uploads")
+	GroupUseCase := usecase.NewGroupUseCase(groupRepo, assetRepo, cfg.Log, cfg.Validate, cfg.Secret)
 
 	if !fiber.IsChild() {
 		cfg.Log.Info("Starting asset cleanup worker on master process...")
@@ -63,6 +65,7 @@ func Bootstrap(cfg BootstrapConfig) {
 	CeritaController := http.NewCeritaController(CeritaUseCase, cfg.Log)
 	StoryCategoryController := http.NewStoryCategoryController(StoryCategoryUseCase, cfg.Log)
 	QuizCategoryController := http.NewQuizCategoryController(QuizCategoryUseCase, cfg.Log)
+	GroupController := http.NewGroupController(GroupUseCase, cfg.Log)
 
 	// Create auth middleware
 	authMiddleware := middleware.NewAuthMiddleware(cfg.Secret, cfg.Log)
@@ -79,6 +82,7 @@ func Bootstrap(cfg BootstrapConfig) {
 		CeritaController:          CeritaController,
 		StoryCategoryController:   StoryCategoryController,
 		QuizCategoryController:    QuizCategoryController,
+		GroupController:           GroupController,
 		AuthMiddleware:            authMiddleware,
 	}
 
