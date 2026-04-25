@@ -17,8 +17,8 @@ info:
   contact:
     name: Artha
 servers:
-- url: http://arsiva.id
-  description: Local development
+- url: https://arsiva.id
+  description: Production
 tags:
 - name: Auth
   description: Autentikasi & token management (public)
