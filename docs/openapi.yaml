@@ -1559,6 +1559,10 @@ paths:
       responses:
         '200':
           description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupListWrapper'
       parameters:
       - name: page
         in: query
@@ -1581,6 +1585,22 @@ paths:
       responses:
         '200':
           description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupWrapper'
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupWrapper'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GroupCreateRequest'
   /api/v1/groups/{id}:
     get:
       tags:
@@ -1597,6 +1617,10 @@ paths:
       responses:
         '200':
           description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupDetailWrapper'
     put:
       tags:
       - Groups
@@ -1612,6 +1636,16 @@ paths:
       responses:
         '200':
           description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupWrapper'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GroupUpdateRequest'
     delete:
       tags:
       - Groups
@@ -1627,6 +1661,10 @@ paths:
       responses:
         '200':
           description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageWrapper'
   /api/v1/groups/{id}/invite:
     post:
       tags:
@@ -1643,6 +1681,16 @@ paths:
       responses:
         '200':
           description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageWrapper'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GroupInviteEmailRequest'
   /api/v1/groups/{id}/invite-link:
     get:
       tags:
@@ -1659,6 +1707,10 @@ paths:
       responses:
         '200':
           description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupInviteWrapper'
   /api/v1/groups/join:
     post:
       tags:
@@ -1669,6 +1721,16 @@ paths:
       responses:
         '200':
           description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageWrapper'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GroupJoinRequest'
   /api/v1/groups/{id}/members:
     get:
       tags:
@@ -1685,6 +1747,10 @@ paths:
       responses:
         '200':
           description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GroupMemberListWrapper'
   /api/v1/groups/{id}/members/{member_id}:
     delete:
       tags:
@@ -1706,6 +1772,10 @@ paths:
       responses:
         '200':
           description: Success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageWrapper'
 components:
   responses:
     UnauthorizedResponse:
@@ -2461,3 +2531,177 @@ components:
             $ref: '#/components/schemas/StoryResponse'
         paging:
           $ref: '#/components/schemas/PageMetaData'
+    GroupCreateRequest:
+      type: object
+      required:
+      - group_name
+      properties:
+        group_name:
+          type: string
+          maxLength: 191
+          example: Kelas 9A - Matematika
+    GroupUpdateRequest:
+      type: object
+      required:
+      - group_name
+      properties:
+        group_name:
+          type: string
+          maxLength: 191
+          example: Kelas 9A - Matematika
+        thumbnail_asset_id:
+          type: integer
+          example: 10
+    GroupInviteEmailRequest:
+      type: object
+      required:
+      - emails
+      properties:
+        emails:
+          type: array
+          items:
+            type: string
+            format: email
+    GroupJoinRequest:
+      type: object
+      required:
+      - invite_token
+      properties:
+        invite_token:
+          type: string
+          example: eyJhbG...
+    GroupGuruResponse:
+      type: object
+      properties:
+        guru_id:
+          type: integer
+          example: 1
+        nip:
+          type: string
+          example: '198501012010011001'
+        bidang_ajar:
+          type: string
+          example: Matematika
+        username:
+          type: string
+          example: pak_budi
+    GroupResponse:
+      type: object
+      properties:
+        group_id:
+          type: string
+          format: uuid
+        group_name:
+          type: string
+          example: Kelas 9A - Matematika
+        thumbnail:
+          type: string
+          example: https://arsiva.app/uploads/thumbnail.webp
+        created_by:
+          $ref: '#/components/schemas/GroupGuruResponse'
+        created_at:
+          type: string
+          example: '2026-04-24 13:00:00'
+        updated_at:
+          type: string
+          example: '2026-04-24 13:00:00'
+        member_count:
+          type: integer
+          example: 0
+    GroupMemberResponse:
+      type: object
+      properties:
+        member_id:
+          type: integer
+          example: 1
+        username:
+          type: string
+          example: andi_siswa
+        email:
+          type: string
+          format: email
+          example: andi@example.com
+        nis:
+          type: string
+          example: '2024001'
+        foto_profil:
+          type: string
+          example: ''
+        tanggal_bergabung:
+          type: string
+          example: '2026-04-24 14:00:00'
+    GroupDetailResponse:
+      type: object
+      properties:
+        group_id:
+          type: string
+          format: uuid
+        group_name:
+          type: string
+          example: Kelas 9A - Matematika
+        thumbnail:
+          type: string
+          example: https://arsiva.app/uploads/thumbnail.webp
+        created_by:
+          $ref: '#/components/schemas/GroupGuruResponse'
+        created_at:
+          type: string
+          example: '2026-04-24 13:00:00'
+        updated_at:
+          type: string
+          example: '2026-04-24 13:00:00'
+        member_count:
+          type: integer
+          example: 2
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/GroupMemberResponse'
+    GroupInviteResponse:
+      type: object
+      properties:
+        invite_token:
+          type: string
+        invite_link:
+          type: string
+        qr_code_data:
+          type: string
+        expires_at:
+          type: string
+    GroupWrapper:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/GroupResponse'
+    GroupDetailWrapper:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/GroupDetailResponse'
+    GroupListWrapper:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/GroupResponse'
+        paging:
+          $ref: '#/components/schemas/PageMetaData'
+    GroupInviteWrapper:
+      type: object
+      properties:
+        data:
+          $ref: '#/components/schemas/GroupInviteResponse'
+    GroupMemberListWrapper:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/GroupMemberResponse'
+    MessageWrapper:
+      type: object
+      properties:
+        data:
+          type: string
+          example: Success message
