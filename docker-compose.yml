@@ -24,6 +24,7 @@ services:
     image: arsiva-backend:latest
     volumes:
       - ~/actions-runner/_work/Arsiva/Arsiva/arsiva_configs/config.json:/config.json:ro
+      - ~/actions-runner/_work/Arsiva/Arsiva/uploads:/app/uploads
     depends_on:
       postgres-db:
         condition: service_healthy
