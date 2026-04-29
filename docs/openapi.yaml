@@ -1,79 +1,117 @@
 openapi: 3.0.3
 info:
   title: Arsiva API
-  description: "REST API untuk **Arsiva** \u2014 sistem manajemen arsip dan inventaris.\n\
-    \n## Autentikasi\nSemua endpoint (kecuali Login dan GET uploaded files) memerlukan\
-    \ JWT Bearer token.  \nDapatkan token melalui endpoint `POST /api/v1/login`.\n\
-    \n## Role-Based Access Control\nSetiap endpoint dilindungi oleh middleware berdasarkan\
-    \ role yang ada di JWT:\n\n| Role | Deskripsi | Akses |\n|------|-----------|-------|\n\
-    | `member` | Siswa / Murid | Hanya bisa **membaca** konten (GET) |\n| `guru` |\
-    \ Guru / Pengajar | Membaca + **membuat/edit/hapus** konten |\n| `super_admin`\
-    \ | Administrator | Semua akses termasuk **manajemen user** |\n\nResponse `401\
-    \ Unauthorized` jika token tidak valid/expired.  \nResponse `403 Forbidden` jika\
-    \ role tidak memiliki izin.\n\n## Format Response\nSemua response mengikuti format:\n\
-    ```json\n{\n  \"data\": ...,\n  \"paging\": { \"page\": 1, \"size\": 10 },\n \
-    \ \"errors\": \"\"\n}\n```\n"
+  description: "REST API untuk **Arsiva** — sistem manajemen arsip dan inventaris.
+
+
+    ## Autentikasi
+
+    Semua endpoint (kecuali Login dan GET uploaded files) memerlukan JWT Bearer
+    token. \ 
+
+    Dapatkan token melalui endpoint `POST /api/v1/login`.
+
+
+    ## Role-Based Access Control
+
+    Setiap endpoint dilindungi oleh middleware berdasarkan role yang ada di JWT:
+
+
+    | Role | Deskripsi | Akses |
+
+    |------|-----------|-------|
+
+    | `member` | Siswa / Murid | Hanya bisa **membaca** konten (GET) |
+
+    | `guru` | Guru / Pengajar | Membaca + **membuat/edit/hapus** konten |
+
+    | `super_admin` | Administrator | Semua akses termasuk **manajemen user** |
+
+
+    Response `401 Unauthorized` jika token tidak valid/expired. \ 
+
+    Response `403 Forbidden` jika role tidak memiliki izin.
+
+
+    ## Format Response
+
+    Semua response mengikuti format:
+
+    ```json
+
+    {
+
+    \  \"data\": ...,
+
+    \  \"paging\": { \"page\": 1, \"size\": 10 },
+
+    \  \"errors\": \"\"
+
+    }
+
+    ```\n"
   version: 1.0.0
   contact:
     name: Artha
 servers:
-- url: https://arsiva.id
-  description: Production
+  - url: http://127.0.0.1:3000
+    description: Production
 tags:
-- name: Auth
-  description: Autentikasi & token management (public)
-- name: Users
-  description: "CRUD manajemen data user (\U0001F512 super_admin)"
-- name: Article Categories
-  description: "CRUD kategori artikel (\U0001F512 GET = semua role, POST/PUT/DELETE\
-    \ = guru + super_admin)"
-- name: Articles
-  description: "Manajemen artikel (\U0001F512 GET = semua role, POST/PUT/DELETE =\
-    \ guru + super_admin)"
-- name: Puzzles
-  description: "CRUD puzzle (\U0001F512 GET = semua role, POST/PUT/DELETE = guru +\
-    \ super_admin)"
-- name: Quizzes
-  description: "CRUD kuis (\U0001F512 GET = semua role, POST/PUT/DELETE = guru + super_admin)"
-- name: Quiz Categories
-  description: "CRUD kategori kuis (\U0001F512 GET = semua role, POST/PUT/DELETE =\
-    \ guru + super_admin)"
-- name: Story Categories
-  description: "CRUD kategori cerita (\U0001F512 GET = semua role, POST/PUT/DELETE\
-    \ = guru + super_admin)"
-- name: Stories
-  description: "CRUD cerita interaktif (\U0001F512 GET = semua role, POST/PUT/DELETE\
-    \ = guru + super_admin)"
-- name: Upload
-  description: "Upload file gambar (\U0001F512 POST = guru + super_admin, GET = public)"
-- name: Groups
-  description: "CRUD manajemen grup dan anggota (\U0001F512 POST/PUT/DELETE/GET =\
-    \ guru, POST join = member)"
+  - name: Auth
+    description: Autentikasi & token management (public)
+  - name: Users
+    description: "CRUD manajemen data user (🔒 super_admin)"
+  - name: Article Categories
+    description: "CRUD kategori artikel (🔒 GET = semua role, POST/PUT/DELETE = guru
+      + super_admin)"
+  - name: Articles
+    description: "Manajemen artikel (🔒 GET = semua role, POST/PUT/DELETE = guru +
+      super_admin)"
+  - name: Puzzles
+    description: "CRUD puzzle (🔒 GET = semua role, POST/PUT/DELETE = guru + super_admin)"
+  - name: Quizzes
+    description: "CRUD kuis (🔒 GET = semua role, POST/PUT/DELETE = guru + super_admin)"
+  - name: Quiz Categories
+    description: "CRUD kategori kuis (🔒 GET = semua role, POST/PUT/DELETE = guru +
+      super_admin)"
+  - name: Story Categories
+    description: "CRUD kategori cerita (🔒 GET = semua role, POST/PUT/DELETE = guru
+      + super_admin)"
+  - name: Stories
+    description: "CRUD cerita interaktif (🔒 GET = semua role, POST/PUT/DELETE =
+      guru + super_admin)"
+  - name: Upload
+    description: "Upload file gambar (🔒 POST = guru + super_admin, GET = public)"
+  - name: Groups
+    description: "CRUD manajemen grup dan anggota (🔒 POST/PUT/DELETE/GET = guru,
+      POST join = member)"
 paths:
   /api/v1/login:
     post:
       tags:
-      - Auth
+        - Auth
       summary: Login
-      description: "Autentikasi user dengan email dan password.  \nMengembalikan **access\
-        \ token** (expired 60 menit) dan **refresh token** (expired 7 hari).\n"
+      description: "Autentikasi user dengan email dan password. \ 
+
+        Mengembalikan **access token** (expired 60 menit) dan **refresh token**
+        (expired 7 hari).\n"
       operationId: login
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/LoginRequest'
+              $ref: "#/components/schemas/LoginRequest"
             example:
               email: admin@example.com
               password: rahasia123
       responses:
-        '200':
+        "200":
           description: Login berhasil
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/LoginResponseWrapper'
+                $ref: "#/components/schemas/LoginResponseWrapper"
               example:
                 data:
                   user:
@@ -83,204 +121,218 @@ paths:
                     role: admin
                   access_token: eyJhbGciOiJIUzI1NiIs...
                   refresh_token: eyJhbGciOiJIUzI1NiIs...
-        '400':
+        "400":
           description: Request body tidak valid
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
               example:
                 error: Bad Request
-        '401':
+        "401":
           description: Email atau password salah
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
               example:
                 error: Unauthorized
   /api/v1/users:
     get:
       tags:
-      - Users
+        - Users
       summary: Get all users
-      description: "Mengambil seluruh user yang aktif (`is_active = true`).  \n\U0001F512\
-        \ **Role**: `super_admin`\n"
+      description: "Mengambil seluruh user yang aktif (`is_active = true`). \ 
+
+        🔒 **Role**: `super_admin`\n"
       operationId: getAllUsers
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: Daftar user berhasil diambil
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UserListResponseWrapper'
+                $ref: "#/components/schemas/UserListResponseWrapper"
               example:
                 data:
-                - id: 550e8400-e29b-41d4-a716-446655440000
-                  username: admin
-                  email: admin@example.com
-                  role: admin
-                - id: 660f9511-f30c-52e5-b827-557766550111
-                  username: budi
-                  email: budi@example.com
-                  role: guru
-        '401':
-          $ref: '#/components/responses/UnauthorizedResponse'
-        '403':
-          $ref: '#/components/responses/ForbiddenResponse'
-        '500':
+                  - id: 550e8400-e29b-41d4-a716-446655440000
+                    username: admin
+                    email: admin@example.com
+                    role: admin
+                  - id: 660f9511-f30c-52e5-b827-557766550111
+                    username: budi
+                    email: budi@example.com
+                    role: guru
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
     post:
       tags:
-      - Users
+        - Users
       summary: Create user
-      description: "Membuat user baru. Password akan di-hash menggunakan bcrypt (cost\
-        \ 12).  \nSemua field wajib diisi.  \n\U0001F512 **Role**: `super_admin`\n"
+      description: "Membuat user baru. Password akan di-hash menggunakan bcrypt (cost
+        12). \ 
+
+        Semua field wajib diisi. \ 
+
+        🔒 **Role**: `super_admin`\n"
       operationId: createUser
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UserRequest'
+              $ref: "#/components/schemas/UserRequest"
             example:
               username: charlie
               email: charlie@example.com
               password: secret123
               role: guru
       responses:
-        '200':
+        "200":
           description: User berhasil dibuat
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UserResponseWrapper'
+                $ref: "#/components/schemas/UserResponseWrapper"
               example:
                 data:
                   id: 770a0622-a41d-63f6-c938-668877660222
                   username: charlie
                   email: charlie@example.com
                   role: guru
-        '400':
+        "400":
           description: Validasi gagal (field kosong / email tidak valid)
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
               example:
                 error: Bad Request
-        '401':
-          $ref: '#/components/responses/UnauthorizedResponse'
-        '403':
-          $ref: '#/components/responses/ForbiddenResponse'
-        '500':
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "500":
           description: Gagal menyimpan ke database
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/users/{id}:
     parameters:
-    - name: id
-      in: path
-      required: true
-      description: UUID user
-      schema:
-        type: string
-        format: uuid
-      example: 550e8400-e29b-41d4-a716-446655440000
+      - name: id
+        in: path
+        required: true
+        description: UUID user
+        schema:
+          type: string
+          format: uuid
+        example: 550e8400-e29b-41d4-a716-446655440000
     get:
       tags:
-      - Users
+        - Users
       summary: Get user by ID
-      description: "Mengambil detail satu user berdasarkan `user_id`.  \n\U0001F512\
-        \ **Role**: `super_admin`\n"
+      description: "Mengambil detail satu user berdasarkan `user_id`. \ 
+
+        🔒 **Role**: `super_admin`\n"
       operationId: getUserById
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: Detail user
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UserResponseWrapper'
+                $ref: "#/components/schemas/UserResponseWrapper"
               example:
                 data:
                   id: 550e8400-e29b-41d4-a716-446655440000
                   username: admin
                   email: admin@example.com
                   role: admin
-        '500':
+        "500":
           description: User tidak ditemukan / error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
     put:
       tags:
-      - Users
+        - Users
       summary: Update user
-      description: "Mengupdate data user. Semua field harus diisi termasuk password\
-        \ baru.  \nPassword akan di-hash ulang.  \n\U0001F512 **Role**: `super_admin`\n"
+      description: "Mengupdate data user. Semua field harus diisi termasuk password
+        baru. \ 
+
+        Password akan di-hash ulang. \ 
+
+        🔒 **Role**: `super_admin`\n"
       operationId: updateUser
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UserRequest'
+              $ref: "#/components/schemas/UserRequest"
             example:
               username: admin-updated
               email: admin-new@example.com
               password: newpassword
               role: admin
       responses:
-        '200':
+        "200":
           description: User berhasil diupdate
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UserResponseWrapper'
+                $ref: "#/components/schemas/UserResponseWrapper"
               example:
                 data:
                   id: 550e8400-e29b-41d4-a716-446655440000
                   username: admin-updated
                   email: admin-new@example.com
                   role: admin
-        '400':
+        "400":
           description: Validasi gagal
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
           description: Gagal update ke database
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
     delete:
       tags:
-      - Users
+        - Users
       summary: Delete user (soft delete)
-      description: "Melakukan **soft delete** \u2014 mengubah `is_active` menjadi\
-        \ `false`.  \nData user tetap ada di database.  \n\U0001F512 **Role**: `super_admin`\n"
+      description: "Melakukan **soft delete** — mengubah `is_active` menjadi `false`.
+        \ 
+
+        Data user tetap ada di database. \ 
+
+        🔒 **Role**: `super_admin`\n"
       operationId: deleteUser
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: User berhasil dihapus
           content:
             application/json:
@@ -290,111 +342,111 @@ paths:
                   data:
                     type: string
                     example: User deleted successfully
-        '500':
+        "500":
           description: Gagal menghapus user
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/categories/article:
     get:
       tags:
-      - Article Categories
+        - Article Categories
       summary: Get all article categories
-      description: "\U0001F512 **Role**: `member`, `guru`, `super_admin`\n"
+      description: "🔒 **Role**: `member`, `guru`, `super_admin`\n"
       operationId: getAllArticleCategories
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: Daftar kategori artikel
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ArticleCategoryListWrapper'
+                $ref: "#/components/schemas/ArticleCategoryListWrapper"
     post:
       tags:
-      - Article Categories
+        - Article Categories
       summary: Create article category
-      description: "\U0001F512 **Role**: `guru`, `super_admin`\n"
+      description: "🔒 **Role**: `guru`, `super_admin`\n"
       operationId: createArticleCategory
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ArticleCategoryRequest'
+              $ref: "#/components/schemas/ArticleCategoryRequest"
             example:
               nama_kategori: Sejarah
       responses:
-        '200':
+        "200":
           description: Kategori berhasil dibuat
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ArticleCategoryWrapper'
-        '400':
+                $ref: "#/components/schemas/ArticleCategoryWrapper"
+        "400":
           description: Validasi gagal
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/categories/article/{id}:
     parameters:
-    - name: id
-      in: path
-      required: true
-      schema:
-        type: string
-      description: ID kategori artikel
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: ID kategori artikel
     get:
       tags:
-      - Article Categories
+        - Article Categories
       summary: Get article category by ID
-      description: "\U0001F512 **Role**: `member`, `guru`, `super_admin`\n"
+      description: "🔒 **Role**: `member`, `guru`, `super_admin`\n"
       operationId: getArticleCategoryById
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: Detail kategori
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ArticleCategoryWrapper'
+                $ref: "#/components/schemas/ArticleCategoryWrapper"
     put:
       tags:
-      - Article Categories
+        - Article Categories
       summary: Update article category
-      description: "\U0001F512 **Role**: `guru`, `super_admin`\n"
+      description: "🔒 **Role**: `guru`, `super_admin`\n"
       operationId: updateArticleCategory
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ArticleCategoryRequest'
+              $ref: "#/components/schemas/ArticleCategoryRequest"
       responses:
-        '200':
+        "200":
           description: Kategori berhasil diupdate
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ArticleCategoryWrapper'
+                $ref: "#/components/schemas/ArticleCategoryWrapper"
     delete:
       tags:
-      - Article Categories
+        - Article Categories
       summary: Delete article category
-      description: "\U0001F512 **Role**: `guru`, `super_admin`\n"
+      description: "🔒 **Role**: `guru`, `super_admin`\n"
       operationId: deleteArticleCategory
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: Kategori berhasil dihapus
           content:
             application/json:
@@ -407,120 +459,120 @@ paths:
   /api/v1/categories/story:
     get:
       tags:
-      - Story Categories
+        - Story Categories
       summary: Get all story categories
-      description: "\U0001F512 **Role**: `member`, `guru`, `super_admin`\n"
+      description: "🔒 **Role**: `member`, `guru`, `super_admin`\n"
       operationId: getAllStoryCategories
       parameters:
-      - name: page
-        in: query
-        schema:
-          type: integer
-          default: 1
-        description: Nomor halaman
-      - name: size
-        in: query
-        schema:
-          type: integer
-          default: 10
-        description: Jumlah item per halaman
-      - name: search
-        in: query
-        schema:
-          type: string
-        description: Pencarian berdasarkan nama kategori
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Nomor halaman
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 10
+          description: Jumlah item per halaman
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Pencarian berdasarkan nama kategori
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: Daftar kategori cerita
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/StoryCategoryListWrapper'
+                $ref: "#/components/schemas/StoryCategoryListWrapper"
     post:
       tags:
-      - Story Categories
+        - Story Categories
       summary: Create story category
-      description: "\U0001F512 **Role**: `guru`, `super_admin`\n"
+      description: "🔒 **Role**: `guru`, `super_admin`\n"
       operationId: createStoryCategory
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/StoryCategoryRequest'
+              $ref: "#/components/schemas/StoryCategoryRequest"
             example:
               nama_kategori: Fantasi
       responses:
-        '200':
+        "200":
           description: Kategori berhasil dibuat
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/StoryCategoryWrapper'
-        '400':
+                $ref: "#/components/schemas/StoryCategoryWrapper"
+        "400":
           description: Validasi gagal
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/categories/story/{id}:
     parameters:
-    - name: id
-      in: path
-      required: true
-      schema:
-        type: string
-      description: ID kategori cerita
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: ID kategori cerita
     get:
       tags:
-      - Story Categories
+        - Story Categories
       summary: Get story category by ID
-      description: "\U0001F512 **Role**: `member`, `guru`, `super_admin`\n"
+      description: "🔒 **Role**: `member`, `guru`, `super_admin`\n"
       operationId: getStoryCategoryById
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: Detail kategori
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/StoryCategoryWrapper'
+                $ref: "#/components/schemas/StoryCategoryWrapper"
     put:
       tags:
-      - Story Categories
+        - Story Categories
       summary: Update story category
-      description: "\U0001F512 **Role**: `guru`, `super_admin`\n"
+      description: "🔒 **Role**: `guru`, `super_admin`\n"
       operationId: updateStoryCategory
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/StoryCategoryRequest'
+              $ref: "#/components/schemas/StoryCategoryRequest"
       responses:
-        '200':
+        "200":
           description: Kategori berhasil diupdate
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/StoryCategoryWrapper'
+                $ref: "#/components/schemas/StoryCategoryWrapper"
     delete:
       tags:
-      - Story Categories
+        - Story Categories
       summary: Delete story category
-      description: "\U0001F512 **Role**: `guru`, `super_admin`\n"
+      description: "🔒 **Role**: `guru`, `super_admin`\n"
       operationId: deleteStoryCategory
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: Kategori berhasil dihapus
           content:
             application/json:
@@ -533,121 +585,121 @@ paths:
   /api/v1/categories/quiz:
     get:
       tags:
-      - Quiz Categories
+        - Quiz Categories
       summary: Get all quiz categories
-      description: "\U0001F512 **Role**: `member`, `guru`, `super_admin`\n"
+      description: "🔒 **Role**: `member`, `guru`, `super_admin`\n"
       operationId: getAllQuizCategories
       parameters:
-      - name: page
-        in: query
-        schema:
-          type: integer
-          default: 1
-        description: Nomor halaman
-      - name: size
-        in: query
-        schema:
-          type: integer
-          default: 10
-        description: Jumlah item per halaman
-      - name: search
-        in: query
-        schema:
-          type: string
-        description: Pencarian berdasarkan nama kategori
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Nomor halaman
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 10
+          description: Jumlah item per halaman
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Pencarian berdasarkan nama kategori
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: Daftar kategori kuis
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/QuizCategoryListWrapper'
+                $ref: "#/components/schemas/QuizCategoryListWrapper"
     post:
       tags:
-      - Quiz Categories
+        - Quiz Categories
       summary: Create quiz category
-      description: "\U0001F512 **Role**: `guru`, `super_admin`\n"
+      description: "🔒 **Role**: `guru`, `super_admin`\n"
       operationId: createQuizCategory
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/QuizCategoryRequest'
+              $ref: "#/components/schemas/QuizCategoryRequest"
             example:
               nama_kategori: Pengetahuan Umum
               deskripsi: Kategori kuis untuk pengetahuan umum
       responses:
-        '200':
+        "200":
           description: Kategori berhasil dibuat
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/QuizCategoryWrapper'
-        '400':
+                $ref: "#/components/schemas/QuizCategoryWrapper"
+        "400":
           description: Validasi gagal
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/categories/quiz/{id}:
     parameters:
-    - name: id
-      in: path
-      required: true
-      schema:
-        type: string
-      description: ID kategori kuis
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: ID kategori kuis
     get:
       tags:
-      - Quiz Categories
+        - Quiz Categories
       summary: Get quiz category by ID
-      description: "\U0001F512 **Role**: `member`, `guru`, `super_admin`\n"
+      description: "🔒 **Role**: `member`, `guru`, `super_admin`\n"
       operationId: getQuizCategoryById
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: Detail kategori
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/QuizCategoryWrapper'
+                $ref: "#/components/schemas/QuizCategoryWrapper"
     put:
       tags:
-      - Quiz Categories
+        - Quiz Categories
       summary: Update quiz category
-      description: "\U0001F512 **Role**: `guru`, `super_admin`\n"
+      description: "🔒 **Role**: `guru`, `super_admin`\n"
       operationId: updateQuizCategory
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/QuizCategoryRequest'
+              $ref: "#/components/schemas/QuizCategoryRequest"
       responses:
-        '200':
+        "200":
           description: Kategori berhasil diupdate
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/QuizCategoryWrapper'
+                $ref: "#/components/schemas/QuizCategoryWrapper"
     delete:
       tags:
-      - Quiz Categories
+        - Quiz Categories
       summary: Delete quiz category
-      description: "\U0001F512 **Role**: `guru`, `super_admin`\n"
+      description: "🔒 **Role**: `guru`, `super_admin`\n"
       operationId: deleteQuizCategory
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: Kategori berhasil dihapus
           content:
             application/json:
@@ -660,191 +712,205 @@ paths:
   /api/v1/articles:
     get:
       tags:
-      - Articles
+        - Articles
       summary: Get all articles
-      description: "Mengambil semua artikel yang aktif (tanpa konten, untuk listing).\
-        \  \n\U0001F512 **Role**: `member`, `guru`, `super_admin`\n"
+      description: "Mengambil semua artikel yang aktif (tanpa konten, untuk listing).
+        \ 
+
+        🔒 **Role**: `member`, `guru`, `super_admin`\n"
       operationId: getAllArticles
       parameters:
-      - name: page
-        in: query
-        schema:
-          type: integer
-          default: 1
-        description: Nomor halaman
-      - name: size
-        in: query
-        schema:
-          type: integer
-          default: 10
-        description: Jumlah item per halaman
-      - name: search
-        in: query
-        schema:
-          type: string
-        description: Pencarian berdasarkan judul artikel
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Nomor halaman
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 10
+          description: Jumlah item per halaman
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Pencarian berdasarkan judul artikel
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: Daftar artikel
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ArticleListWrapper'
-        '500':
+                $ref: "#/components/schemas/ArticleListWrapper"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
     post:
       tags:
-      - Articles
+        - Articles
       summary: Create article (draft)
-      description: "Membuat artikel baru dengan status **draft**.  \nHanya memerlukan\
-        \ `title`, `category_id`, dan `created_by`.  \nSlug otomatis di-generate dari\
-        \ judul.  \n\U0001F512 **Role**: `guru`, `super_admin`\n"
+      description: "Membuat artikel baru dengan status **draft**. \ 
+
+        Hanya memerlukan `title`, `category_id`, dan `created_by`. \ 
+
+        Slug otomatis di-generate dari judul. \ 
+
+        🔒 **Role**: `guru`, `super_admin`\n"
       operationId: createArticle
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ArticleCreateRequest'
+              $ref: "#/components/schemas/ArticleCreateRequest"
             example:
               title: Sejarah Kerajaan Majapahit
-              category_id: '1'
+              category_id: "1"
       responses:
-        '200':
+        "200":
           description: Artikel draft berhasil dibuat
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ArticleWrapper'
-        '400':
+                $ref: "#/components/schemas/ArticleWrapper"
+        "400":
           description: Validasi gagal
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/articles/{slug}:
     parameters:
-    - name: slug
-      in: path
-      required: true
-      schema:
-        type: string
-      description: Slug artikel (unique)
-      example: sejarah-kerajaan-majapahit-123456
+      - name: slug
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Slug artikel (unique)
+        example: sejarah-kerajaan-majapahit-123456
     get:
       tags:
-      - Articles
+        - Articles
       summary: Get article by slug
-      description: "Mengambil detail artikel lengkap beserta konten.  \n\U0001F512\
-        \ **Role**: `member`, `guru`, `super_admin`\n"
+      description: "Mengambil detail artikel lengkap beserta konten. \ 
+
+        🔒 **Role**: `member`, `guru`, `super_admin`\n"
       operationId: getArticleBySlug
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: Detail artikel
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ArticleWrapper'
-        '500':
+                $ref: "#/components/schemas/ArticleWrapper"
+        "500":
           description: Artikel tidak ditemukan
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/articles/detail/{id}:
     parameters:
-    - name: id
-      in: path
-      required: true
-      schema:
-        type: string
-      description: ID artikel
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: ID artikel
     get:
       tags:
-      - Articles
+        - Articles
       summary: Get article by ID
-      description: "Mengambil detail artikel lengkap berdasarkan ID (untuk halaman\
-        \ edit).  \n\U0001F512 **Role**: `member`, `guru`, `super_admin`\n"
+      description: "Mengambil detail artikel lengkap berdasarkan ID (untuk halaman
+        edit). \ 
+
+        🔒 **Role**: `member`, `guru`, `super_admin`\n"
       operationId: getArticleById
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: Detail artikel
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ArticleWrapper'
-        '500':
+                $ref: "#/components/schemas/ArticleWrapper"
+        "500":
           description: Artikel tidak ditemukan
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/articles/{id}:
     parameters:
-    - name: id
-      in: path
-      required: true
-      schema:
-        type: string
-      description: ID artikel
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: ID artikel
     put:
       tags:
-      - Articles
+        - Articles
       summary: Update article
-      description: "Update artikel dengan konten lengkap dari Block-Based Editor (BSON).\
-        \  \nSlug dan excerpt otomatis di-generate ulang.  \n\U0001F512 **Role**:\
-        \ `guru`, `super_admin`\n"
+      description: "Update artikel dengan konten lengkap dari Block-Based Editor
+        (BSON). \ 
+
+        Slug dan excerpt otomatis di-generate ulang. \ 
+
+        🔒 **Role**: `guru`, `super_admin`\n"
       operationId: updateArticle
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/ArticleUpdateRequest'
+              $ref: "#/components/schemas/ArticleUpdateRequest"
             example:
               title: Sejarah Kerajaan Majapahit (Revisi)
-              category_id: '1'
+              category_id: "1"
               status: published
-              content: '{"blocks":[{"type":"paragraph","data":{"text":"Kerajaan Majapahit..."}}]}'
+              content: "{\"blocks\":[{\"type\":\"paragraph\",\"data\":{\"text\":\"Kerajaan
+                Majapahit...\"}}]}"
               thumbnail: /uploads/majapahit.jpg
       responses:
-        '200':
+        "200":
           description: Artikel berhasil diupdate
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ArticleWrapper'
-        '400':
+                $ref: "#/components/schemas/ArticleWrapper"
+        "400":
           description: Validasi gagal
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
     delete:
       tags:
-      - Articles
+        - Articles
       summary: Delete article (soft delete)
-      description: "Mengubah `is_active` menjadi `false`.  \n\U0001F512 **Role**:\
-        \ `guru`, `super_admin`\n"
+      description: "Mengubah `is_active` menjadi `false`. \ 
+
+        🔒 **Role**: `guru`, `super_admin`\n"
       operationId: deleteArticle
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: Artikel berhasil dihapus
           content:
             application/json:
@@ -854,25 +920,32 @@ paths:
                   data:
                     type: string
                     example: Article Deleted
-        '500':
+        "500":
           description: Gagal menghapus artikel
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/upload/image:
     post:
       tags:
-      - Upload
+        - Upload
       summary: Upload gambar
-      description: "Upload file gambar untuk digunakan di artikel (thumbnail atau\
-        \ konten Block-Based Editor).  \n- Format yang didukung: **jpg, jpeg, png,\
-        \ webp, gif**  \n- Ukuran maksimal: **5MB**  \n- File disimpan di `uploads/YYYY/MM/<uuid>.ext`\
-        \  \n- URL yang dikembalikan bisa langsung diakses via `GET /uploads/...`\
-        \  \n\U0001F512 **Role**: `guru`, `super_admin`\n"
+      description: "Upload file gambar untuk digunakan di artikel (thumbnail atau
+        konten Block-Based Editor). \ 
+
+        - Format yang didukung: **jpg, jpeg, png, webp, gif** \ 
+
+        - Ukuran maksimal: **5MB** \ 
+
+        - File disimpan di `uploads/YYYY/MM/<uuid>.ext` \ 
+
+        - URL yang dikembalikan bisa langsung diakses via `GET /uploads/...` \ 
+
+        🔒 **Role**: `guru`, `super_admin`\n"
       operationId: uploadImage
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       requestBody:
         required: true
         content:
@@ -880,203 +953,202 @@ paths:
             schema:
               type: object
               required:
-              - image
+                - image
               properties:
                 image:
                   type: string
                   format: binary
                   description: File gambar (jpg/jpeg/png/webp/gif, max 5MB)
       responses:
-        '200':
+        "200":
           description: Upload berhasil
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UploadResponseWrapper'
+                $ref: "#/components/schemas/UploadResponseWrapper"
               example:
                 data:
                   url: /uploads/2026/03/a1b2c3d4-e5f6-7890-abcd-ef1234567890.jpg
                   filename: majapahit.jpg
                   size: 204800
-        '400':
+        "400":
           description: File tidak valid (format/ukuran salah)
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
               example:
-                error: 'Format file tidak didukung. Gunakan: jpg, jpeg, png, webp,
-                  gif'
+                error: "Format file tidak didukung. Gunakan: jpg, jpeg, png, webp, gif"
   /uploads/{filepath}:
     parameters:
-    - name: filepath
-      in: path
-      required: true
-      schema:
-        type: string
-      description: Path file gambar
-      example: 2026/03/majapahit.jpg
+      - name: filepath
+        in: path
+        required: true
+        schema:
+          type: string
+        description: Path file gambar
+        example: 2026/03/majapahit.jpg
     get:
       tags:
-      - Upload
+        - Upload
       summary: Get uploaded file
       description: Mengambil file gambar yang telah diupload berdasarkan path-nya.
       operationId: getFile
       responses:
-        '200':
+        "200":
           description: File gambar
           content:
             image/*:
               schema:
                 type: string
                 format: binary
-        '404':
+        "404":
           description: File tidak ditemukan
   /api/v1/puzzles:
     get:
       tags:
-      - Puzzles
+        - Puzzles
       summary: Get all puzzles
-      description: "\U0001F512 **Role**: `member`, `guru`, `super_admin`\n"
+      description: "🔒 **Role**: `member`, `guru`, `super_admin`\n"
       operationId: getAllPuzzles
       parameters:
-      - name: page
-        in: query
-        schema:
-          type: integer
-          default: 1
-        description: Nomor halaman
-      - name: size
-        in: query
-        schema:
-          type: integer
-          default: 10
-        description: Jumlah item per halaman
-      - name: search
-        in: query
-        schema:
-          type: string
-        description: Pencarian berdasarkan judul puzzle
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Nomor halaman
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 10
+          description: Jumlah item per halaman
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Pencarian berdasarkan judul puzzle
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: Daftar puzzle
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PuzzleListWrapper'
-        '500':
+                $ref: "#/components/schemas/PuzzleListWrapper"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
     post:
       tags:
-      - Puzzles
+        - Puzzles
       summary: Create puzzle
-      description: "\U0001F512 **Role**: `guru`, `super_admin`\n"
+      description: "🔒 **Role**: `guru`, `super_admin`\n"
       operationId: createPuzzle
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PuzzleRequest'
+              $ref: "#/components/schemas/PuzzleRequest"
       responses:
-        '200':
+        "200":
           description: Puzzle berhasil dibuat
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PuzzleWrapper'
-        '400':
+                $ref: "#/components/schemas/PuzzleWrapper"
+        "400":
           description: Validasi gagal
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/puzzles/{id}:
     parameters:
-    - name: id
-      in: path
-      required: true
-      schema:
-        type: string
-      description: ID puzzle
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: ID puzzle
     get:
       tags:
-      - Puzzles
+        - Puzzles
       summary: Get puzzle by ID
-      description: "\U0001F512 **Role**: `member`, `guru`, `super_admin`\n"
+      description: "🔒 **Role**: `member`, `guru`, `super_admin`\n"
       operationId: getPuzzleById
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: Detail puzzle
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PuzzleWrapper'
-        '500':
+                $ref: "#/components/schemas/PuzzleWrapper"
+        "500":
           description: Puzzle tidak ditemukan atau error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
     put:
       tags:
-      - Puzzles
+        - Puzzles
       summary: Update puzzle
-      description: "\U0001F512 **Role**: `guru`, `super_admin`\n"
+      description: "🔒 **Role**: `guru`, `super_admin`\n"
       operationId: updatePuzzle
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/PuzzleRequest'
+              $ref: "#/components/schemas/PuzzleRequest"
       responses:
-        '200':
+        "200":
           description: Puzzle berhasil diupdate
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PuzzleWrapper'
-        '400':
+                $ref: "#/components/schemas/PuzzleWrapper"
+        "400":
           description: Validasi gagal
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
     delete:
       tags:
-      - Puzzles
+        - Puzzles
       summary: Delete puzzle
-      description: "\U0001F512 **Role**: `guru`, `super_admin`\n"
+      description: "🔒 **Role**: `guru`, `super_admin`\n"
       operationId: deletePuzzle
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: Puzzle berhasil dihapus
           content:
             application/json:
@@ -1086,160 +1158,164 @@ paths:
                   data:
                     type: string
                     example: puzzle deleted successfully
-        '500':
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/quizzes:
     get:
       tags:
-      - Quizzes
+        - Quizzes
       summary: Get all quizzes
-      description: "\U0001F512 **Role**: `member`, `guru`, `super_admin`\n"
+      description: "🔒 **Role**: `member`, `guru`, `super_admin`\n"
       operationId: getAllQuizzes
       parameters:
-      - name: page
-        in: query
-        schema:
-          type: integer
-          default: 1
-        description: Nomor halaman
-      - name: size
-        in: query
-        schema:
-          type: integer
-          default: 10
-        description: Jumlah item per halaman
-      - name: search
-        in: query
-        schema:
-          type: string
-        description: Pencarian berdasarkan judul kuis
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Nomor halaman
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 10
+          description: Jumlah item per halaman
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Pencarian berdasarkan judul kuis
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: Daftar kuis
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/QuizListWrapper'
-        '500':
+                $ref: "#/components/schemas/QuizListWrapper"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
     post:
       tags:
-      - Quizzes
+        - Quizzes
       summary: Create quiz
-      description: "Membuat kuis baru beserta soal dan pilihan gandanya.  \n\U0001F512\
-        \ **Role**: `guru`, `super_admin`\n"
+      description: "Membuat kuis baru beserta soal dan pilihan gandanya. \ 
+
+        🔒 **Role**: `guru`, `super_admin`\n"
       operationId: createQuiz
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/QuizRequest'
+              $ref: "#/components/schemas/QuizRequest"
       responses:
-        '200':
+        "200":
           description: Kuis berhasil dibuat
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/QuizWrapper'
-        '400':
+                $ref: "#/components/schemas/QuizWrapper"
+        "400":
           description: Validasi gagal
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/quizzes/{id}:
     parameters:
-    - name: id
-      in: path
-      required: true
-      schema:
-        type: integer
-      description: ID kuis
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+        description: ID kuis
     get:
       tags:
-      - Quizzes
+        - Quizzes
       summary: Get quiz by ID
-      description: "Get kuis lengkap beserta pertanyaan dan pilihan ganda.  \n\U0001F512\
-        \ **Role**: `member`, `guru`, `super_admin`\n"
+      description: "Get kuis lengkap beserta pertanyaan dan pilihan ganda. \ 
+
+        🔒 **Role**: `member`, `guru`, `super_admin`\n"
       operationId: getQuizById
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: Detail kuis
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/QuizWrapper'
-        '500':
+                $ref: "#/components/schemas/QuizWrapper"
+        "500":
           description: Kuis tidak ditemukan atau error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
     put:
       tags:
-      - Quizzes
+        - Quizzes
       summary: Update quiz
-      description: "Update kuis, pertanyaan, dan pilihan ganda. Ini akan me-replace\
-        \ pertanyaan dan pilihan lama.  \n\U0001F512 **Role**: `guru`, `super_admin`\n"
+      description: "Update kuis, pertanyaan, dan pilihan ganda. Ini akan me-replace
+        pertanyaan dan pilihan lama. \ 
+
+        🔒 **Role**: `guru`, `super_admin`\n"
       operationId: updateQuiz
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/QuizRequest'
+              $ref: "#/components/schemas/QuizRequest"
       responses:
-        '200':
+        "200":
           description: Kuis berhasil diupdate
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/QuizWrapper'
-        '400':
+                $ref: "#/components/schemas/QuizWrapper"
+        "400":
           description: Validasi gagal
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '500':
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
     delete:
       tags:
-      - Quizzes
+        - Quizzes
       summary: Delete quiz
-      description: "\U0001F512 **Role**: `guru`, `super_admin`\n"
+      description: "🔒 **Role**: `guru`, `super_admin`\n"
       operationId: deleteQuiz
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: Kuis berhasil dihapus
           content:
             application/json:
@@ -1249,159 +1325,164 @@ paths:
                   data:
                     type: string
                     example: quiz deleted successfully
-        '500':
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/stories:
     get:
       tags:
-      - Stories
+        - Stories
       summary: Get all stories
-      description: "Mengambil semua cerita interaktif.  \n\U0001F512 **Role**: `member`,\
-        \ `guru`, `super_admin`\n"
+      description: "Mengambil semua cerita interaktif. \ 
+
+        🔒 **Role**: `member`, `guru`, `super_admin`\n"
       operationId: getAllStories
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: Daftar cerita interaktif
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/StoryListWrapper'
-        '401':
-          $ref: '#/components/responses/UnauthorizedResponse'
-        '403':
-          $ref: '#/components/responses/ForbiddenResponse'
-        '500':
+                $ref: "#/components/schemas/StoryListWrapper"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
     post:
       tags:
-      - Stories
+        - Stories
       summary: Create story
-      description: "Membuat cerita interaktif baru (draft) hanya dengan metadata cerita.\
-        \  \n\U0001F512 **Role**: `guru`, `super_admin`\n"
+      description: "Membuat cerita interaktif baru (draft) hanya dengan metadata
+        cerita. \ 
+
+        🔒 **Role**: `guru`, `super_admin`\n"
       operationId: createStory
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/StoryRequest'
+              $ref: "#/components/schemas/StoryRequest"
       responses:
-        '200':
+        "200":
           description: Cerita berhasil dibuat
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/StoryWrapper'
-        '400':
+                $ref: "#/components/schemas/StoryWrapper"
+        "400":
           description: Validasi gagal
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
-          $ref: '#/components/responses/UnauthorizedResponse'
-        '403':
-          $ref: '#/components/responses/ForbiddenResponse'
-        '500':
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/stories/{id}:
     parameters:
-    - name: id
-      in: path
-      required: true
-      schema:
-        type: string
-      description: ID cerita interaktif
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: ID cerita interaktif
     get:
       tags:
-      - Stories
+        - Stories
       summary: Get story by ID
-      description: "Mengambil detail cerita interaktif beserta scene-scene-nya.  \n\
-        \U0001F512 **Role**: `member`, `guru`, `super_admin`\n"
+      description: "Mengambil detail cerita interaktif beserta scene-scene-nya. \ 
+
+        🔒 **Role**: `member`, `guru`, `super_admin`\n"
       operationId: getStoryById
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: Detail cerita
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/StoryWrapper'
-        '401':
-          $ref: '#/components/responses/UnauthorizedResponse'
-        '403':
-          $ref: '#/components/responses/ForbiddenResponse'
-        '500':
+                $ref: "#/components/schemas/StoryWrapper"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "500":
           description: Cerita tidak ditemukan atau error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
     put:
       tags:
-      - Stories
+        - Stories
       summary: Update story
-      description: "Update metadata cerita interaktif (termasuk status publish). \
-        \ \n\U0001F512 **Role**: `guru`, `super_admin`\n"
+      description: "Update metadata cerita interaktif (termasuk status publish). \ 
+
+        🔒 **Role**: `guru`, `super_admin`\n"
       operationId: updateStory
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/StoryRequest'
+              $ref: "#/components/schemas/StoryRequest"
       responses:
-        '200':
+        "200":
           description: Cerita berhasil diupdate
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/StoryWrapper'
-        '400':
+                $ref: "#/components/schemas/StoryWrapper"
+        "400":
           description: Validasi gagal
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
-          $ref: '#/components/responses/UnauthorizedResponse'
-        '403':
-          $ref: '#/components/responses/ForbiddenResponse'
-        '500':
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
     delete:
       tags:
-      - Stories
+        - Stories
       summary: Delete story
-      description: "\U0001F512 **Role**: `guru`, `super_admin`\n"
+      description: "🔒 **Role**: `guru`, `super_admin`\n"
       operationId: deleteStory
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: Cerita berhasil dihapus
           content:
             application/json:
@@ -1411,125 +1492,128 @@ paths:
                   data:
                     type: string
                     example: story deleted successfully
-        '401':
-          $ref: '#/components/responses/UnauthorizedResponse'
-        '403':
-          $ref: '#/components/responses/ForbiddenResponse'
-        '500':
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/stories/{id}/scenes:
     parameters:
-    - name: id
-      in: path
-      required: true
-      schema:
-        type: string
-      description: ID cerita interaktif
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: ID cerita interaktif
     post:
       tags:
-      - Stories
+        - Stories
       summary: Create scene
-      description: "Menambahkan satu scene ke cerita interaktif.  \n\U0001F512 **Role**:\
-        \ `guru`, `super_admin`\n"
+      description: "Menambahkan satu scene ke cerita interaktif. \ 
+
+        🔒 **Role**: `guru`, `super_admin`\n"
       operationId: createStoryScene
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SceneRequest'
+              $ref: "#/components/schemas/SceneRequest"
       responses:
-        '200':
+        "200":
           description: Scene berhasil dibuat
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SceneWrapper'
-        '400':
+                $ref: "#/components/schemas/SceneWrapper"
+        "400":
           description: Validasi gagal
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
-          $ref: '#/components/responses/UnauthorizedResponse'
-        '403':
-          $ref: '#/components/responses/ForbiddenResponse'
-        '500':
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/stories/{id}/scenes/{scene_id}:
     parameters:
-    - name: id
-      in: path
-      required: true
-      schema:
-        type: string
-      description: ID cerita interaktif
-    - name: scene_id
-      in: path
-      required: true
-      schema:
-        type: string
-      description: ID scene
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: ID cerita interaktif
+      - name: scene_id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: ID scene
     put:
       tags:
-      - Stories
+        - Stories
       summary: Update scene
-      description: "Update satu scene pada cerita interaktif.  \n\U0001F512 **Role**:\
-        \ `guru`, `super_admin`\n"
+      description: "Update satu scene pada cerita interaktif. \ 
+
+        🔒 **Role**: `guru`, `super_admin`\n"
       operationId: updateStoryScene
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SceneRequest'
+              $ref: "#/components/schemas/SceneRequest"
       responses:
-        '200':
+        "200":
           description: Scene berhasil diupdate
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SceneWrapper'
-        '400':
+                $ref: "#/components/schemas/SceneWrapper"
+        "400":
           description: Validasi gagal
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        '401':
-          $ref: '#/components/responses/UnauthorizedResponse'
-        '403':
-          $ref: '#/components/responses/ForbiddenResponse'
-        '500':
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
     delete:
       tags:
-      - Stories
+        - Stories
       summary: Delete scene
-      description: "Hapus satu scene pada cerita interaktif.  \n\U0001F512 **Role**:\
-        \ `guru`, `super_admin`\n"
+      description: "Hapus satu scene pada cerita interaktif. \ 
+
+        🔒 **Role**: `guru`, `super_admin`\n"
       operationId: deleteStoryScene
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: Scene berhasil dihapus
           content:
             application/json:
@@ -1539,243 +1623,243 @@ paths:
                   data:
                     type: string
                     example: scene deleted successfully
-        '401':
-          $ref: '#/components/responses/UnauthorizedResponse'
-        '403':
-          $ref: '#/components/responses/ForbiddenResponse'
-        '500':
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "500":
           description: Internal server error
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/groups:
     get:
       tags:
-      - Groups
+        - Groups
       summary: Get all groups
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: Success
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GroupListWrapper'
+                $ref: "#/components/schemas/GroupListWrapper"
       parameters:
-      - name: page
-        in: query
-        schema:
-          type: integer
-      - name: size
-        in: query
-        schema:
-          type: integer
-      - name: search
-        in: query
-        schema:
-          type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: size
+          in: query
+          schema:
+            type: integer
+        - name: search
+          in: query
+          schema:
+            type: string
     post:
       tags:
-      - Groups
+        - Groups
       summary: Create group
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: Success
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GroupWrapper'
-        '201':
+                $ref: "#/components/schemas/GroupWrapper"
+        "201":
           description: Created
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GroupWrapper'
+                $ref: "#/components/schemas/GroupWrapper"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/GroupCreateRequest'
+              $ref: "#/components/schemas/GroupCreateRequest"
   /api/v1/groups/{id}:
     get:
       tags:
-      - Groups
+        - Groups
       summary: Get group detail
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
       responses:
-        '200':
+        "200":
           description: Success
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GroupDetailWrapper'
+                $ref: "#/components/schemas/GroupDetailWrapper"
     put:
       tags:
-      - Groups
+        - Groups
       summary: Update group
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
       responses:
-        '200':
+        "200":
           description: Success
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GroupWrapper'
+                $ref: "#/components/schemas/GroupWrapper"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/GroupUpdateRequest'
+              $ref: "#/components/schemas/GroupUpdateRequest"
     delete:
       tags:
-      - Groups
+        - Groups
       summary: Delete group
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
       responses:
-        '200':
+        "200":
           description: Success
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MessageWrapper'
+                $ref: "#/components/schemas/MessageWrapper"
   /api/v1/groups/{id}/invite:
     post:
       tags:
-      - Groups
+        - Groups
       summary: Invite members by email
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
       responses:
-        '200':
+        "200":
           description: Success
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MessageWrapper'
+                $ref: "#/components/schemas/MessageWrapper"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/GroupInviteEmailRequest'
+              $ref: "#/components/schemas/GroupInviteEmailRequest"
   /api/v1/groups/{id}/invite-link:
     get:
       tags:
-      - Groups
+        - Groups
       summary: Generate invite link
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
       responses:
-        '200':
+        "200":
           description: Success
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GroupInviteWrapper'
+                $ref: "#/components/schemas/GroupInviteWrapper"
   /api/v1/groups/join:
     post:
       tags:
-      - Groups
+        - Groups
       summary: Join a group
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       responses:
-        '200':
+        "200":
           description: Success
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MessageWrapper'
+                $ref: "#/components/schemas/MessageWrapper"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/GroupJoinRequest'
+              $ref: "#/components/schemas/GroupJoinRequest"
   /api/v1/groups/{id}/members:
     get:
       tags:
-      - Groups
+        - Groups
       summary: Get group members
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
       responses:
-        '200':
+        "200":
           description: Success
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GroupMemberListWrapper'
+                $ref: "#/components/schemas/GroupMemberListWrapper"
   /api/v1/groups/{id}/members/{member_id}:
     delete:
       tags:
-      - Groups
+        - Groups
       summary: Remove member
       security:
-      - BearerAuth: []
+        - BearerAuth: []
       parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: member_id
-        in: path
-        required: true
-        schema:
-          type: integer
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: member_id
+          in: path
+          required: true
+          schema:
+            type: integer
       responses:
-        '200':
+        "200":
           description: Success
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/MessageWrapper'
+                $ref: "#/components/schemas/MessageWrapper"
 components:
   responses:
     UnauthorizedResponse:
@@ -1797,21 +1881,23 @@ components:
             properties:
               errors:
                 type: string
-                example: 'forbidden: insufficient role'
+                example: "forbidden: insufficient role"
   securitySchemes:
     BearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: "Gunakan access token dari response login.  \nFormat: `Authorization:\
-        \ Bearer <token>`  \nToken berisi claims: `user_id`, `email`, `username`,\
-        \ `role`\n"
+      description: "Gunakan access token dari response login. \ 
+
+        Format: `Authorization: Bearer <token>` \ 
+
+        Token berisi claims: `user_id`, `email`, `username`, `role`\n"
   schemas:
     LoginRequest:
       type: object
       required:
-      - email
-      - password
+        - email
+        - password
       properties:
         email:
           type: string
@@ -1826,10 +1912,10 @@ components:
     UserRequest:
       type: object
       required:
-      - username
-      - email
-      - password
-      - role
+        - username
+        - email
+        - password
+        - role
       properties:
         username:
           type: string
@@ -1847,11 +1933,11 @@ components:
           example: secret123
         role:
           type: string
-          description: 'Role user: `member`, `guru`, atau `super_admin`'
+          description: "Role user: `member`, `guru`, atau `super_admin`"
           enum:
-          - member
-          - guru
-          - super_admin
+            - member
+            - guru
+            - super_admin
           example: guru
     UserResponse:
       type: object
@@ -1868,9 +1954,9 @@ components:
         role:
           type: string
           enum:
-          - member
-          - guru
-          - super_admin
+            - member
+            - guru
+            - super_admin
         created_at:
           type: string
           format: date-time
@@ -1878,7 +1964,7 @@ components:
       type: object
       properties:
         user:
-          $ref: '#/components/schemas/UserResponse'
+          $ref: "#/components/schemas/UserResponse"
         access_token:
           type: string
           description: JWT access token (expired 60 menit)
@@ -1889,9 +1975,9 @@ components:
       type: object
       properties:
         data:
-          $ref: '#/components/schemas/UserResponse'
+          $ref: "#/components/schemas/UserResponse"
         paging:
-          $ref: '#/components/schemas/PageMetaData'
+          $ref: "#/components/schemas/PageMetaData"
         errors:
           type: string
     UserListResponseWrapper:
@@ -1900,18 +1986,18 @@ components:
         data:
           type: array
           items:
-            $ref: '#/components/schemas/UserResponse'
+            $ref: "#/components/schemas/UserResponse"
         paging:
-          $ref: '#/components/schemas/PageMetaData'
+          $ref: "#/components/schemas/PageMetaData"
         errors:
           type: string
     LoginResponseWrapper:
       type: object
       properties:
         data:
-          $ref: '#/components/schemas/LoginResponse'
+          $ref: "#/components/schemas/LoginResponse"
         paging:
-          $ref: '#/components/schemas/PageMetaData'
+          $ref: "#/components/schemas/PageMetaData"
         errors:
           type: string
     PageMetaData:
@@ -1931,7 +2017,7 @@ components:
     ArticleCategoryRequest:
       type: object
       required:
-      - nama_kategori
+        - nama_kategori
       properties:
         nama_kategori:
           type: string
@@ -1948,18 +2034,18 @@ components:
       type: object
       properties:
         data:
-          $ref: '#/components/schemas/ArticleCategoryResponse'
+          $ref: "#/components/schemas/ArticleCategoryResponse"
     ArticleCategoryListWrapper:
       type: object
       properties:
         data:
           type: array
           items:
-            $ref: '#/components/schemas/ArticleCategoryResponse'
+            $ref: "#/components/schemas/ArticleCategoryResponse"
     StoryCategoryRequest:
       type: object
       required:
-      - nama_kategori
+        - nama_kategori
       properties:
         nama_kategori:
           type: string
@@ -1978,20 +2064,20 @@ components:
       type: object
       properties:
         data:
-          $ref: '#/components/schemas/StoryCategoryResponse'
+          $ref: "#/components/schemas/StoryCategoryResponse"
     StoryCategoryListWrapper:
       type: object
       properties:
         data:
           type: array
           items:
-            $ref: '#/components/schemas/StoryCategoryResponse'
+            $ref: "#/components/schemas/StoryCategoryResponse"
         paging:
-          $ref: '#/components/schemas/PageMetaData'
+          $ref: "#/components/schemas/PageMetaData"
     QuizCategoryRequest:
       type: object
       required:
-      - nama_kategori
+        - nama_kategori
       properties:
         nama_kategori:
           type: string
@@ -2021,21 +2107,21 @@ components:
       type: object
       properties:
         data:
-          $ref: '#/components/schemas/QuizCategoryResponse'
+          $ref: "#/components/schemas/QuizCategoryResponse"
     QuizCategoryListWrapper:
       type: object
       properties:
         data:
           type: array
           items:
-            $ref: '#/components/schemas/QuizCategoryResponse'
+            $ref: "#/components/schemas/QuizCategoryResponse"
         paging:
-          $ref: '#/components/schemas/PageMetaData'
+          $ref: "#/components/schemas/PageMetaData"
     ArticleCreateRequest:
       type: object
       required:
-      - title
-      - category_id
+        - title
+        - category_id
       properties:
         title:
           type: string
@@ -2044,7 +2130,7 @@ components:
         category_id:
           type: string
           description: ID kategori artikel
-          example: '1'
+          example: "1"
         thumbnail_asset_id:
           type: integer
           description: ID asset thumbnail (opsional)
@@ -2052,10 +2138,10 @@ components:
     ArticleUpdateRequest:
       type: object
       required:
-      - title
-      - category_id
-      - status
-      - content
+        - title
+        - category_id
+        - status
+        - content
       properties:
         title:
           type: string
@@ -2067,8 +2153,8 @@ components:
           type: string
           description: Status publikasi
           enum:
-          - draft
-          - published
+            - draft
+            - published
         content:
           type: string
           description: Konten BSON dari Block-Based Editor
@@ -2089,17 +2175,17 @@ components:
           type: string
           description: Konten BSON (hanya muncul pada detail)
         category:
-          $ref: '#/components/schemas/ArticleCategoryResponse'
+          $ref: "#/components/schemas/ArticleCategoryResponse"
         status:
           type: string
           enum:
-          - draft
-          - published
+            - draft
+            - published
         excerpt:
           type: string
           description: Auto-generated dari konten (max 150 chars)
         created_by:
-          $ref: '#/components/schemas/UserResponse'
+          $ref: "#/components/schemas/UserResponse"
         created_at:
           type: string
           format: date-time
@@ -2109,14 +2195,14 @@ components:
       type: object
       properties:
         data:
-          $ref: '#/components/schemas/ArticleResponse'
+          $ref: "#/components/schemas/ArticleResponse"
     ArticleListWrapper:
       type: object
       properties:
         data:
           type: array
           items:
-            $ref: '#/components/schemas/ArticleResponse'
+            $ref: "#/components/schemas/ArticleResponse"
     UploadResponse:
       type: object
       properties:
@@ -2140,14 +2226,14 @@ components:
       type: object
       properties:
         data:
-          $ref: '#/components/schemas/UploadResponse'
+          $ref: "#/components/schemas/UploadResponse"
     PuzzleRequest:
       type: object
       required:
-      - judul
-      - kategori
-      - xp_reward
-      - is_published
+        - judul
+        - kategori
+        - xp_reward
+        - is_published
       properties:
         judul:
           type: string
@@ -2179,7 +2265,7 @@ components:
         xp_reward:
           type: integer
         user:
-          $ref: '#/components/schemas/UserResponse'
+          $ref: "#/components/schemas/UserResponse"
         created_at:
           type: string
           format: date-time
@@ -2189,20 +2275,20 @@ components:
       type: object
       properties:
         data:
-          $ref: '#/components/schemas/PuzzleResponse'
+          $ref: "#/components/schemas/PuzzleResponse"
     PuzzleListWrapper:
       type: object
       properties:
         data:
           type: array
           items:
-            $ref: '#/components/schemas/PuzzleResponse'
+            $ref: "#/components/schemas/PuzzleResponse"
     OptionRequest:
       type: object
       required:
-      - teks_jawaban
-      - is_correct
-      - score
+        - teks_jawaban
+        - is_correct
+        - score
       properties:
         teks_jawaban:
           type: string
@@ -2216,10 +2302,10 @@ components:
     QuestionRequest:
       type: object
       required:
-      - teks_pertanyaan
-      - tipe
-      - poin
-      - pilihan
+        - teks_pertanyaan
+        - tipe
+        - poin
+        - pilihan
       properties:
         urutan:
           type: integer
@@ -2230,8 +2316,8 @@ components:
         tipe:
           type: string
           enum:
-          - pilihan_ganda
-          - benar_salah
+            - pilihan_ganda
+            - benar_salah
           example: pilihan_ganda
         poin:
           type: integer
@@ -2242,15 +2328,15 @@ components:
         pilihan:
           type: array
           items:
-            $ref: '#/components/schemas/OptionRequest'
+            $ref: "#/components/schemas/OptionRequest"
     QuizRequest:
       type: object
       required:
-      - judul
-      - xp_reward
-      - kategori_id
-      - is_published
-      - soal
+        - judul
+        - xp_reward
+        - kategori_id
+        - is_published
+        - soal
       properties:
         judul:
           type: string
@@ -2266,14 +2352,14 @@ components:
           example: 100
         kategori_id:
           type: string
-          example: '2'
+          example: "2"
         is_published:
           type: boolean
           example: true
         soal:
           type: array
           items:
-            $ref: '#/components/schemas/QuestionRequest'
+            $ref: "#/components/schemas/QuestionRequest"
     OptionResponse:
       type: object
       properties:
@@ -2316,7 +2402,7 @@ components:
         pilihan:
           type: array
           items:
-            $ref: '#/components/schemas/OptionResponse'
+            $ref: "#/components/schemas/OptionResponse"
     QuizResponse:
       type: object
       properties:
@@ -2337,7 +2423,7 @@ components:
           example: 100
         kategori_id:
           type: string
-          example: '2'
+          example: "2"
         kategori:
           type: string
           example: Geografi Nusantara
@@ -2345,29 +2431,29 @@ components:
           type: boolean
           example: true
         user:
-          $ref: '#/components/schemas/UserResponse'
+          $ref: "#/components/schemas/UserResponse"
         created_at:
           type: string
           format: date-time
-          example: '2026-03-25T15:04:05Z'
+          example: "2026-03-25T15:04:05Z"
         soal:
           type: array
           items:
-            $ref: '#/components/schemas/QuestionResponse'
+            $ref: "#/components/schemas/QuestionResponse"
     QuizWrapper:
       type: object
       properties:
         data:
-          $ref: '#/components/schemas/QuizResponse'
+          $ref: "#/components/schemas/QuizResponse"
     QuizListWrapper:
       type: object
       properties:
         data:
           type: array
           items:
-            $ref: '#/components/schemas/QuizResponse'
+            $ref: "#/components/schemas/QuizResponse"
         paging:
-          $ref: '#/components/schemas/PageMetaData'
+          $ref: "#/components/schemas/PageMetaData"
     SceneChoice:
       type: object
       properties:
@@ -2382,8 +2468,8 @@ components:
     SceneRequest:
       type: object
       required:
-      - scene_key
-      - scene_text
+        - scene_key
+        - scene_text
       properties:
         scene_key:
           type: string
@@ -2400,7 +2486,7 @@ components:
         scene_choices:
           type: array
           items:
-            $ref: '#/components/schemas/SceneChoice'
+            $ref: "#/components/schemas/SceneChoice"
         is_ending:
           type: boolean
           description: Apakah scene ini adalah ending
@@ -2412,7 +2498,7 @@ components:
         ending_type:
           type: string
           description: Tipe ending (good/bad/neutral)
-          example: ''
+          example: ""
         urutan:
           type: integer
           description: Urutan scene
@@ -2438,7 +2524,7 @@ components:
         scene_choices:
           type: array
           items:
-            $ref: '#/components/schemas/SceneChoice'
+            $ref: "#/components/schemas/SceneChoice"
         is_ending:
           type: boolean
           example: false
@@ -2447,15 +2533,15 @@ components:
           example: 0
         ending_type:
           type: string
-          example: ''
+          example: ""
         urutan:
           type: integer
           example: 1
     StoryRequest:
       type: object
       required:
-      - judul
-      - kategori_id
+        - judul
+        - kategori_id
       properties:
         judul:
           type: string
@@ -2502,13 +2588,13 @@ components:
         scenes:
           type: array
           items:
-            $ref: '#/components/schemas/SceneResponse'
+            $ref: "#/components/schemas/SceneResponse"
         created_at:
           type: string
           format: date-time
-          example: '2026-03-26T10:00:00Z'
+          example: "2026-03-26T10:00:00Z"
         created_by:
-          $ref: '#/components/schemas/UserResponse'
+          $ref: "#/components/schemas/UserResponse"
         is_published:
           type: boolean
           example: true
@@ -2516,25 +2602,25 @@ components:
       type: object
       properties:
         data:
-          $ref: '#/components/schemas/StoryResponse'
+          $ref: "#/components/schemas/StoryResponse"
     SceneWrapper:
       type: object
       properties:
         data:
-          $ref: '#/components/schemas/SceneResponse'
+          $ref: "#/components/schemas/SceneResponse"
     StoryListWrapper:
       type: object
       properties:
         data:
           type: array
           items:
-            $ref: '#/components/schemas/StoryResponse'
+            $ref: "#/components/schemas/StoryResponse"
         paging:
-          $ref: '#/components/schemas/PageMetaData'
+          $ref: "#/components/schemas/PageMetaData"
     GroupCreateRequest:
       type: object
       required:
-      - group_name
+        - group_name
       properties:
         group_name:
           type: string
@@ -2543,7 +2629,7 @@ components:
     GroupUpdateRequest:
       type: object
       required:
-      - group_name
+        - group_name
       properties:
         group_name:
           type: string
@@ -2555,7 +2641,7 @@ components:
     GroupInviteEmailRequest:
       type: object
       required:
-      - emails
+        - emails
       properties:
         emails:
           type: array
@@ -2565,7 +2651,7 @@ components:
     GroupJoinRequest:
       type: object
       required:
-      - invite_token
+        - invite_token
       properties:
         invite_token:
           type: string
@@ -2578,7 +2664,7 @@ components:
           example: 1
         nip:
           type: string
-          example: '198501012010011001'
+          example: "198501012010011001"
         bidang_ajar:
           type: string
           example: Matematika
@@ -2598,13 +2684,13 @@ components:
           type: string
           example: https://arsiva.app/uploads/thumbnail.webp
         created_by:
-          $ref: '#/components/schemas/GroupGuruResponse'
+          $ref: "#/components/schemas/GroupGuruResponse"
         created_at:
           type: string
-          example: '2026-04-24 13:00:00'
+          example: "2026-04-24 13:00:00"
         updated_at:
           type: string
-          example: '2026-04-24 13:00:00'
+          example: "2026-04-24 13:00:00"
         member_count:
           type: integer
           example: 0
@@ -2623,13 +2709,13 @@ components:
           example: andi@example.com
         nis:
           type: string
-          example: '2024001'
+          example: "2024001"
         foto_profil:
           type: string
-          example: ''
+          example: ""
         tanggal_bergabung:
           type: string
-          example: '2026-04-24 14:00:00'
+          example: "2026-04-24 14:00:00"
     GroupDetailResponse:
       type: object
       properties:
@@ -2643,20 +2729,20 @@ components:
           type: string
           example: https://arsiva.app/uploads/thumbnail.webp
         created_by:
-          $ref: '#/components/schemas/GroupGuruResponse'
+          $ref: "#/components/schemas/GroupGuruResponse"
         created_at:
           type: string
-          example: '2026-04-24 13:00:00'
+          example: "2026-04-24 13:00:00"
         updated_at:
           type: string
-          example: '2026-04-24 13:00:00'
+          example: "2026-04-24 13:00:00"
         member_count:
           type: integer
           example: 2
         members:
           type: array
           items:
-            $ref: '#/components/schemas/GroupMemberResponse'
+            $ref: "#/components/schemas/GroupMemberResponse"
     GroupInviteResponse:
       type: object
       properties:
@@ -2672,33 +2758,33 @@ components:
       type: object
       properties:
         data:
-          $ref: '#/components/schemas/GroupResponse'
+          $ref: "#/components/schemas/GroupResponse"
     GroupDetailWrapper:
       type: object
       properties:
         data:
-          $ref: '#/components/schemas/GroupDetailResponse'
+          $ref: "#/components/schemas/GroupDetailResponse"
     GroupListWrapper:
       type: object
       properties:
         data:
           type: array
           items:
-            $ref: '#/components/schemas/GroupResponse'
+            $ref: "#/components/schemas/GroupResponse"
         paging:
-          $ref: '#/components/schemas/PageMetaData'
+          $ref: "#/components/schemas/PageMetaData"
     GroupInviteWrapper:
       type: object
       properties:
         data:
-          $ref: '#/components/schemas/GroupInviteResponse'
+          $ref: "#/components/schemas/GroupInviteResponse"
     GroupMemberListWrapper:
       type: object
       properties:
         data:
           type: array
           items:
-            $ref: '#/components/schemas/GroupMemberResponse'
+            $ref: "#/components/schemas/GroupMemberResponse"
     MessageWrapper:
       type: object
       properties:

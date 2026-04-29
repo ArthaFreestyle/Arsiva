@@ -33,130 +33,132 @@ func (c *RouteConfig) SetupGuestRoutes() {
 }
 
 func (c *RouteConfig) SetupAuthRoutes() {
-	// Group with auth middleware
+	// Auth group — hanya prefix + auth middleware
 	auth := c.App.Group("/v1", c.AuthMiddleware)
+
+	// Role middleware disimpan dalam variabel
+	superadminOnly := middleware.RoleMiddleware("super_admin")
+	allRoles := middleware.RoleMiddleware("member", "guru", "super_admin")
+	guruAdmin := middleware.RoleMiddleware("guru", "super_admin")
+	guruOnly := middleware.RoleMiddleware("guru")
+	memberOnly := middleware.RoleMiddleware("member")
 
 	// ==========================================
 	// SUPERADMIN ONLY
 	// ==========================================
-	superadmin := auth.Group("", middleware.RoleMiddleware("super_admin"))
 
-	//users
-	superadmin.Get("/users", c.UserController.GetAllUsers)
-	superadmin.Get("/users/:id", c.UserController.GetUserById)
-	superadmin.Post("/users", c.UserController.CreateUser)
-	superadmin.Put("/users/:id", c.UserController.UpdateUser)
-	superadmin.Delete("/users/:id", c.UserController.DeleteUser)
+	// users
+	auth.Get("/users", superadminOnly, c.UserController.GetAllUsers)
+	auth.Get("/users/:id", superadminOnly, c.UserController.GetUserById)
+	auth.Post("/users", superadminOnly, c.UserController.CreateUser)
+	auth.Put("/users/:id", superadminOnly, c.UserController.UpdateUser)
+	auth.Delete("/users/:id", superadminOnly, c.UserController.DeleteUser)
 
 	// ==========================================
 	// ALL AUTHENTICATED (member, guru, superadmin)
 	// ==========================================
-	allAuth := auth.Group("", middleware.RoleMiddleware("member", "guru", "super_admin"))
 
-	//article category - read
-	allAuth.Get("/categories/article", c.ArticleCategoryController.GetAllArticleCategories)
-	allAuth.Get("/categories/article/:id", c.ArticleCategoryController.GetArticleCategoryById)
+	// article category - read
+	auth.Get("/categories/article", allRoles, c.ArticleCategoryController.GetAllArticleCategories)
+	auth.Get("/categories/article/:id", allRoles, c.ArticleCategoryController.GetArticleCategoryById)
 
-	//article - read
-	allAuth.Get("/articles", c.ArticleController.GetAllArticle)
-	allAuth.Get("/articles/detail/:id", c.ArticleController.GetArticleById)
-	allAuth.Get("/articles/:slug", c.ArticleController.GetArticleBySlug)
+	// article - read
+	auth.Get("/articles", allRoles, c.ArticleController.GetAllArticle)
+	auth.Get("/articles/detail/:id", allRoles, c.ArticleController.GetArticleById)
+	auth.Get("/articles/:slug", allRoles, c.ArticleController.GetArticleBySlug)
 
-	//puzzle - read
-	allAuth.Get("/puzzles", c.PuzzleController.GetAllPuzzle)
-	allAuth.Get("/puzzles/:id", c.PuzzleController.GetPuzzleById)
+	// puzzle - read
+	auth.Get("/puzzles", allRoles, c.PuzzleController.GetAllPuzzle)
+	auth.Get("/puzzles/:id", allRoles, c.PuzzleController.GetPuzzleById)
 
-	//quiz - read
-	allAuth.Get("/quizzes", c.QuizController.GetAllQuiz)
-	allAuth.Get("/quizzes/:id", c.QuizController.GetQuizById)
+	// quiz - read
+	auth.Get("/quizzes", allRoles, c.QuizController.GetAllQuiz)
+	auth.Get("/quizzes/:id", allRoles, c.QuizController.GetQuizById)
 
-	//cerita interaktif - read
-	allAuth.Get("/stories", c.CeritaController.GetAllCerita)
-	allAuth.Get("/stories/:id", c.CeritaController.GetCeritaById)
+	// cerita interaktif - read
+	auth.Get("/stories", allRoles, c.CeritaController.GetAllCerita)
+	auth.Get("/stories/:id", allRoles, c.CeritaController.GetCeritaById)
 
-	//story category - read
-	allAuth.Get("/categories/story", c.StoryCategoryController.GetAllStoryCategories)
-	allAuth.Get("/categories/story/:id", c.StoryCategoryController.GetStoryCategoryById)
+	// story category - read
+	auth.Get("/categories/story", allRoles, c.StoryCategoryController.GetAllStoryCategories)
+	auth.Get("/categories/story/:id", allRoles, c.StoryCategoryController.GetStoryCategoryById)
 
-	//quiz category - read
-	allAuth.Get("/categories/quiz", c.QuizCategoryController.GetAllQuizCategories)
-	allAuth.Get("/categories/quiz/:id", c.QuizCategoryController.GetQuizCategoryById)
+	// quiz category - read
+	auth.Get("/categories/quiz", allRoles, c.QuizCategoryController.GetAllQuizCategories)
+	auth.Get("/categories/quiz/:id", allRoles, c.QuizCategoryController.GetQuizCategoryById)
 
 	// ==========================================
 	// GURU + SUPERADMIN (content management)
 	// ==========================================
-	guruAdmin := auth.Group("", middleware.RoleMiddleware("guru", "super_admin"))
 
-	// --- NEW: Management READ endpoints (role-aware) ---
-	guruAdmin.Get("/manage/puzzles", c.PuzzleController.GetAllPuzzleManage)
-	guruAdmin.Get("/manage/puzzles/:id", c.PuzzleController.GetPuzzleByIdManage)
-	guruAdmin.Get("/manage/quizzes", c.QuizController.GetAllQuizManage)
-	guruAdmin.Get("/manage/quizzes/:id", c.QuizController.GetQuizByIdManage)
-	guruAdmin.Get("/manage/stories", c.CeritaController.GetAllCeritaManage)
-	guruAdmin.Get("/manage/stories/:id", c.CeritaController.GetCeritaByIdManage)
+	// management READ endpoints (role-aware)
+	auth.Get("/manage/puzzles", guruAdmin, c.PuzzleController.GetAllPuzzleManage)
+	auth.Get("/manage/puzzles/:id", guruAdmin, c.PuzzleController.GetPuzzleByIdManage)
+	auth.Get("/manage/quizzes", guruAdmin, c.QuizController.GetAllQuizManage)
+	auth.Get("/manage/quizzes/:id", guruAdmin, c.QuizController.GetQuizByIdManage)
+	auth.Get("/manage/stories", guruAdmin, c.CeritaController.GetAllCeritaManage)
+	auth.Get("/manage/stories/:id", guruAdmin, c.CeritaController.GetCeritaByIdManage)
 
-	//article category - write
-	guruAdmin.Post("/categories/article", c.ArticleCategoryController.CreateArticleCategory)
-	guruAdmin.Put("/categories/article/:id", c.ArticleCategoryController.UpdateArticleCategory)
-	guruAdmin.Delete("/categories/article/:id", c.ArticleCategoryController.DeleteArticleCategory)
+	// article category - write
+	auth.Post("/categories/article", guruAdmin, c.ArticleCategoryController.CreateArticleCategory)
+	auth.Put("/categories/article/:id", guruAdmin, c.ArticleCategoryController.UpdateArticleCategory)
+	auth.Delete("/categories/article/:id", guruAdmin, c.ArticleCategoryController.DeleteArticleCategory)
 
-	//article - write
-	guruAdmin.Post("/articles", c.ArticleController.CreateArticle)
-	guruAdmin.Put("/articles/:id", c.ArticleController.UpdateArticle)
-	guruAdmin.Delete("/articles/:id", c.ArticleController.DeleteArticle)
+	// article - write
+	auth.Post("/articles", guruAdmin, c.ArticleController.CreateArticle)
+	auth.Put("/articles/:id", guruAdmin, c.ArticleController.UpdateArticle)
+	auth.Delete("/articles/:id", guruAdmin, c.ArticleController.DeleteArticle)
 
-	//puzzle - write
-	guruAdmin.Post("/puzzles", c.PuzzleController.CreatePuzzle)
-	guruAdmin.Put("/puzzles/:id", c.PuzzleController.UpdatePuzzle)
-	guruAdmin.Delete("/puzzles/:id", c.PuzzleController.DeletePuzzle)
+	// puzzle - write
+	auth.Post("/puzzles", guruAdmin, c.PuzzleController.CreatePuzzle)
+	auth.Put("/puzzles/:id", guruAdmin, c.PuzzleController.UpdatePuzzle)
+	auth.Delete("/puzzles/:id", guruAdmin, c.PuzzleController.DeletePuzzle)
 
-	//quiz - write
-	guruAdmin.Post("/quizzes", c.QuizController.CreateQuiz)
-	guruAdmin.Put("/quizzes/:id", c.QuizController.UpdateQuiz)
-	guruAdmin.Delete("/quizzes/:id", c.QuizController.DeleteQuiz)
+	// quiz - write
+	auth.Post("/quizzes", guruAdmin, c.QuizController.CreateQuiz)
+	auth.Put("/quizzes/:id", guruAdmin, c.QuizController.UpdateQuiz)
+	auth.Delete("/quizzes/:id", guruAdmin, c.QuizController.DeleteQuiz)
 
-	//cerita interaktif - write
-	guruAdmin.Post("/stories", c.CeritaController.CreateCerita)
-	guruAdmin.Put("/stories/:id", c.CeritaController.UpdateCerita)
-	guruAdmin.Post("/stories/:id/scenes", c.CeritaController.CreateScene)
-	guruAdmin.Put("/stories/:id/scenes/:scene_id", c.CeritaController.UpdateScene)
-	guruAdmin.Delete("/stories/:id/scenes/:scene_id", c.CeritaController.DeleteScene)
-	guruAdmin.Delete("/stories/:id", c.CeritaController.DeleteCerita)
+	// cerita interaktif - write
+	auth.Post("/stories", guruAdmin, c.CeritaController.CreateCerita)
+	auth.Put("/stories/:id", guruAdmin, c.CeritaController.UpdateCerita)
+	auth.Post("/stories/:id/scenes", guruAdmin, c.CeritaController.CreateScene)
+	auth.Put("/stories/:id/scenes/:scene_id", guruAdmin, c.CeritaController.UpdateScene)
+	auth.Delete("/stories/:id/scenes/:scene_id", guruAdmin, c.CeritaController.DeleteScene)
+	auth.Delete("/stories/:id", guruAdmin, c.CeritaController.DeleteCerita)
 
-	//story category - write
-	guruAdmin.Post("/categories/story", c.StoryCategoryController.CreateStoryCategory)
-	guruAdmin.Put("/categories/story/:id", c.StoryCategoryController.UpdateStoryCategory)
-	guruAdmin.Delete("/categories/story/:id", c.StoryCategoryController.DeleteStoryCategory)
+	// story category - write
+	auth.Post("/categories/story", guruAdmin, c.StoryCategoryController.CreateStoryCategory)
+	auth.Put("/categories/story/:id", guruAdmin, c.StoryCategoryController.UpdateStoryCategory)
+	auth.Delete("/categories/story/:id", guruAdmin, c.StoryCategoryController.DeleteStoryCategory)
 
-	//quiz category - write
-	guruAdmin.Post("/categories/quiz", c.QuizCategoryController.CreateQuizCategory)
-	guruAdmin.Put("/categories/quiz/:id", c.QuizCategoryController.UpdateQuizCategory)
-	guruAdmin.Delete("/categories/quiz/:id", c.QuizCategoryController.DeleteQuizCategory)
+	// quiz category - write
+	auth.Post("/categories/quiz", guruAdmin, c.QuizCategoryController.CreateQuizCategory)
+	auth.Put("/categories/quiz/:id", guruAdmin, c.QuizCategoryController.UpdateQuizCategory)
+	auth.Delete("/categories/quiz/:id", guruAdmin, c.QuizCategoryController.DeleteQuizCategory)
 
-	//upload
-	guruAdmin.Post("/upload/image", c.UploadController.UploadImage)
+	// upload
+	auth.Post("/upload/image", guruAdmin, c.UploadController.UploadImage)
 
 	// ==========================================
 	// GURU ONLY (group management)
 	// ==========================================
-	guruOnly := auth.Group("", middleware.RoleMiddleware("guru"))
 
 	// Group CRUD
-	guruOnly.Post("/groups", c.GroupController.CreateGroup)
-	guruOnly.Get("/groups", c.GroupController.GetAllGroups)
-	guruOnly.Get("/groups/:id", c.GroupController.GetGroupDetail)
-	guruOnly.Put("/groups/:id", c.GroupController.UpdateGroup)
-	guruOnly.Delete("/groups/:id", c.GroupController.DeleteGroup)
+	auth.Post("/groups", guruOnly, c.GroupController.CreateGroup)
+	auth.Get("/groups", guruOnly, c.GroupController.GetAllGroups)
+	auth.Get("/groups/:id", guruOnly, c.GroupController.GetGroupDetail)
+	auth.Put("/groups/:id", guruOnly, c.GroupController.UpdateGroup)
+	auth.Delete("/groups/:id", guruOnly, c.GroupController.DeleteGroup)
 
 	// Group Member Management (Guru)
-	guruOnly.Post("/groups/:id/invite", c.GroupController.InviteMembersByEmail)
-	guruOnly.Get("/groups/:id/invite-link", c.GroupController.GenerateInviteLink)
-	guruOnly.Get("/groups/:id/members", c.GroupController.GetGroupMembers)
-	guruOnly.Delete("/groups/:id/members/:member_id", c.GroupController.RemoveMember)
+	auth.Post("/groups/:id/invite", guruOnly, c.GroupController.InviteMembersByEmail)
+	auth.Get("/groups/:id/invite-link", guruOnly, c.GroupController.GenerateInviteLink)
+	auth.Get("/groups/:id/members", guruOnly, c.GroupController.GetGroupMembers)
+	auth.Delete("/groups/:id/members/:member_id", guruOnly, c.GroupController.RemoveMember)
 
 	// ==========================================
 	// MEMBER ONLY (join group)
 	// ==========================================
-	memberOnly := auth.Group("", middleware.RoleMiddleware("member"))
-	memberOnly.Post("/groups/join", c.GroupController.JoinGroup)
+	auth.Post("/groups/join", memberOnly, c.GroupController.JoinGroup)
 }

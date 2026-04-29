@@ -24,6 +24,7 @@ func RoleMiddleware(allowedRoles ...string) fiber.Handler {
 			}
 		}
 
+
 		return ctx.Status(fiber.StatusForbidden).JSON(model.WebResponse[any]{
 			Errors: "forbidden: insufficient role",
 		})
