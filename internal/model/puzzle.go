@@ -14,8 +14,8 @@ type PuzzleRequest struct {
 type PuzzleResponse struct {
 	PuzzleId	string	`json:"puzzle_id"`
 	Judul		string	`json:"judul"`
-	Thumbnail	string	`json:"thumbnail"`
-	Gambar		string	`json:"gambar"`
+	Thumbnail	*AssetResponse	`json:"thumbnail"`
+	Gambar		*AssetResponse	`json:"gambar"`
 	Kategori	string	`json:"kategori"`
 	XpReward	int		`json:"xp_reward"`
 	CreatedBy	UserResponse	`json:"user"`

@@ -20,7 +20,7 @@ func ToSceneResponse(scene *entity.Scene) *model.SceneResponse {
 		SceneId:      scene.SceneId,
 		CeritaId:     scene.CeritaId,
 		SceneKey:     scene.SceneKey,
-		SceneImage:   scene.SceneImage,
+		SceneImage:   toAsset(scene.SceneImageAssetId, scene.SceneImage),
 		SceneText:    scene.SceneText,
 		SceneChoices: choices,
 		IsEnding:     scene.IsEnding,
@@ -39,7 +39,7 @@ func ToCeritaResponse(cerita *entity.CeritaInteraktif) *model.CeritaResponse {
 	return &model.CeritaResponse{
 		CeritaId:    cerita.CeritaId,
 		Judul:       cerita.Judul,
-		Thumbnail:   cerita.Thumbnail,
+		Thumbnail:   toAsset(cerita.ThumbnailAssetId, cerita.Thumbnail),
 		Deskripsi:   cerita.Deskripsi,
 		KategoriId:  cerita.KategoriId,
 		XpReward:    cerita.XpReward,

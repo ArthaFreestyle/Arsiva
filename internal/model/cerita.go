@@ -22,7 +22,7 @@ type SceneResponse struct {
 	SceneId      int           `json:"scene_id"`
 	CeritaId     int           `json:"cerita_id"`
 	SceneKey     string        `json:"scene_key"`
-	SceneImage   string        `json:"scene_image"`
+	SceneImage   *AssetResponse `json:"scene_image"`
 	SceneText    string        `json:"scene_text"`
 	SceneChoices []SceneChoice `json:"scene_choices"`
 	IsEnding     bool          `json:"is_ending"`
@@ -43,7 +43,7 @@ type CeritaRequest struct {
 type CeritaResponse struct {
 	CeritaId    int              `json:"cerita_id"`
 	Judul       string           `json:"judul"`
-	Thumbnail   string           `json:"thumbnail"`
+	Thumbnail   *AssetResponse   `json:"thumbnail"`
 	Deskripsi   string           `json:"deskripsi"`
 	KategoriId  int              `json:"kategori_id"`
 	XpReward    int              `json:"xp_reward"`

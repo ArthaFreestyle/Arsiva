@@ -23,5 +23,5 @@ type ArticleResponse struct {
 	Excerpt string `json:"excerpt,omitempty"`
 	CreatedBy UserResponse `json:"created_by,omitempty"`
 	CreatedAt string `json:"created_at"`
-	Thumbnail string `json:"thumbnail,omitempty"`
+	Thumbnail *AssetResponse `json:"thumbnail,omitempty"`
 }

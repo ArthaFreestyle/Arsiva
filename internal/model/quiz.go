@@ -15,8 +15,8 @@ type QuizRequest struct {
 type QuizResponse struct {
 	QuizId      int                 `json:"quiz_id"`
 	Judul       string              `json:"judul"`
-	Gambar      string              `json:"gambar"`
-	Thumbnail   string              `json:"thumbnail"`
+	Gambar      *AssetResponse      `json:"gambar"`
+	Thumbnail   *AssetResponse      `json:"thumbnail"`
 	Kategori    string              `json:"kategori"`
 	XpReward    int                 `json:"xp_reward"`
 	Soal        []*QuestionResponse `json:"soal,omitempty"`

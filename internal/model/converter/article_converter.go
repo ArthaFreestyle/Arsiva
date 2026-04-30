@@ -6,7 +6,7 @@ import (
 )
 
 func ToArticleResponse(article *entity.Article) *model.ArticleResponse {
-	var content, excerpt, thumbnail, createdAt string
+	var content, excerpt, thumbnailStr, createdAt string
 	if article.Konten != nil {
 		content = *article.Konten
 	}
@@ -14,7 +14,7 @@ func ToArticleResponse(article *entity.Article) *model.ArticleResponse {
 		excerpt = *article.Excerpt
 	}
 	if article.Thumbnail != nil {
-		thumbnail = *article.Thumbnail
+		thumbnailStr = *article.Thumbnail
 	}
 	if article.CreatedAt != nil {
 		createdAt = article.CreatedAt.Format("2006-01-02 15:04:05")
@@ -36,7 +36,7 @@ func ToArticleResponse(article *entity.Article) *model.ArticleResponse {
 			Username: article.CreatedBy.Username,
 		},
 		CreatedAt: createdAt,
-		Thumbnail: thumbnail,
+		Thumbnail: toAsset(article.ThumbnailAssetId, thumbnailStr),
 	}
 }
 
