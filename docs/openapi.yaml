@@ -89,6 +89,8 @@ tags:
     description: "CRUD manajemen data sekolah (🔒 super_admin only)"
   - name: Guru
     description: "CRUD manajemen data guru (🔒 POST = super_admin + guru-self, DELETE = super_admin, GET/PUT = super_admin + guru-self, GET /me = guru)"
+  - name: Member
+    description: "CRUD manajemen data member (🔒 POST = super_admin, DELETE = super_admin, GET/PUT = super_admin + member-self, GET /me = member, PUT /me = member)"
 paths:
   /api/v1/login:
     post:
@@ -2389,6 +2391,342 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/member:
+    get:
+      tags:
+        - Member
+      summary: Get all member
+      description: "Mengambil daftar member dengan pagination dan pencarian berdasarkan NIS atau username.\n\n🔒 **Role**: `super_admin`\n"
+      operationId: getAllMember
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Nomor halaman
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 10
+          description: Jumlah item per halaman
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Pencarian berdasarkan NIS atau username
+      responses:
+        "200":
+          description: Daftar member berhasil diambil
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemberListWrapper"
+              example:
+                data:
+                  - member_id: "1"
+                    nis: "2024001"
+                    sekolah_id: "1"
+                    total_xp: 0
+                    level: 0
+                    username: andi_siswa
+                    email: andi@example.com
+                paging:
+                  page: 1
+                  size: 10
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      tags:
+        - Member
+      summary: Create member
+      description: "Mendaftarkan user sebagai member secara manual (admin path).\n\n🔒 **Role**: `super_admin`\n"
+      operationId: createMember
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MemberCreateRequest"
+            example:
+              user_id: "10"
+              sekolah_id: "1"
+              nis: "2024001"
+      responses:
+        "201":
+          description: Member berhasil didaftarkan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemberWrapper"
+              example:
+                data:
+                  member_id: "1"
+                  nis: "2024001"
+                  sekolah_id: "1"
+                  total_xp: 0
+                  level: 0
+                  username: andi_siswa
+                  email: andi@example.com
+        "400":
+          description: Validasi gagal (field wajib kosong)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          description: user_id sudah terdaftar sebagai member
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: user_id sudah terdaftar sebagai member
+        "500":
+          description: Gagal menyimpan ke database
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/member/me:
+    get:
+      tags:
+        - Member
+      summary: Get own member profile
+      description: "Mengambil profil member milik sendiri beserta sekolah. Member ID diambil dari JWT `details` — tidak perlu ID eksplisit.\n\n🔒 **Role**: `member`\n"
+      operationId: getMemberMe
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Profil member beserta sekolah
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemberDetailWrapper"
+              example:
+                data:
+                  member_id: "1"
+                  nis: "2024001"
+                  total_xp: 150
+                  level: 2
+                  foto_profil: /uploads/2026/03/foto.jpg
+                  bio: Siswa kelas 9 yang suka sains.
+                  tanggal_lahir: "2010-05-15"
+                  jenis_kelamin: L
+                  minat: Matematika, IPA
+                  username: andi_siswa
+                  email: andi@example.com
+                  sekolah:
+                    sekolah_id: "1"
+                    nama_sekolah: SMP Negeri 1 Jakarta
+                    alamat_sekolah: Jl. Merdeka No. 1
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "404":
+          description: Profil member tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      tags:
+        - Member
+      summary: Update own member profile
+      description: "Melengkapi / mengupdate profil member milik sendiri. Field `total_xp`, `level`, dan `last_active` tidak dapat diubah melalui endpoint ini.\n\n🔒 **Role**: `member`\n"
+      operationId: updateMemberMe
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MemberUpdateProfileRequest"
+            example:
+              sekolah_id: "1"
+              nis: "2024001"
+              foto_profil: /uploads/2026/03/foto.jpg
+              bio: Siswa kelas 9 yang suka sains.
+              tanggal_lahir: "2010-05-15"
+              jenis_kelamin: L
+              minat: Matematika, IPA
+      responses:
+        "200":
+          description: Profil member berhasil diupdate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemberWrapper"
+        "400":
+          description: "Validasi gagal — termasuk nilai `jenis_kelamin` di luar `L`, `P`, `Lainnya`"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "404":
+          description: Member tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/member/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+        description: ID member (SERIAL)
+        example: 1
+    get:
+      tags:
+        - Member
+      summary: Get member by ID
+      description: "Mengambil detail member beserta sekolah. Member hanya bisa mengakses profil miliknya sendiri.\n\n🔒 **Role**: `super_admin`, `member` (hanya milik sendiri)\n"
+      operationId: getMemberById
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Detail member beserta sekolah
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemberDetailWrapper"
+              example:
+                data:
+                  member_id: "1"
+                  nis: "2024001"
+                  total_xp: 150
+                  level: 2
+                  foto_profil: /uploads/2026/03/foto.jpg
+                  bio: Siswa kelas 9 yang suka sains.
+                  tanggal_lahir: "2010-05-15"
+                  jenis_kelamin: L
+                  minat: Matematika, IPA
+                  username: andi_siswa
+                  email: andi@example.com
+                  sekolah:
+                    sekolah_id: "1"
+                    nama_sekolah: SMP Negeri 1 Jakarta
+                    alamat_sekolah: Jl. Merdeka No. 1
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "404":
+          description: Member tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      tags:
+        - Member
+      summary: Update member by ID
+      description: "Mengupdate profil member. Member hanya bisa mengupdate profil miliknya sendiri. Field `total_xp`, `level`, dan `last_active` tidak dapat diubah melalui endpoint ini.\n\n🔒 **Role**: `super_admin`, `member` (hanya milik sendiri)\n"
+      operationId: updateMember
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MemberUpdateProfileRequest"
+            example:
+              sekolah_id: "2"
+              nis: "2024002"
+              bio: Siswa pindahan kelas 9.
+              jenis_kelamin: P
+      responses:
+        "200":
+          description: Member berhasil diupdate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemberWrapper"
+        "400":
+          description: "Validasi gagal — termasuk nilai `jenis_kelamin` di luar `L`, `P`, `Lainnya`"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "404":
+          description: Member tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Gagal update ke database
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      tags:
+        - Member
+      summary: Delete member
+      description: "Menghapus data member dari database.\n\n🔒 **Role**: `super_admin`\n"
+      operationId: deleteMember
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Member berhasil dihapus
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: string
+                    example: Member deleted successfully
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "404":
+          description: Member tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   responses:
     UnauthorizedResponse:
@@ -2420,7 +2758,7 @@ components:
 
         Format: `Authorization: Bearer <token>` \
 
-        Token berisi claims: `user_id`, `email`, `username`, `role`, `details` (role-specific: `GuruDetails` untuk guru, `null` untuk role lain)\n"
+        Token berisi claims: `user_id`, `email`, `username`, `role`, `details` (role-specific: `GuruDetails` untuk guru, `MemberDetails` untuk member, `null` untuk super_admin)\n"
   schemas:
     LoginRequest:
       type: object
@@ -3567,3 +3905,193 @@ components:
         sekolah_id:
           type: string
           example: "1"
+    MemberCreateRequest:
+      type: object
+      required:
+        - user_id
+      properties:
+        user_id:
+          type: string
+          description: ID user yang akan dijadikan member
+          example: "10"
+        sekolah_id:
+          type: string
+          description: ID sekolah asal member (opsional)
+          example: "1"
+        nis:
+          type: string
+          description: Nomor Induk Siswa (opsional, max 20 karakter)
+          example: "2024001"
+    MemberUpdateProfileRequest:
+      type: object
+      description: "Field `total_xp`, `level`, dan `last_active` tidak termasuk — server-owned dan tidak bisa diubah dari sini."
+      properties:
+        sekolah_id:
+          type: string
+          description: ID sekolah asal member (opsional)
+          example: "1"
+        nis:
+          type: string
+          description: Nomor Induk Siswa (opsional)
+          example: "2024001"
+        foto_profil:
+          type: string
+          description: URL foto profil (opsional)
+          example: /uploads/2026/03/foto.jpg
+        bio:
+          type: string
+          description: Bio singkat member (opsional)
+          example: Siswa kelas 9 yang suka sains.
+        tanggal_lahir:
+          type: string
+          format: date
+          description: Tanggal lahir (format YYYY-MM-DD, opsional)
+          example: "2010-05-15"
+        jenis_kelamin:
+          type: string
+          description: "Jenis kelamin — harus salah satu dari enum: `L`, `P`, `Lainnya`"
+          enum:
+            - L
+            - P
+            - Lainnya
+          example: L
+        minat:
+          type: string
+          description: Deskripsi minat/hobi member (opsional)
+          example: "Matematika, IPA"
+    MemberResponse:
+      type: object
+      properties:
+        member_id:
+          type: string
+          description: ID member
+          example: "1"
+        sekolah_id:
+          type: string
+          description: ID sekolah asal
+          example: "1"
+        nis:
+          type: string
+          description: Nomor Induk Siswa
+          example: "2024001"
+        total_xp:
+          type: integer
+          description: Total XP yang dikumpulkan (server-owned)
+          example: 150
+        level:
+          type: integer
+          description: Level gamifikasi (server-owned)
+          example: 2
+        foto_profil:
+          type: string
+          description: URL foto profil
+          example: /uploads/2026/03/foto.jpg
+        bio:
+          type: string
+          example: Siswa kelas 9 yang suka sains.
+        tanggal_lahir:
+          type: string
+          format: date
+          example: "2010-05-15"
+        jenis_kelamin:
+          type: string
+          enum:
+            - L
+            - P
+            - Lainnya
+          example: L
+        minat:
+          type: string
+          example: "Matematika, IPA"
+        username:
+          type: string
+          example: andi_siswa
+        email:
+          type: string
+          format: email
+          example: andi@example.com
+    MemberDetailResponse:
+      type: object
+      properties:
+        member_id:
+          type: string
+          example: "1"
+        nis:
+          type: string
+          example: "2024001"
+        total_xp:
+          type: integer
+          example: 150
+        level:
+          type: integer
+          example: 2
+        foto_profil:
+          type: string
+          example: /uploads/2026/03/foto.jpg
+        bio:
+          type: string
+          example: Siswa kelas 9 yang suka sains.
+        tanggal_lahir:
+          type: string
+          format: date
+          example: "2010-05-15"
+        jenis_kelamin:
+          type: string
+          enum:
+            - L
+            - P
+            - Lainnya
+          example: L
+        minat:
+          type: string
+          example: "Matematika, IPA"
+        username:
+          type: string
+          example: andi_siswa
+        email:
+          type: string
+          format: email
+          example: andi@example.com
+        sekolah:
+          $ref: "#/components/schemas/SekolahResponse"
+    MemberWrapper:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/MemberResponse"
+        errors:
+          type: string
+    MemberDetailWrapper:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/MemberDetailResponse"
+        errors:
+          type: string
+    MemberListWrapper:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/MemberResponse"
+        paging:
+          $ref: "#/components/schemas/PageMetaData"
+        errors:
+          type: string
+    MemberDetails:
+      type: object
+      description: "Payload `details` di dalam JWT untuk role `member`"
+      properties:
+        member_id:
+          type: string
+          example: "1"
+        nis:
+          type: string
+          example: "2024001"
+        sekolah_id:
+          type: string
+          example: "1"
+        level:
+          type: integer
+          example: 2
