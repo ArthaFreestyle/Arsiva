@@ -19,6 +19,7 @@ type RouteConfig struct {
 	StoryCategoryController   http.StoryCategoryController
 	QuizCategoryController    http.QuizCategoryController
 	GroupController           http.GroupController
+	SekolahController         http.SekolahController
 	AuthMiddleware            fiber.Handler
 }
 
@@ -161,4 +162,13 @@ func (c *RouteConfig) SetupAuthRoutes() {
 	// MEMBER ONLY (join group)
 	// ==========================================
 	auth.Post("/groups/join", memberOnly, c.GroupController.JoinGroup)
+
+	// ==========================================
+	// SUPERADMIN ONLY (sekolah management)
+	// ==========================================
+	auth.Post("/sekolah", superadminOnly, c.SekolahController.Create)
+	auth.Get("/sekolah", superadminOnly, c.SekolahController.FindAll)
+	auth.Get("/sekolah/:id", superadminOnly, c.SekolahController.FindById)
+	auth.Put("/sekolah/:id", superadminOnly, c.SekolahController.Update)
+	auth.Delete("/sekolah/:id", superadminOnly, c.SekolahController.Delete)
 }

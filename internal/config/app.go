@@ -37,6 +37,7 @@ func Bootstrap(cfg BootstrapConfig) {
 	quizCategoryRepo := repository.NewQuizCategoryRepository(cfg.DB, cfg.Log)
 	assetRepo := repository.NewAssetRepository(cfg.DB, cfg.Log)
 	groupRepo := repository.NewGroupRepository(cfg.DB, cfg.Log)
+	sekolahRepo := repository.NewSekolahRepository(cfg.DB, cfg.Log)
 
 	AuthUseCase := usecase.NewAuthUseCase(userRepo, cfg.Secret, cfg.Validate, cfg.Log, cfg.DB)
 	UserUseCase := usecase.NewUserUseCase(userRepo, cfg.Log, cfg.DB, cfg.Validate)
@@ -49,6 +50,7 @@ func Bootstrap(cfg BootstrapConfig) {
 	QuizCategoryUseCase := usecase.NewQuizCategoryUseCase(quizCategoryRepo, cfg.Log, cfg.Validate)
 	AssetUseCase := usecase.NewAssetUsecase(assetRepo, cfg.Log, "./uploads")
 	GroupUseCase := usecase.NewGroupUseCase(groupRepo, assetRepo, cfg.Log, cfg.Validate, cfg.Secret)
+	SekolahUseCase := usecase.NewSekolahUseCase(sekolahRepo, cfg.Log, cfg.Validate)
 
 	if !fiber.IsChild() {
 		cfg.Log.Info("Starting asset cleanup worker on master process...")
@@ -66,6 +68,7 @@ func Bootstrap(cfg BootstrapConfig) {
 	StoryCategoryController := http.NewStoryCategoryController(StoryCategoryUseCase, cfg.Log)
 	QuizCategoryController := http.NewQuizCategoryController(QuizCategoryUseCase, cfg.Log)
 	GroupController := http.NewGroupController(GroupUseCase, cfg.Log)
+	SekolahController := http.NewSekolahController(SekolahUseCase, cfg.Log)
 
 	// Create auth middleware
 	authMiddleware := middleware.NewAuthMiddleware(cfg.Secret, cfg.Log)
@@ -83,6 +86,7 @@ func Bootstrap(cfg BootstrapConfig) {
 		StoryCategoryController:   StoryCategoryController,
 		QuizCategoryController:    QuizCategoryController,
 		GroupController:           GroupController,
+		SekolahController:         SekolahController,
 		AuthMiddleware:            authMiddleware,
 	}
 
