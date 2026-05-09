@@ -9,13 +9,14 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
-func GenerateToken(User *entity.User, jwtSecret []byte) (string, string, error) {
+func GenerateToken(User *entity.User, details any, jwtSecret []byte) (string, string, error) {
 	var AccessExpiration = time.Now().Add(60 * time.Minute)
 	AccessClaims := model.Claims{
-		UserId:      User.UserId,
-		Username:    User.Username,
+		UserId:   User.UserId,
+		Username: User.Username,
 		Email:    User.Email,
-		Role:        User.Role,
+		Role:     User.Role,
+		Details:  details,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(AccessExpiration),
 		},
@@ -27,10 +28,11 @@ func GenerateToken(User *entity.User, jwtSecret []byte) (string, string, error) 
 	}
 	RefreshExpiration := time.Now().Add(7 * 24 * time.Hour)
 	RefreshClaims := model.Claims{
-		UserId:      User.UserId,
-		Username:    User.Username,
+		UserId:   User.UserId,
+		Username: User.Username,
 		Email:    User.Email,
-		Role:        User.Role,
+		Role:     User.Role,
+		Details:  details,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(RefreshExpiration),
 		},

@@ -1,10 +1,13 @@
 package entity
 
 type Guru struct {
-	GuruId		string `db:"guru_id" json:"GuruId"`
-	NIP			string `db:"nip" json:"NIP"`
-	BidangAjar	string `db:"bidang_ajar" json:"BidangAjar"`
-	Username    string `json:"Username"`
-	Sekolah		Sekolah `db:"sekolah"`
-	Groups		[]Group	`db:"groups"`
+	GuruId     string  `db:"guru_id"`
+	UserId     string  `db:"user_id"`
+	SekolahId  string  `db:"sekolah_id"`
+	NIP        string  `db:"nip"`
+	BidangAjar string  `db:"bidang_ajar"`
+	Username   string  `db:"username"`
+	Email      string  `db:"email"`
+	Sekolah    Sekolah
+	Groups     []Group
 }

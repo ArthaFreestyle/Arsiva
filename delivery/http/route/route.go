@@ -20,6 +20,7 @@ type RouteConfig struct {
 	QuizCategoryController    http.QuizCategoryController
 	GroupController           http.GroupController
 	SekolahController         http.SekolahController
+	GuruController            http.GuruController
 	AuthMiddleware            fiber.Handler
 }
 
@@ -171,4 +172,16 @@ func (c *RouteConfig) SetupAuthRoutes() {
 	auth.Get("/sekolah/:id", superadminOnly, c.SekolahController.FindById)
 	auth.Put("/sekolah/:id", superadminOnly, c.SekolahController.Update)
 	auth.Delete("/sekolah/:id", superadminOnly, c.SekolahController.Delete)
+
+	// ==========================================
+	// GURU MANAGEMENT
+	// ==========================================
+	superadminOrGuru := middleware.RoleMiddleware("super_admin", "guru")
+
+	auth.Post("/guru", superadminOnly, c.GuruController.Create)
+	auth.Get("/guru", superadminOnly, c.GuruController.FindAll)
+	auth.Get("/guru/me", guruOnly, c.GuruController.GetMe)
+	auth.Get("/guru/:id", superadminOrGuru, c.GuruController.FindById)
+	auth.Put("/guru/:id", superadminOrGuru, c.GuruController.Update)
+	auth.Delete("/guru/:id", superadminOnly, c.GuruController.Delete)
 }

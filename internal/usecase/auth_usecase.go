@@ -15,58 +15,72 @@ import (
 )
 
 type AuthUseCase interface {
-	Login(ctx context.Context,request *model.LoginRequest) (*model.LoginResponse, error)
+	Login(ctx context.Context, request *model.LoginRequest) (*model.LoginResponse, error)
 }
 
 type AuthUseCaseImpl struct {
-	DB	 *pgxpool.Pool
-	Log	 *logrus.Logger
-	Validate *validator.Validate
-	Repo repository.UserRepository
-	Secret []byte
+	DB             *pgxpool.Pool
+	Log            *logrus.Logger
+	Validate       *validator.Validate
+	Repo           repository.UserRepository
+	GuruRepository repository.GuruRepository
+	Secret         []byte
 }
 
-func NewAuthUseCase(repo repository.UserRepository,secret []byte,validate *validator.Validate,log *logrus.Logger,DB *pgxpool.Pool) AuthUseCase {
+func NewAuthUseCase(repo repository.UserRepository, secret []byte, validate *validator.Validate, log *logrus.Logger, DB *pgxpool.Pool, guruRepo repository.GuruRepository) AuthUseCase {
 	return &AuthUseCaseImpl{
-		Repo: repo,
-		Secret: secret,
-		Validate: validate,
-		DB: DB,
-		Log: log,
+		Repo:           repo,
+		Secret:         secret,
+		Validate:       validate,
+		DB:             DB,
+		Log:            log,
+		GuruRepository: guruRepo,
 	}
 }
 
-func (c *AuthUseCaseImpl) Login(ctx context.Context,request *model.LoginRequest) (*model.LoginResponse, error) {
+func (c *AuthUseCaseImpl) Login(ctx context.Context, request *model.LoginRequest) (*model.LoginResponse, error) {
 	if err := c.Validate.Struct(request); err != nil {
 		c.Log.Warnf("Invalid request body  : %+v", err)
-		return nil,fiber.ErrBadRequest
+		return nil, fiber.ErrBadRequest
 	}
 
 	request.Email = strings.ToLower(request.Email)
 
-	user,err := c.Repo.FindByEmail(ctx,request.Email); 
+	user, err := c.Repo.FindByEmail(ctx, request.Email)
 	if err != nil {
 		c.Log.Warnf("Failed find user by email : %+v", err)
-		return nil,fiber.ErrUnauthorized
+		return nil, fiber.ErrUnauthorized
 	}
 
 	if !utils.CheckPasswordHash(request.Password, user.PasswordHash) {
 		c.Log.Warnf("Invalid password : %+v", err)
-		return nil,fiber.ErrUnauthorized
+		return nil, fiber.ErrUnauthorized
 	}
 
-	access,refresh,err := utils.GenerateToken(user,c.Secret)
+	var details any
+	if user.Role == "guru" && c.GuruRepository != nil {
+		guru, err := c.GuruRepository.FindByUserId(ctx, user.UserId)
+		if err == nil {
+			details = model.GuruDetails{
+				GuruId:     guru.GuruId,
+				NIP:        guru.NIP,
+				BidangAjar: guru.BidangAjar,
+				SekolahId:  guru.SekolahId,
+			}
+		}
+	}
+
+	access, refresh, err := utils.GenerateToken(user, details, c.Secret)
 	if err != nil {
 		c.Log.Warnf("Failed generate token : %+v", err)
-		return nil,fiber.ErrInternalServerError
+		return nil, fiber.ErrInternalServerError
 	}
 
 	AuthResponse := converter.ToUserResponse(user)
-	
-	return &model.LoginResponse{
-		User: *AuthResponse,
-		AccessToken: access,
-		RefreshToken: refresh,
-	},nil
 
+	return &model.LoginResponse{
+		User:         *AuthResponse,
+		AccessToken:  access,
+		RefreshToken: refresh,
+	}, nil
 }

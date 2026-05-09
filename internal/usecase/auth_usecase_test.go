@@ -7,7 +7,7 @@ import (
 )
 
 func TestNewAuthUseCase(t *testing.T) {
-uc := NewAuthUseCase(nil, []byte("secret"), validator.New(), nil, nil)
+uc := NewAuthUseCase(nil, []byte("secret"), validator.New(), nil, nil, nil)
 if uc == nil {
 t.Fatal("expected usecase instance")
 }
