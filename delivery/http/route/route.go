@@ -21,6 +21,7 @@ type RouteConfig struct {
 	GroupController           http.GroupController
 	SekolahController         http.SekolahController
 	GuruController            http.GuruController
+	MemberController          http.MemberController
 	AuthMiddleware            fiber.Handler
 }
 
@@ -184,4 +185,17 @@ func (c *RouteConfig) SetupAuthRoutes() {
 	auth.Get("/guru/:id", superadminOrGuru, c.GuruController.FindById)
 	auth.Put("/guru/:id", superadminOrGuru, c.GuruController.Update)
 	auth.Delete("/guru/:id", superadminOnly, c.GuruController.Delete)
+
+	// ==========================================
+	// MEMBER MANAGEMENT
+	// ==========================================
+	superadminOrMember := middleware.RoleMiddleware("super_admin", "member")
+
+	auth.Post("/member", superadminOnly, c.MemberController.Create)
+	auth.Get("/member", superadminOnly, c.MemberController.FindAll)
+	auth.Get("/member/me", memberOnly, c.MemberController.GetMe)
+	auth.Put("/member/me", memberOnly, c.MemberController.UpdateMe)
+	auth.Get("/member/:id", superadminOrMember, c.MemberController.FindById)
+	auth.Put("/member/:id", superadminOrMember, c.MemberController.Update)
+	auth.Delete("/member/:id", superadminOnly, c.MemberController.Delete)
 }
