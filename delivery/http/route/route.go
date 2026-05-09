@@ -95,6 +95,8 @@ func (c *RouteConfig) SetupAuthRoutes() {
 	// ==========================================
 
 	// management READ endpoints (role-aware)
+	auth.Get("/manage/articles", guruAdmin, c.ArticleController.GetAllArticleManage)
+	auth.Get("/manage/articles/:id", guruAdmin, c.ArticleController.GetArticleByIdManage)
 	auth.Get("/manage/puzzles", guruAdmin, c.PuzzleController.GetAllPuzzleManage)
 	auth.Get("/manage/puzzles/:id", guruAdmin, c.PuzzleController.GetPuzzleByIdManage)
 	auth.Get("/manage/quizzes", guruAdmin, c.QuizController.GetAllQuizManage)
