@@ -87,6 +87,8 @@ tags:
       POST join = member)"
   - name: Sekolah
     description: "CRUD manajemen data sekolah (🔒 super_admin only)"
+  - name: Guru
+    description: "CRUD manajemen data guru (🔒 POST/DELETE = super_admin, GET/PUT = super_admin + guru-self, GET /me = guru)"
 paths:
   /api/v1/login:
     post:
@@ -2096,6 +2098,297 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/guru:
+    get:
+      tags:
+        - Guru
+      summary: Get all guru
+      description: "Mengambil daftar guru dengan pagination dan pencarian berdasarkan NIP atau username.\n\n🔒 **Role**: `super_admin`\n"
+      operationId: getAllGuru
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Nomor halaman
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 10
+          description: Jumlah item per halaman
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Pencarian berdasarkan NIP atau username
+      responses:
+        "200":
+          description: Daftar guru berhasil diambil
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GuruListWrapper"
+              example:
+                data:
+                  - guru_id: "1"
+                    nip: "198501012010011001"
+                    bidang_ajar: Matematika
+                    sekolah_id: "1"
+                    username: pak_budi
+                    email: budi@example.com
+                paging:
+                  page: 1
+                  size: 10
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      tags:
+        - Guru
+      summary: Create guru
+      description: "Mendaftarkan user sebagai guru dan mengaitkannya ke sekolah. `user_id` harus milik user dengan role `guru` yang belum punya profil guru.\n\n🔒 **Role**: `super_admin`\n"
+      operationId: createGuru
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GuruCreateRequest"
+            example:
+              user_id: "5"
+              sekolah_id: "1"
+              nip: "198501012010011001"
+              bidang_ajar: Matematika
+      responses:
+        "201":
+          description: Guru berhasil didaftarkan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GuruWrapper"
+              example:
+                data:
+                  guru_id: "1"
+                  nip: "198501012010011001"
+                  bidang_ajar: Matematika
+                  sekolah_id: "1"
+                  username: pak_budi
+                  email: budi@example.com
+        "400":
+          description: Validasi gagal (field wajib kosong)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          description: NIP atau user_id sudah terdaftar
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: nip sudah digunakan
+        "500":
+          description: Gagal menyimpan ke database
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/guru/me:
+    get:
+      tags:
+        - Guru
+      summary: Get own guru profile
+      description: "Mengambil profil guru milik sendiri beserta sekolah dan grup yang dibuat. Guru ID diambil dari JWT `details` — tidak perlu ID eksplisit.\n\n🔒 **Role**: `guru`\n"
+      operationId: getGuruMe
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Profil guru beserta sekolah dan grup
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GuruDetailWrapper"
+              example:
+                data:
+                  guru_id: "1"
+                  nip: "198501012010011001"
+                  bidang_ajar: Matematika
+                  username: pak_budi
+                  email: budi@example.com
+                  sekolah:
+                    sekolah_id: "1"
+                    nama_sekolah: SMP Negeri 1 Jakarta
+                    alamat_sekolah: Jl. Merdeka No. 1
+                  groups:
+                    - group_id: uuid-xxx
+                      group_name: Kelas 9A
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "404":
+          description: Profil guru tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/guru/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+        description: ID guru (SERIAL)
+        example: 1
+    get:
+      tags:
+        - Guru
+      summary: Get guru by ID
+      description: "Mengambil detail guru beserta sekolah dan grup yang dibuat. Guru hanya bisa mengakses profil miliknya sendiri.\n\n🔒 **Role**: `super_admin`, `guru` (hanya milik sendiri)\n"
+      operationId: getGuruById
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Detail guru beserta sekolah dan grup
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GuruDetailWrapper"
+              example:
+                data:
+                  guru_id: "1"
+                  nip: "198501012010011001"
+                  bidang_ajar: Matematika
+                  username: pak_budi
+                  email: budi@example.com
+                  sekolah:
+                    sekolah_id: "1"
+                    nama_sekolah: SMP Negeri 1 Jakarta
+                    alamat_sekolah: Jl. Merdeka No. 1
+                  groups:
+                    - group_id: uuid-xxx
+                      group_name: Kelas 9A
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "404":
+          description: Guru tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      tags:
+        - Guru
+      summary: Update guru
+      description: "Mengupdate data guru. Semua field opsional — hanya field yang dikirim yang diupdate. Guru hanya bisa mengupdate profil miliknya sendiri.\n\n🔒 **Role**: `super_admin`, `guru` (hanya milik sendiri)\n"
+      operationId: updateGuru
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GuruUpdateRequest"
+            example:
+              sekolah_id: "2"
+              nip: "198501012010011002"
+              bidang_ajar: IPA
+      responses:
+        "200":
+          description: Guru berhasil diupdate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GuruWrapper"
+        "400":
+          description: Validasi gagal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "404":
+          description: Guru tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: NIP sudah digunakan guru lain
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: nip sudah digunakan
+        "500":
+          description: Gagal update ke database
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      tags:
+        - Guru
+      summary: Delete guru
+      description: "Menghapus data guru dari database.\n\n🔒 **Role**: `super_admin`\n"
+      operationId: deleteGuru
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Guru berhasil dihapus
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: string
+                    example: Guru deleted successfully
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "404":
+          description: Guru tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   responses:
     UnauthorizedResponse:
@@ -2123,11 +2416,11 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: "Gunakan access token dari response login. \ 
+      description: "Gunakan access token dari response login. \
 
-        Format: `Authorization: Bearer <token>` \ 
+        Format: `Authorization: Bearer <token>` \
 
-        Token berisi claims: `user_id`, `email`, `username`, `role`\n"
+        Token berisi claims: `user_id`, `email`, `username`, `role`, `details` (role-specific: `GuruDetails` untuk guru, `null` untuk role lain)\n"
   schemas:
     LoginRequest:
       type: object
@@ -3129,3 +3422,148 @@ components:
           $ref: "#/components/schemas/PageMetaData"
         errors:
           type: string
+    GuruCreateRequest:
+      type: object
+      required:
+        - user_id
+        - nip
+        - bidang_ajar
+      properties:
+        user_id:
+          type: string
+          description: ID user yang akan dijadikan guru (harus belum punya profil guru)
+          example: "5"
+        sekolah_id:
+          type: string
+          description: ID sekolah tempat guru mengajar (opsional)
+          example: "1"
+        nip:
+          type: string
+          description: Nomor Induk Pegawai (unik, max 20 karakter)
+          example: "198501012010011001"
+        bidang_ajar:
+          type: string
+          description: Mata pelajaran yang diajarkan (max 100 karakter)
+          example: Matematika
+    GuruUpdateRequest:
+      type: object
+      properties:
+        sekolah_id:
+          type: string
+          description: ID sekolah baru (opsional, kosongkan untuk menghapus relasi)
+          example: "2"
+        nip:
+          type: string
+          description: NIP baru (opsional)
+          example: "198501012010011002"
+        bidang_ajar:
+          type: string
+          description: Bidang ajar baru (opsional)
+          example: IPA
+    GuruResponse:
+      type: object
+      properties:
+        guru_id:
+          type: string
+          description: ID guru
+          example: "1"
+        nip:
+          type: string
+          description: Nomor Induk Pegawai
+          example: "198501012010011001"
+        bidang_ajar:
+          type: string
+          description: Mata pelajaran yang diajarkan
+          example: Matematika
+        sekolah_id:
+          type: string
+          description: ID sekolah tempat mengajar
+          example: "1"
+        username:
+          type: string
+          description: Username akun guru
+          example: pak_budi
+        email:
+          type: string
+          format: email
+          description: Email akun guru
+          example: budi@example.com
+    GroupSummary:
+      type: object
+      properties:
+        group_id:
+          type: string
+          format: uuid
+          description: ID grup
+          example: 550e8400-e29b-41d4-a716-446655440000
+        group_name:
+          type: string
+          description: Nama grup
+          example: Kelas 9A - Matematika
+    GuruDetailResponse:
+      type: object
+      properties:
+        guru_id:
+          type: string
+          example: "1"
+        nip:
+          type: string
+          example: "198501012010011001"
+        bidang_ajar:
+          type: string
+          example: Matematika
+        username:
+          type: string
+          example: pak_budi
+        email:
+          type: string
+          format: email
+          example: budi@example.com
+        sekolah:
+          $ref: "#/components/schemas/SekolahResponse"
+        groups:
+          type: array
+          description: Grup yang dibuat oleh guru ini
+          items:
+            $ref: "#/components/schemas/GroupSummary"
+    GuruWrapper:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/GuruResponse"
+        errors:
+          type: string
+    GuruDetailWrapper:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/GuruDetailResponse"
+        errors:
+          type: string
+    GuruListWrapper:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/GuruResponse"
+        paging:
+          $ref: "#/components/schemas/PageMetaData"
+        errors:
+          type: string
+    GuruDetails:
+      type: object
+      description: "Payload `details` di dalam JWT untuk role `guru`"
+      properties:
+        guru_id:
+          type: string
+          example: "1"
+        nip:
+          type: string
+          example: "198501012010011001"
+        bidang_ajar:
+          type: string
+          example: Matematika
+        sekolah_id:
+          type: string
+          example: "1"
