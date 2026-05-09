@@ -178,7 +178,7 @@ func (c *RouteConfig) SetupAuthRoutes() {
 	// ==========================================
 	superadminOrGuru := middleware.RoleMiddleware("super_admin", "guru")
 
-	auth.Post("/guru", superadminOnly, c.GuruController.Create)
+	auth.Post("/guru", superadminOrGuru, c.GuruController.Create)
 	auth.Get("/guru", superadminOnly, c.GuruController.FindAll)
 	auth.Get("/guru/me", guruOnly, c.GuruController.GetMe)
 	auth.Get("/guru/:id", superadminOrGuru, c.GuruController.FindById)

@@ -88,7 +88,7 @@ tags:
   - name: Sekolah
     description: "CRUD manajemen data sekolah (🔒 super_admin only)"
   - name: Guru
-    description: "CRUD manajemen data guru (🔒 POST/DELETE = super_admin, GET/PUT = super_admin + guru-self, GET /me = guru)"
+    description: "CRUD manajemen data guru (🔒 POST = super_admin + guru-self, DELETE = super_admin, GET/PUT = super_admin + guru-self, GET /me = guru)"
 paths:
   /api/v1/login:
     post:
@@ -2157,7 +2157,7 @@ paths:
       tags:
         - Guru
       summary: Create guru
-      description: "Mendaftarkan user sebagai guru dan mengaitkannya ke sekolah. `user_id` harus milik user dengan role `guru` yang belum punya profil guru.\n\n🔒 **Role**: `super_admin`\n"
+      description: "Mendaftarkan user sebagai guru dan mengaitkannya ke sekolah.\n\n- **`super_admin`**: wajib mengisi `user_id` milik user lain yang belum punya profil guru.\n- **`guru`**: `user_id` diabaikan dan otomatis diisi dari JWT — guru hanya bisa mendaftarkan dirinya sendiri.\n\n🔒 **Role**: `super_admin`, `guru`\n"
       operationId: createGuru
       security:
         - BearerAuth: []
@@ -3431,7 +3431,7 @@ components:
       properties:
         user_id:
           type: string
-          description: ID user yang akan dijadikan guru (harus belum punya profil guru)
+          description: "ID user yang akan dijadikan guru (wajib untuk super_admin; diabaikan untuk guru — otomatis dari JWT)"
           example: "5"
         sekolah_id:
           type: string

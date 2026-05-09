@@ -38,7 +38,9 @@ func (c *guruControllerImpl) Create(ctx fiber.Ctx) error {
 		return fiber.ErrBadRequest
 	}
 
-	guru, err := c.GuruUseCase.Create(ctx.Context(), req)
+	claims := ctx.Locals("user").(*model.Claims)
+
+	guru, err := c.GuruUseCase.Create(ctx.Context(), req, claims)
 	if err != nil {
 		c.Log.Warnf("Failed create guru: %v", err)
 		return err

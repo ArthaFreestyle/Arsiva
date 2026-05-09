@@ -16,7 +16,7 @@ import (
 )
 
 type GuruUseCase interface {
-	Create(ctx context.Context, req *model.GuruCreateRequest) (*model.GuruResponse, error)
+	Create(ctx context.Context, req *model.GuruCreateRequest, claims *model.Claims) (*model.GuruResponse, error)
 	FindById(ctx context.Context, guruId string, claims *model.Claims) (*model.GuruDetailResponse, error)
 	FindAll(ctx context.Context, search string, page int, size int) ([]*model.GuruResponse, int, error)
 	Update(ctx context.Context, guruId string, req *model.GuruUpdateRequest, claims *model.Claims) (*model.GuruResponse, error)
@@ -38,7 +38,11 @@ func NewGuruUseCase(guruRepo repository.GuruRepository, log *logrus.Logger, vali
 	}
 }
 
-func (u *guruUseCaseImpl) Create(ctx context.Context, req *model.GuruCreateRequest) (*model.GuruResponse, error) {
+func (u *guruUseCaseImpl) Create(ctx context.Context, req *model.GuruCreateRequest, claims *model.Claims) (*model.GuruResponse, error) {
+	if claims.Role == "guru" {
+		req.UserId = claims.UserId
+	}
+
 	if err := u.Validator.Struct(req); err != nil {
 		u.Log.Warnf("Invalid request body: %+v", err)
 		return nil, fiber.ErrBadRequest
