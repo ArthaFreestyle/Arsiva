@@ -85,6 +85,8 @@ tags:
   - name: Groups
     description: "CRUD manajemen grup dan anggota (🔒 POST/PUT/DELETE/GET = guru,
       POST join = member)"
+  - name: Sekolah
+    description: "CRUD manajemen data sekolah (🔒 super_admin only)"
 paths:
   /api/v1/login:
     post:
@@ -1860,6 +1862,240 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MessageWrapper"
+  /api/v1/sekolah:
+    get:
+      tags:
+        - Sekolah
+      summary: Get all sekolah
+      description: "Mengambil daftar sekolah dengan pagination dan pencarian. \n\n🔒
+        **Role**: `super_admin`\n"
+      operationId: getAllSekolah
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Nomor halaman
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 10
+          description: Jumlah item per halaman
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Pencarian berdasarkan nama sekolah
+      responses:
+        "200":
+          description: Daftar sekolah berhasil diambil
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SekolahListWrapper"
+              example:
+                data:
+                  - sekolah_id: "1"
+                    nama_sekolah: SMP Negeri 1 Jakarta
+                    alamat_sekolah: Jl. Merdeka No. 1, Jakarta
+                paging:
+                  page: 1
+                  size: 10
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      tags:
+        - Sekolah
+      summary: Create sekolah
+      description: "Membuat data sekolah baru. \n\n🔒 **Role**: `super_admin`\n"
+      operationId: createSekolah
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SekolahCreateRequest"
+            example:
+              nama_sekolah: SMP Negeri 1 Jakarta
+              alamat_sekolah: Jl. Merdeka No. 1, Jakarta Pusat
+      responses:
+        "201":
+          description: Sekolah berhasil dibuat
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SekolahWrapper"
+              example:
+                data:
+                  sekolah_id: "1"
+                  nama_sekolah: SMP Negeri 1 Jakarta
+                  alamat_sekolah: Jl. Merdeka No. 1, Jakarta Pusat
+        "400":
+          description: Validasi gagal (field kosong)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "500":
+          description: Gagal menyimpan ke database
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/sekolah/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+        description: ID sekolah (SERIAL)
+        example: 1
+    get:
+      tags:
+        - Sekolah
+      summary: Get sekolah by ID
+      description: "Mengambil detail sekolah beserta daftar guru yang terdaftar. \n\n🔒
+        **Role**: `super_admin`\n"
+      operationId: getSekolahById
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Detail sekolah beserta guru
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SekolahDetailWrapper"
+              example:
+                data:
+                  sekolah_id: "1"
+                  nama_sekolah: SMP Negeri 1 Jakarta
+                  alamat_sekolah: Jl. Merdeka No. 1, Jakarta Pusat
+                  gurus:
+                    - guru_id: "1"
+                      nip: "198501012010011001"
+                      bidang_ajar: Matematika
+                      username: pak_budi
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "404":
+          description: Sekolah tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      tags:
+        - Sekolah
+      summary: Update sekolah
+      description: "Mengupdate data sekolah. Semua field wajib diisi. \n\n🔒 **Role**:
+        `super_admin`\n"
+      operationId: updateSekolah
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SekolahUpdateRequest"
+            example:
+              nama_sekolah: SMP Negeri 1 Jakarta (Updated)
+              alamat_sekolah: Jl. Merdeka No. 2, Jakarta Pusat
+      responses:
+        "200":
+          description: Sekolah berhasil diupdate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SekolahWrapper"
+        "400":
+          description: Validasi gagal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "404":
+          description: Sekolah tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Gagal update ke database
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      tags:
+        - Sekolah
+      summary: Delete sekolah
+      description: "Menghapus data sekolah. Akan mengembalikan `409 Conflict` jika
+        masih ada guru yang terdaftar di sekolah ini. \n\n🔒 **Role**: `super_admin`\n"
+      operationId: deleteSekolah
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Sekolah berhasil dihapus
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: string
+                    example: Sekolah deleted successfully
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "404":
+          description: Sekolah tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Tidak bisa dihapus karena masih ada guru yang terdaftar
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: "cannot delete sekolah: guru records still reference it"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   responses:
     UnauthorizedResponse:
@@ -2791,3 +3027,105 @@ components:
         data:
           type: string
           example: Success message
+    SekolahCreateRequest:
+      type: object
+      required:
+        - nama_sekolah
+        - alamat_sekolah
+      properties:
+        nama_sekolah:
+          type: string
+          description: Nama sekolah
+          example: SMP Negeri 1 Jakarta
+        alamat_sekolah:
+          type: string
+          description: Alamat lengkap sekolah
+          example: Jl. Merdeka No. 1, Jakarta Pusat
+    SekolahUpdateRequest:
+      type: object
+      required:
+        - nama_sekolah
+        - alamat_sekolah
+      properties:
+        nama_sekolah:
+          type: string
+          description: Nama sekolah
+          example: SMP Negeri 1 Jakarta
+        alamat_sekolah:
+          type: string
+          description: Alamat lengkap sekolah
+          example: Jl. Merdeka No. 1, Jakarta Pusat
+    SekolahResponse:
+      type: object
+      properties:
+        sekolah_id:
+          type: string
+          description: ID sekolah
+          example: "1"
+        nama_sekolah:
+          type: string
+          example: SMP Negeri 1 Jakarta
+        alamat_sekolah:
+          type: string
+          example: Jl. Merdeka No. 1, Jakarta Pusat
+    GuruSummary:
+      type: object
+      properties:
+        guru_id:
+          type: string
+          description: ID guru
+          example: "1"
+        nip:
+          type: string
+          description: Nomor Induk Pegawai
+          example: "198501012010011001"
+        bidang_ajar:
+          type: string
+          description: Bidang/mata pelajaran yang diajarkan
+          example: Matematika
+        username:
+          type: string
+          description: Username akun guru
+          example: pak_budi
+    SekolahDetailResponse:
+      type: object
+      properties:
+        sekolah_id:
+          type: string
+          example: "1"
+        nama_sekolah:
+          type: string
+          example: SMP Negeri 1 Jakarta
+        alamat_sekolah:
+          type: string
+          example: Jl. Merdeka No. 1, Jakarta Pusat
+        gurus:
+          type: array
+          description: Daftar guru yang terdaftar di sekolah ini
+          items:
+            $ref: "#/components/schemas/GuruSummary"
+    SekolahWrapper:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/SekolahResponse"
+        errors:
+          type: string
+    SekolahDetailWrapper:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/SekolahDetailResponse"
+        errors:
+          type: string
+    SekolahListWrapper:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/SekolahResponse"
+        paging:
+          $ref: "#/components/schemas/PageMetaData"
+        errors:
+          type: string
