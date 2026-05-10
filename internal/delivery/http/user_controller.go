@@ -10,6 +10,7 @@ import (
 type UserController interface {
 	GetAllUsers(ctx fiber.Ctx) error
 	GetUserById(ctx fiber.Ctx) error
+	SearchUsersByEmail(ctx fiber.Ctx) error
 	CreateUser(ctx fiber.Ctx) error
 	UpdateUser(ctx fiber.Ctx) error
 	DeleteUser(ctx fiber.Ctx) error
@@ -50,6 +51,21 @@ func (u *UserControllerImpl) GetUserById(ctx fiber.Ctx) error {
 
 	res := model.WebResponse[*model.UserResponse]{
 		Data: user,
+	}
+
+	return ctx.Status(fiber.StatusOK).JSON(res)
+}
+
+func (u *UserControllerImpl) SearchUsersByEmail(ctx fiber.Ctx) error {
+	emailQuery := ctx.Query("email")
+	users,err := u.UserUseCase.SearchUsersByEmail(ctx,emailQuery)
+	if err != nil {
+		u.Log.Warnf("Failed search users by email : %+v", err)
+		return err
+	}
+
+	res := model.WebResponse[[]*model.UserResponse]{
+		Data: users,
 	}
 
 	return ctx.Status(fiber.StatusOK).JSON(res)

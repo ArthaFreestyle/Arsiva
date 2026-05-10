@@ -236,6 +236,51 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/users/search:
+    get:
+      tags:
+        - Users
+      summary: Search users by email
+      description: "Mencari user aktif dengan role `member` berdasarkan partial email.\
+        \ \\ \n\n        Digunakan untuk autocomplete saat guru mengundang anggota\
+        \ ke grup. \\ \n\n        Minimal 3 karakter, maksimal 10 hasil. \\ \n\n \
+        \       🔒 **Role**: `guru`\\n"
+      operationId: searchUsersByEmail
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: email
+          in: query
+          required: true
+          description: Partial email untuk pencarian (min 3 karakter)
+          schema:
+            type: string
+            minLength: 3
+          example: stu
+      responses:
+        "200":
+          description: Daftar user yang cocok (max 10)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserListResponseWrapper"
+              example:
+                data:
+                  - id: 550e8400-e29b-41d4-a716-446655440000
+                    username: student_name
+                    email: student@example.com
+        "400":
+          description: Query param `email` kosong atau kurang dari 3 karakter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: Bad Request
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
   /api/v1/users/{id}:
     parameters:
       - name: id

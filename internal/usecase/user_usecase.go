@@ -17,6 +17,7 @@ import (
 type UserUseCase interface {
 	GetAllUsers(ctx context.Context) ([]*model.UserResponse, error)
 	GetUserById(ctx context.Context,UserId string) (*model.UserResponse, error)
+	SearchUsersByEmail(ctx context.Context,emailQuery string) ([]*model.UserResponse, error)
 	CreateUser(ctx context.Context,user *model.UserRequest) (*model.UserResponse, error)
 	UpdateUser(ctx context.Context,user *model.UserRequest, UserId string) (*model.UserResponse, error)
 	DeleteUser(ctx context.Context,UserId string) (error)
@@ -59,6 +60,20 @@ func (c *UserUseCaseImpl) GetUserById(ctx context.Context,UserId string) (*model
 	res := converter.ToUserResponse(user)
 
 	return res,nil
+}
+
+func (c *UserUseCaseImpl) SearchUsersByEmail(ctx context.Context,emailQuery string) ([]*model.UserResponse, error) {
+	if len(emailQuery) < 3 {
+		return nil,fiber.ErrBadRequest
+	}
+
+	users,err := c.UserRepository.SearchByEmail(ctx,emailQuery,10)
+	if err != nil {
+		c.Log.Warnf("Error searching users by email: %v", err)
+		return nil,fiber.ErrInternalServerError
+	}
+
+	return converter.ToUsersResponse(users),nil
 }
 
 func (c *UserUseCaseImpl) CreateUser(ctx context.Context,user *model.UserRequest) (*model.UserResponse, error) {

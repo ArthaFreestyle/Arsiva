@@ -12,6 +12,7 @@ type UserRepository interface {
 	FindByEmail(ctx context.Context,email string) (*entity.User, error)
 	GetAllUsers(ctx context.Context) ([]*entity.User, error)
 	GetUserById(ctx context.Context,userId string) (*entity.User, error)
+	SearchByEmail(ctx context.Context,emailQuery string,limit int) ([]*entity.User, error)
 	CreateUser(ctx context.Context,user *entity.User) (*entity.User, error)
 	UpdateUser(ctx context.Context,user *entity.User) (*entity.User, error)
 	DeleteUser(ctx context.Context,user *entity.User) (error)
@@ -82,6 +83,23 @@ func (r *UserRepositoryImpl) GetUserById(ctx context.Context,userId string) (*en
 	}
 
 	return user,nil
+}
+
+func (r *UserRepositoryImpl) SearchByEmail(ctx context.Context,emailQuery string,limit int) ([]*entity.User, error) {
+	SQL := `SELECT user_id, username, email FROM users WHERE email ILIKE $1 AND role = 'member' AND is_active = true LIMIT $2`
+
+	rows,err := r.DB.Query(ctx,SQL,"%"+emailQuery+"%",limit)
+	if err != nil {
+		return nil,err
+	}
+
+	r.Log.Info("query : ",SQL)
+	users,err := pgx.CollectRows(rows,pgx.RowToAddrOfStructByNameLax[entity.User])
+	if err != nil {
+		return nil,err
+	}
+
+	return users,nil
 }
 
 func (r *UserRepositoryImpl) CreateUser(ctx context.Context,user *entity.User) (*entity.User, error) {

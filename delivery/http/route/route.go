@@ -52,6 +52,7 @@ func (c *RouteConfig) SetupAuthRoutes() {
 
 	// users
 	auth.Get("/users", superadminOnly, c.UserController.GetAllUsers)
+	auth.Get("/users/search", guruOnly, c.UserController.SearchUsersByEmail)
 	auth.Get("/users/:id", superadminOnly, c.UserController.GetUserById)
 	auth.Post("/users", superadminOnly, c.UserController.CreateUser)
 	auth.Put("/users/:id", superadminOnly, c.UserController.UpdateUser)
