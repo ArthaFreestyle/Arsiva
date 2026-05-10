@@ -3,11 +3,15 @@ package repository
 import (
 	"ArthaFreestyle/Arsiva/internal/entity"
 	"context"
+	"errors"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sirupsen/logrus"
 )
+
+// ErrGroupContentNotFound is returned when a group_content row doesn't exist or doesn't belong to the given group.
+var ErrGroupContentNotFound = errors.New("group content not found")
 
 type GroupRepository interface {
 	// Group CRUD
@@ -22,6 +26,13 @@ type GroupRepository interface {
 	RemoveMember(ctx context.Context, groupId string, memberId int) error
 	GetGroupMembers(ctx context.Context, groupId string) ([]*entity.GroupMember, error)
 	IsMemberInGroup(ctx context.Context, groupId string, memberId int) (bool, error)
+
+	// Group Contents
+	AddContent(ctx context.Context, groupId string, contentType string, contentId int) (*entity.GroupContent, error)
+	GetContentsByGroupId(ctx context.Context, groupId string, contentType string) ([]*entity.GroupContent, error)
+	RemoveContent(ctx context.Context, groupContentId int, groupId string) error
+	ContentExists(ctx context.Context, contentType string, contentId int) (bool, error)
+	IsContentAlreadyAssigned(ctx context.Context, groupId string, contentType string, contentId int) (bool, error)
 
 	// Helper
 	GetGuruIdByUserId(ctx context.Context, userId string) (int, error)
@@ -271,4 +282,139 @@ func (r *groupRepositoryImpl) GetMemberIdByUserId(ctx context.Context, userId st
 		return 0, err
 	}
 	return memberId, nil
+}
+
+// contentJoinQuery is the base SELECT + FROM + LEFT JOINs shared by AddContent and GetContentsByGroupId.
+// It joins group_contents with kuis, cerita_interaktif, and puzzles to resolve judul and thumbnail.
+const contentJoinQuery = `
+	SELECT
+		gc.group_content_id,
+		gc.group_id,
+		gc.content_type,
+		gc.content_id,
+		CASE
+			WHEN gc.content_type = 'kuis'   THEN k.judul
+			WHEN gc.content_type = 'cerita' THEN c.judul
+			WHEN gc.content_type = 'puzzle' THEN p.judul
+		END AS judul,
+		COALESCE(
+			CASE
+				WHEN gc.content_type = 'kuis'   THEN ka.url
+				WHEN gc.content_type = 'cerita' THEN ca.url
+				WHEN gc.content_type = 'puzzle' THEN pa.url
+			END, ''
+		) AS thumbnail
+	FROM group_contents gc
+	LEFT JOIN kuis k              ON gc.content_type = 'kuis'   AND gc.content_id = k.kuis_id
+	LEFT JOIN assets ka           ON k.thumbnail_asset_id = ka.asset_id
+	LEFT JOIN cerita_interaktif c ON gc.content_type = 'cerita' AND gc.content_id = c.cerita_id
+	LEFT JOIN assets ca           ON c.thumbnail_asset_id = ca.asset_id
+	LEFT JOIN puzzles p           ON gc.content_type = 'puzzle' AND gc.content_id = p.puzzle_id
+	LEFT JOIN assets pa           ON p.thumbnail_asset_id = pa.asset_id
+`
+
+func (r *groupRepositoryImpl) AddContent(ctx context.Context, groupId string, contentType string, contentId int) (*entity.GroupContent, error) {
+	insertQuery := `INSERT INTO group_contents (group_id, content_type, content_id) VALUES ($1, $2, $3) RETURNING group_content_id`
+
+	r.Log.Infof("Executing AddContent query")
+	var groupContentId int
+	err := r.DB.QueryRow(ctx, insertQuery, groupId, contentType, contentId).Scan(&groupContentId)
+	if err != nil {
+		r.Log.Errorf("Error AddContent insert: %v", err)
+		return nil, err
+	}
+
+	return r.getContentByGroupContentId(ctx, groupContentId)
+}
+
+func (r *groupRepositoryImpl) getContentByGroupContentId(ctx context.Context, groupContentId int) (*entity.GroupContent, error) {
+	query := contentJoinQuery + `WHERE gc.group_content_id = $1`
+
+	rows, err := r.DB.Query(ctx, query, groupContentId)
+	if err != nil {
+		r.Log.Errorf("Error query getContentByGroupContentId: %v", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	content, err := pgx.CollectExactlyOneRow(rows, pgx.RowToAddrOfStructByNameLax[entity.GroupContent])
+	if err != nil {
+		r.Log.Errorf("Error collecting row getContentByGroupContentId: %v", err)
+		return nil, err
+	}
+
+	return content, nil
+}
+
+func (r *groupRepositoryImpl) GetContentsByGroupId(ctx context.Context, groupId string, contentType string) ([]*entity.GroupContent, error) {
+	var (
+		rows pgx.Rows
+		err  error
+	)
+
+	if contentType != "" {
+		query := contentJoinQuery + `WHERE gc.group_id = $1 AND gc.content_type = $2`
+		rows, err = r.DB.Query(ctx, query, groupId, contentType)
+	} else {
+		query := contentJoinQuery + `WHERE gc.group_id = $1`
+		rows, err = r.DB.Query(ctx, query, groupId)
+	}
+
+	if err != nil {
+		r.Log.Errorf("Error query GetContentsByGroupId: %v", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	contents, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByNameLax[entity.GroupContent])
+	if err != nil {
+		r.Log.Errorf("Error collecting rows GetContentsByGroupId: %v", err)
+		return nil, err
+	}
+
+	return contents, nil
+}
+
+func (r *groupRepositoryImpl) RemoveContent(ctx context.Context, groupContentId int, groupId string) error {
+	query := `DELETE FROM group_contents WHERE group_content_id = $1 AND group_id = $2`
+	cmdTag, err := r.DB.Exec(ctx, query, groupContentId, groupId)
+	if err != nil {
+		r.Log.Errorf("Error RemoveContent: %v", err)
+		return err
+	}
+	if cmdTag.RowsAffected() == 0 {
+		return ErrGroupContentNotFound
+	}
+	return nil
+}
+
+func (r *groupRepositoryImpl) ContentExists(ctx context.Context, contentType string, contentId int) (bool, error) {
+	var query string
+	switch contentType {
+	case "kuis":
+		query = `SELECT EXISTS(SELECT 1 FROM kuis WHERE kuis_id = $1 AND is_published = true)`
+	case "cerita":
+		query = `SELECT EXISTS(SELECT 1 FROM cerita_interaktif WHERE cerita_id = $1 AND is_published = true)`
+	case "puzzle":
+		query = `SELECT EXISTS(SELECT 1 FROM puzzles WHERE puzzle_id = $1 AND is_published = true)`
+	}
+
+	var exists bool
+	err := r.DB.QueryRow(ctx, query, contentId).Scan(&exists)
+	if err != nil {
+		r.Log.Errorf("Error ContentExists: %v", err)
+		return false, err
+	}
+	return exists, nil
+}
+
+func (r *groupRepositoryImpl) IsContentAlreadyAssigned(ctx context.Context, groupId string, contentType string, contentId int) (bool, error) {
+	query := `SELECT EXISTS(SELECT 1 FROM group_contents WHERE group_id = $1 AND content_type = $2 AND content_id = $3)`
+	var exists bool
+	err := r.DB.QueryRow(ctx, query, groupId, contentType, contentId).Scan(&exists)
+	if err != nil {
+		r.Log.Errorf("Error IsContentAlreadyAssigned: %v", err)
+		return false, err
+	}
+	return exists, nil
 }

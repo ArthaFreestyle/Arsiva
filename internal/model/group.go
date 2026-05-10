@@ -64,3 +64,18 @@ type GroupInviteResponse struct {
 	QRCodeData  string `json:"qr_code_data"`
 	ExpiresAt   string `json:"expires_at"`
 }
+
+// ==================== Group Contents ====================
+
+type GroupContentCreateRequest struct {
+	ContentType string `json:"content_type" validate:"required,oneof=kuis cerita puzzle"`
+	ContentId   int    `json:"content_id" validate:"required,min=1"`
+}
+
+type GroupContentResponse struct {
+	GroupContentId int    `json:"group_content_id"`
+	ContentType    string `json:"content_type"`
+	ContentId      int    `json:"content_id"`
+	Judul          string `json:"judul"`
+	Thumbnail      string `json:"thumbnail,omitempty"`
+}

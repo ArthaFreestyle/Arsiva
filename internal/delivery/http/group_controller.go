@@ -21,6 +21,9 @@ type GroupController interface {
 	JoinGroup(ctx fiber.Ctx) error
 	RemoveMember(ctx fiber.Ctx) error
 	GetGroupMembers(ctx fiber.Ctx) error
+	AddContent(ctx fiber.Ctx) error
+	GetGroupContents(ctx fiber.Ctx) error
+	RemoveContent(ctx fiber.Ctx) error
 }
 
 type groupControllerImpl struct {
@@ -199,4 +202,59 @@ func (c *groupControllerImpl) GetGroupMembers(ctx fiber.Ctx) error {
 	}
 
 	return ctx.Status(fiber.StatusOK).JSON(model.WebResponse[[]model.GroupMemberResponse]{Data: members})
+}
+
+func (c *groupControllerImpl) AddContent(ctx fiber.Ctx) error {
+	req := new(model.GroupContentCreateRequest)
+	if err := ctx.Bind().Body(req); err != nil {
+		c.Log.Warnf("Invalid request body AddContent: %+v", err)
+		return fiber.ErrBadRequest
+	}
+
+	groupId := ctx.Params("id")
+	userId := ctx.Locals("userId").(string)
+
+	content, err := c.GroupUseCase.AddContentToGroup(ctx.Context(), groupId, req, userId)
+	if err != nil {
+		c.Log.Warnf("Failed add content to group: %v", err)
+		return err
+	}
+
+	return ctx.Status(fiber.StatusCreated).JSON(model.WebResponse[*model.GroupContentResponse]{Data: content})
+}
+
+func (c *groupControllerImpl) GetGroupContents(ctx fiber.Ctx) error {
+	groupId := ctx.Params("id")
+	contentType := ctx.Query("content_type", "")
+
+	// Pass role so the usecase can distinguish guru (ownership check) vs member (membership check)
+	claims := ctx.Locals("user").(*model.Claims)
+	userId := claims.UserId
+	role := claims.Role
+
+	contents, err := c.GroupUseCase.GetGroupContents(ctx.Context(), groupId, contentType, userId, role)
+	if err != nil {
+		c.Log.Warnf("Failed get group contents: %v", err)
+		return err
+	}
+
+	return ctx.Status(fiber.StatusOK).JSON(model.WebResponse[[]model.GroupContentResponse]{Data: contents})
+}
+
+func (c *groupControllerImpl) RemoveContent(ctx fiber.Ctx) error {
+	groupId := ctx.Params("id")
+	groupContentIdStr := ctx.Params("content_id")
+	groupContentId, err := strconv.Atoi(groupContentIdStr)
+	if err != nil {
+		return fiber.ErrBadRequest
+	}
+	userId := ctx.Locals("userId").(string)
+
+	err = c.GroupUseCase.RemoveContentFromGroup(ctx.Context(), groupId, groupContentId, userId)
+	if err != nil {
+		c.Log.Warnf("Failed remove content from group: %v", err)
+		return err
+	}
+
+	return ctx.Status(fiber.StatusOK).JSON(model.WebResponse[string]{Data: "Content removed from group successfully"})
 }

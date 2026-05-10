@@ -163,6 +163,13 @@ func (c *RouteConfig) SetupAuthRoutes() {
 	auth.Get("/groups/:id/members", guruOnly, c.GroupController.GetGroupMembers)
 	auth.Delete("/groups/:id/members/:member_id", guruOnly, c.GroupController.RemoveMember)
 
+	// Group Content Management
+	auth.Post("/groups/:id/contents", guruOnly, c.GroupController.AddContent)
+	auth.Delete("/groups/:id/contents/:content_id", guruOnly, c.GroupController.RemoveContent)
+
+	// View group contents — usecase handles ownership (guru) vs membership (member) check
+	auth.Get("/groups/:id/contents", allRoles, c.GroupController.GetGroupContents)
+
 	// ==========================================
 	// MEMBER ONLY (join group)
 	// ==========================================

@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -31,6 +32,11 @@ type GroupUseCase interface {
 	JoinGroup(ctx context.Context, req *model.GroupJoinRequest, userId string) error
 	RemoveMember(ctx context.Context, groupId string, memberId int, userId string) error
 	GetGroupMembers(ctx context.Context, groupId string, userId string) ([]model.GroupMemberResponse, error)
+
+	// Group Contents
+	AddContentToGroup(ctx context.Context, groupId string, req *model.GroupContentCreateRequest, userId string) (*model.GroupContentResponse, error)
+	GetGroupContents(ctx context.Context, groupId string, contentType string, userId string, role string) ([]model.GroupContentResponse, error)
+	RemoveContentFromGroup(ctx context.Context, groupId string, groupContentId int, userId string) error
 }
 
 type groupUseCaseImpl struct {
@@ -341,4 +347,115 @@ func (u *groupUseCaseImpl) GetGroupMembers(ctx context.Context, groupId string, 
 	}
 
 	return converter.ToGroupMemberResponses(members), nil
+}
+
+func (u *groupUseCaseImpl) AddContentToGroup(ctx context.Context, groupId string, req *model.GroupContentCreateRequest, userId string) (*model.GroupContentResponse, error) {
+	if err := u.Validator.Struct(req); err != nil {
+		u.Log.Warnf("Invalid request body AddContentToGroup: %+v", err)
+		return nil, fiber.ErrBadRequest
+	}
+
+	guruId, err := u.GroupRepository.GetGuruIdByUserId(ctx, userId)
+	if err != nil {
+		u.Log.Warnf("User is not a guru or guru not found: %v", err)
+		return nil, fiber.ErrForbidden
+	}
+
+	group, err := u.GroupRepository.GetGroupById(ctx, groupId)
+	if err != nil {
+		return nil, fiber.ErrNotFound
+	}
+	if group.CreatedBy != guruId {
+		return nil, fiber.ErrForbidden
+	}
+
+	contentExists, err := u.GroupRepository.ContentExists(ctx, req.ContentType, req.ContentId)
+	if err != nil {
+		return nil, fiber.ErrInternalServerError
+	}
+	if !contentExists {
+		return nil, fiber.NewError(fiber.StatusUnprocessableEntity, "Content not found or not published")
+	}
+
+	alreadyAssigned, err := u.GroupRepository.IsContentAlreadyAssigned(ctx, groupId, req.ContentType, req.ContentId)
+	if err != nil {
+		return nil, fiber.ErrInternalServerError
+	}
+	if alreadyAssigned {
+		return nil, fiber.NewError(fiber.StatusConflict, "Content already assigned to this group")
+	}
+
+	content, err := u.GroupRepository.AddContent(ctx, groupId, req.ContentType, req.ContentId)
+	if err != nil {
+		return nil, fiber.ErrInternalServerError
+	}
+
+	res := converter.ToGroupContentResponse(content)
+	return &res, nil
+}
+
+func (u *groupUseCaseImpl) GetGroupContents(ctx context.Context, groupId string, contentType string, userId string, role string) ([]model.GroupContentResponse, error) {
+	group, err := u.GroupRepository.GetGroupById(ctx, groupId)
+	if err != nil {
+		return nil, fiber.ErrNotFound
+	}
+
+	switch role {
+	case "guru":
+		guruId, err := u.GroupRepository.GetGuruIdByUserId(ctx, userId)
+		if err != nil {
+			return nil, fiber.ErrForbidden
+		}
+		if group.CreatedBy != guruId {
+			return nil, fiber.ErrForbidden
+		}
+	case "member":
+		memberId, err := u.GroupRepository.GetMemberIdByUserId(ctx, userId)
+		if err != nil {
+			return nil, fiber.ErrForbidden
+		}
+		isMember, err := u.GroupRepository.IsMemberInGroup(ctx, groupId, memberId)
+		if err != nil {
+			return nil, fiber.ErrInternalServerError
+		}
+		if !isMember {
+			return nil, fiber.ErrForbidden
+		}
+	case "super_admin":
+		// super_admin can access any group's contents
+	default:
+		return nil, fiber.ErrForbidden
+	}
+
+	contents, err := u.GroupRepository.GetContentsByGroupId(ctx, groupId, contentType)
+	if err != nil {
+		return nil, fiber.ErrInternalServerError
+	}
+
+	return converter.ToGroupContentResponses(contents), nil
+}
+
+func (u *groupUseCaseImpl) RemoveContentFromGroup(ctx context.Context, groupId string, groupContentId int, userId string) error {
+	guruId, err := u.GroupRepository.GetGuruIdByUserId(ctx, userId)
+	if err != nil {
+		return fiber.ErrForbidden
+	}
+
+	group, err := u.GroupRepository.GetGroupById(ctx, groupId)
+	if err != nil {
+		return fiber.ErrNotFound
+	}
+	if group.CreatedBy != guruId {
+		return fiber.ErrForbidden
+	}
+
+	err = u.GroupRepository.RemoveContent(ctx, groupContentId, groupId)
+	if err != nil {
+		if errors.Is(err, repository.ErrGroupContentNotFound) {
+			return fiber.ErrNotFound
+		}
+		return fiber.ErrInternalServerError
+	}
+
+	return nil
 }

@@ -91,6 +91,30 @@ func ToGroupMemberResponses(members []*entity.GroupMember) []model.GroupMemberRe
 	return responses
 }
 
+func ToGroupContentResponse(gc *entity.GroupContent) model.GroupContentResponse {
+	if gc == nil {
+		return model.GroupContentResponse{}
+	}
+	return model.GroupContentResponse{
+		GroupContentId: gc.GroupContentId,
+		ContentType:    gc.ContentType,
+		ContentId:      gc.ContentId,
+		Judul:          gc.Judul,
+		Thumbnail:      gc.Thumbnail,
+	}
+}
+
+func ToGroupContentResponses(gcs []*entity.GroupContent) []model.GroupContentResponse {
+	var responses []model.GroupContentResponse
+	for _, gc := range gcs {
+		responses = append(responses, ToGroupContentResponse(gc))
+	}
+	if responses == nil {
+		responses = []model.GroupContentResponse{}
+	}
+	return responses
+}
+
 func ToGroupDetailResponse(group *entity.Group, members []*entity.GroupMember) *model.GroupDetailResponse {
 	if group == nil {
 		return nil

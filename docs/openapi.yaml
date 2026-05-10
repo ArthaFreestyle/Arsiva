@@ -83,8 +83,8 @@ tags:
   - name: Upload
     description: "Upload file gambar (🔒 POST = guru + super_admin, GET = public)"
   - name: Groups
-    description: "CRUD manajemen grup dan anggota (🔒 POST/PUT/DELETE/GET = guru,
-      POST join = member)"
+    description: "CRUD manajemen grup, anggota, dan konten grup (🔒 POST/PUT/DELETE/GET\
+      \ = guru, POST join = member, GET contents = guru + member + super_admin)"
   - name: Sekolah
     description: "CRUD manajemen data sekolah (🔒 super_admin only)"
   - name: Guru
@@ -1911,6 +1911,181 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MessageWrapper"
+  /api/v1/groups/{id}/contents:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: ID grup
+    post:
+      tags:
+        - Groups
+      summary: Assign content to group
+      description: "Menambahkan konten (`kuis`, `cerita`, atau `puzzle`) yang sudah\
+        \ dipublish ke dalam grup. \\ \n\n        Hanya guru pemilik grup yang bisa\
+        \ melakukan ini. Duplikasi konten dicegah. \\ \n\n        🔒 **Role**: `guru`\\n"
+      operationId: addContentToGroup
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GroupContentCreateRequest"
+            example:
+              content_type: kuis
+              content_id: 5
+      responses:
+        "201":
+          description: Konten berhasil ditambahkan ke grup
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupContentWrapper"
+              example:
+                data:
+                  group_content_id: 1
+                  content_type: kuis
+                  content_id: 5
+                  judul: Kuis Sejarah Majapahit
+                  thumbnail: /uploads/2026/03/thumbnail.jpg
+        "400":
+          description: Request body tidak valid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "404":
+          description: Grup tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Konten sudah ada di grup ini
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                errors: Content already assigned to this group
+        "422":
+          description: Konten tidak ditemukan atau belum dipublish
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                errors: Content not found or not published
+    get:
+      tags:
+        - Groups
+      summary: List group contents
+      description: "Mengambil semua konten yang telah di-assign ke grup. \\ \n\n \
+        \       Guru (pemilik grup) dan Member (yang bergabung di grup) bisa mengakses\
+        \ endpoint ini. \\ \n\n        Optional filter berdasarkan `content_type`.\
+        \ \\ \n\n        🔒 **Role**: `guru`, `member`, `super_admin`\\n"
+      operationId: getGroupContents
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: content_type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - kuis
+              - cerita
+              - puzzle
+          description: Filter berdasarkan tipe konten (opsional)
+      responses:
+        "200":
+          description: Daftar konten grup
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupContentListWrapper"
+              example:
+                data:
+                  - group_content_id: 1
+                    content_type: kuis
+                    content_id: 5
+                    judul: Kuis Sejarah Majapahit
+                    thumbnail: /uploads/2026/03/thumbnail.jpg
+                  - group_content_id: 2
+                    content_type: puzzle
+                    content_id: 3
+                    judul: Puzzle Candi Borobudur
+                    thumbnail: ""
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "404":
+          description: Grup tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/groups/{id}/contents/{content_id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: ID grup
+      - name: content_id
+        in: path
+        required: true
+        schema:
+          type: integer
+        description: ID grup-konten (`group_content_id`)
+    delete:
+      tags:
+        - Groups
+      summary: Remove content from group
+      description: "Menghapus konten dari grup berdasarkan `group_content_id`. \\\
+        \ \n\n        Hanya guru pemilik grup yang bisa menghapus. \\ \n\n        🔒\
+        \ **Role**: `guru`\\n"
+      operationId: removeContentFromGroup
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Konten berhasil dihapus dari grup
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: string
+                    example: Content removed from group successfully
+        "400":
+          description: Parameter tidak valid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "404":
+          description: Konten atau grup tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/sekolah:
     get:
       tags:
@@ -3697,6 +3872,65 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/GroupMemberResponse"
+    GroupContentCreateRequest:
+      type: object
+      required:
+        - content_type
+        - content_id
+      properties:
+        content_type:
+          type: string
+          enum:
+            - kuis
+            - cerita
+            - puzzle
+          description: "Tipe konten yang akan di-assign — harus salah satu dari: `kuis`, `cerita`, `puzzle`"
+          example: kuis
+        content_id:
+          type: integer
+          description: ID konten sesuai tipe (kuis_id / cerita_id / puzzle_id)
+          example: 5
+    GroupContentResponse:
+      type: object
+      properties:
+        group_content_id:
+          type: integer
+          description: ID unik assignment konten ke grup
+          example: 1
+        content_type:
+          type: string
+          enum:
+            - kuis
+            - cerita
+            - puzzle
+          example: kuis
+        content_id:
+          type: integer
+          example: 5
+        judul:
+          type: string
+          description: Judul konten (dari tabel kuis / cerita_interaktif / puzzles)
+          example: Kuis Sejarah Majapahit
+        thumbnail:
+          type: string
+          description: URL thumbnail konten (kosong jika tidak ada)
+          example: /uploads/2026/03/thumbnail.jpg
+    GroupContentWrapper:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/GroupContentResponse"
+        errors:
+          type: string
+    GroupContentListWrapper:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/GroupContentResponse"
+        errors:
+          type: string
     MessageWrapper:
       type: object
       properties:
