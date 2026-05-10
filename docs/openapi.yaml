@@ -2725,14 +2725,6 @@ paths:
         "403":
           $ref: "#/components/responses/ForbiddenResponse"
         "409":
-          description: User sudah terdaftar sebagai member
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-              example:
-                errors: user_id sudah terdaftar sebagai member
-        "409":
           description: user_id sudah terdaftar sebagai member
           content:
             application/json:
