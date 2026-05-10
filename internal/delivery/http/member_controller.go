@@ -39,7 +39,9 @@ func (c *memberControllerImpl) Create(ctx fiber.Ctx) error {
 		return fiber.ErrBadRequest
 	}
 
-	member, err := c.MemberUseCase.Create(ctx.Context(), req)
+	claims := ctx.Locals("user").(*model.Claims)
+
+	member, err := c.MemberUseCase.Create(ctx.Context(), req, claims)
 	if err != nil {
 		c.Log.Warnf("Failed create member: %v", err)
 		return err

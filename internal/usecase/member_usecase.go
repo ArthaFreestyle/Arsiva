@@ -15,7 +15,7 @@ import (
 )
 
 type MemberUseCase interface {
-	Create(ctx context.Context, req *model.MemberCreateRequest) (*model.MemberResponse, error)
+	Create(ctx context.Context, req *model.MemberCreateRequest, claims *model.Claims) (*model.MemberResponse, error)
 	FindById(ctx context.Context, memberId string, claims *model.Claims) (*model.MemberDetailResponse, error)
 	FindAll(ctx context.Context, search string, page int, size int) ([]*model.MemberResponse, int, error)
 	Update(ctx context.Context, memberId string, req *model.MemberUpdateProfileRequest, claims *model.Claims) (*model.MemberResponse, error)
@@ -38,7 +38,12 @@ func NewMemberUseCase(memberRepo repository.MemberRepository, log *logrus.Logger
 	}
 }
 
-func (u *memberUseCaseImpl) Create(ctx context.Context, req *model.MemberCreateRequest) (*model.MemberResponse, error) {
+func (u *memberUseCaseImpl) Create(ctx context.Context, req *model.MemberCreateRequest, claims *model.Claims) (*model.MemberResponse, error) {
+	// Self-registration: member overrides user_id from their own JWT, not from request body
+	if claims.Role == "member" {
+		req.UserId = claims.UserId
+	}
+
 	if err := u.Validator.Struct(req); err != nil {
 		u.Log.Warnf("Invalid request body: %+v", err)
 		return nil, fiber.ErrBadRequest

@@ -90,7 +90,9 @@ tags:
   - name: Guru
     description: "CRUD manajemen data guru (🔒 POST = super_admin + guru-self, DELETE = super_admin, GET/PUT = super_admin + guru-self, GET /me = guru)"
   - name: Member
-    description: "CRUD manajemen data member (🔒 POST = super_admin, DELETE = super_admin, GET/PUT = super_admin + member-self, GET /me = member, PUT /me = member)"
+    description: "CRUD manajemen data member (🔒 POST = super_admin + member-self\
+      \ (self-register), DELETE = super_admin, GET/PUT = super_admin + member-self,\
+      \ GET /me = member, PUT /me = member)"
 paths:
   /api/v1/login:
     post:
@@ -2670,8 +2672,11 @@ paths:
     post:
       tags:
         - Member
-      summary: Create member
-      description: "Mendaftarkan user sebagai member secara manual (admin path).\n\n🔒 **Role**: `super_admin`\n"
+      summary: Create member / Self-register as member
+      description: "Mendaftarkan user sebagai member. \\ \n\n        **Admin path** (`super_admin`): isi\
+        \ `user_id` di body untuk mendaftarkan user lain. \\ \n\n        **Self-register\
+        \ path** (`member`): `user_id` diambil otomatis dari JWT — tidak perlu diisi\
+        \ di body. \\ \n\n        🔒 **Role**: `super_admin`, `member`\\n"
       operationId: createMember
       security:
         - BearerAuth: []
@@ -2681,10 +2686,18 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/MemberCreateRequest"
-            example:
-              user_id: "10"
-              sekolah_id: "1"
-              nis: "2024001"
+            examples:
+              admin:
+                summary: Super admin mendaftarkan user lain
+                value:
+                  user_id: "10"
+                  sekolah_id: "1"
+                  nis: "2024001"
+              self:
+                summary: Member mendaftarkan diri sendiri (user_id dari JWT)
+                value:
+                  sekolah_id: "1"
+                  nis: "2024001"
       responses:
         "201":
           description: Member berhasil didaftarkan
@@ -2711,6 +2724,14 @@ paths:
           $ref: "#/components/responses/UnauthorizedResponse"
         "403":
           $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          description: User sudah terdaftar sebagai member
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                errors: user_id sudah terdaftar sebagai member
         "409":
           description: user_id sudah terdaftar sebagai member
           content:
