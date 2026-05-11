@@ -31,8 +31,12 @@ jobs:
 
       - name: Run Unit Tests
         run: |
-          # Pakai image golang 1.25 dan install gcc buat handle webp (CGO)
-          docker run --rm -v $(pwd):/app -w /app \
+          # gomodcache adalah named volume yang persisten di runner,
+          # sehingga dependency tidak perlu di-download ulang setiap run.
+          docker run --rm \
+            -v $(pwd):/app \
+            -v gomodcache:/go/pkg/mod \
+            -w /app \
             -e CGO_ENABLED=1 \
             golang:1.25-alpine \
             sh -c "apk add --no-cache build-base gcc musl-dev && go test ./..."
