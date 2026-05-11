@@ -21,8 +21,9 @@ type RouteConfig struct {
 	GroupController           http.GroupController
 	SekolahController         http.SekolahController
 	GuruController            http.GuruController
-	MemberController          http.MemberController
-	AuthMiddleware            fiber.Handler
+	MemberController               http.MemberController
+	MemberSocialLinkController     http.MemberSocialLinkController
+	AuthMiddleware                 fiber.Handler
 }
 
 func (c *RouteConfig) SetupRoutes() {
@@ -205,7 +206,17 @@ func (c *RouteConfig) SetupAuthRoutes() {
 	auth.Get("/member", superadminOnly, c.MemberController.FindAll)
 	auth.Get("/member/me", memberOnly, c.MemberController.GetMe)
 	auth.Put("/member/me", memberOnly, c.MemberController.UpdateMe)
+	auth.Get("/member/profile", memberOnly, c.MemberController.GetProfile)
 	auth.Get("/member/:id", superadminOrMember, c.MemberController.FindById)
 	auth.Put("/member/:id", superadminOrMember, c.MemberController.Update)
 	auth.Delete("/member/:id", superadminOnly, c.MemberController.Delete)
+
+	// ==========================================
+	// MEMBER SOCIAL LINKS (member only)
+	// ==========================================
+	auth.Post("/member/social-links", memberOnly, c.MemberSocialLinkController.Create)
+	auth.Get("/member/social-links", memberOnly, c.MemberSocialLinkController.FindAllMine)
+	auth.Get("/member/social-links/:id", memberOnly, c.MemberSocialLinkController.FindById)
+	auth.Put("/member/social-links/:id", memberOnly, c.MemberSocialLinkController.Update)
+	auth.Delete("/member/social-links/:id", memberOnly, c.MemberSocialLinkController.Delete)
 }

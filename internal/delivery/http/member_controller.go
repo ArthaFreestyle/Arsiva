@@ -18,6 +18,7 @@ type MemberController interface {
 	Delete(ctx fiber.Ctx) error
 	GetMe(ctx fiber.Ctx) error
 	UpdateMe(ctx fiber.Ctx) error
+	GetProfile(ctx fiber.Ctx) error
 }
 
 type memberControllerImpl struct {
@@ -143,4 +144,16 @@ func (c *memberControllerImpl) UpdateMe(ctx fiber.Ctx) error {
 	}
 
 	return ctx.Status(fiber.StatusOK).JSON(model.WebResponse[*model.MemberResponse]{Data: member})
+}
+
+func (c *memberControllerImpl) GetProfile(ctx fiber.Ctx) error {
+	claims := ctx.Locals("user").(*model.Claims)
+
+	profile, err := c.MemberUseCase.GetMyProfile(ctx.Context(), claims)
+	if err != nil {
+		c.Log.Warnf("Failed get member full profile: %v", err)
+		return err
+	}
+
+	return ctx.Status(fiber.StatusOK).JSON(model.WebResponse[*model.MemberProfileResponse]{Data: profile})
 }

@@ -22,19 +22,30 @@ type MemberUseCase interface {
 	Delete(ctx context.Context, memberId string) error
 	GetMe(ctx context.Context, claims *model.Claims) (*model.MemberDetailResponse, error)
 	UpdateMe(ctx context.Context, req *model.MemberUpdateProfileRequest, claims *model.Claims) (*model.MemberResponse, error)
+	GetMyProfile(ctx context.Context, claims *model.Claims) (*model.MemberProfileResponse, error)
 }
 
 type memberUseCaseImpl struct {
-	MemberRepository repository.MemberRepository
-	Log              *logrus.Logger
-	Validator        *validator.Validate
+	MemberRepository        repository.MemberRepository
+	AchievementRepository   repository.MemberAchievementRepository
+	SocialLinkRepository    repository.MemberSocialLinkRepository
+	Log                     *logrus.Logger
+	Validator               *validator.Validate
 }
 
-func NewMemberUseCase(memberRepo repository.MemberRepository, log *logrus.Logger, validate *validator.Validate) MemberUseCase {
+func NewMemberUseCase(
+	memberRepo repository.MemberRepository,
+	achievementRepo repository.MemberAchievementRepository,
+	socialLinkRepo repository.MemberSocialLinkRepository,
+	log *logrus.Logger,
+	validate *validator.Validate,
+) MemberUseCase {
 	return &memberUseCaseImpl{
-		MemberRepository: memberRepo,
-		Log:              log,
-		Validator:        validate,
+		MemberRepository:      memberRepo,
+		AchievementRepository: achievementRepo,
+		SocialLinkRepository:  socialLinkRepo,
+		Log:                   log,
+		Validator:             validate,
 	}
 }
 
@@ -176,6 +187,38 @@ func (u *memberUseCaseImpl) UpdateMe(ctx context.Context, req *model.MemberUpdat
 		return nil, fiber.ErrForbidden
 	}
 	return u.Update(ctx, memberId, req, claims)
+}
+
+func (u *memberUseCaseImpl) GetMyProfile(ctx context.Context, claims *model.Claims) (*model.MemberProfileResponse, error) {
+	memberId := extractMemberIdFromClaims(claims)
+	if memberId == "" {
+		return nil, fiber.ErrForbidden
+	}
+
+	member, err := u.MemberRepository.FindById(ctx, memberId)
+	if err != nil {
+		u.Log.Warnf("Member not found: %v", err)
+		return nil, fiber.ErrNotFound
+	}
+
+	var sekolah *entity.Sekolah
+	if member.SekolahId != "" {
+		sekolah, _ = u.MemberRepository.FindSekolahByMemberId(ctx, memberId)
+	}
+
+	achievements, err := u.AchievementRepository.FindAllByMemberId(ctx, memberId)
+	if err != nil {
+		u.Log.Warnf("Failed get achievements for profile, continuing with empty: %v", err)
+		achievements = []*entity.MemberAchievement{}
+	}
+
+	socialLinks, err := u.SocialLinkRepository.FindAllByMemberId(ctx, memberId)
+	if err != nil {
+		u.Log.Warnf("Failed get social links for profile, continuing with empty: %v", err)
+		socialLinks = []*entity.MemberSocialLink{}
+	}
+
+	return converter.ToMemberProfileResponse(member, sekolah, achievements, socialLinks), nil
 }
 
 func extractMemberIdFromClaims(claims *model.Claims) string {

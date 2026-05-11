@@ -40,6 +40,8 @@ func Bootstrap(cfg BootstrapConfig) {
 	sekolahRepo := repository.NewSekolahRepository(cfg.DB, cfg.Log)
 	guruRepo := repository.NewGuruRepository(cfg.DB, cfg.Log)
 	memberRepo := repository.NewMemberRepository(cfg.DB, cfg.Log)
+	memberAchievementRepo := repository.NewMemberAchievementRepository(cfg.DB, cfg.Log)
+	memberSocialLinkRepo := repository.NewMemberSocialLinkRepository(cfg.DB, cfg.Log)
 
 	AuthUseCase := usecase.NewAuthUseCase(userRepo, cfg.Secret, cfg.Validate, cfg.Log, cfg.DB, guruRepo)
 	UserUseCase := usecase.NewUserUseCase(userRepo, cfg.Log, cfg.DB, cfg.Validate)
@@ -54,7 +56,8 @@ func Bootstrap(cfg BootstrapConfig) {
 	GroupUseCase := usecase.NewGroupUseCase(groupRepo, assetRepo, cfg.Log, cfg.Validate, cfg.Secret)
 	SekolahUseCase := usecase.NewSekolahUseCase(sekolahRepo, cfg.Log, cfg.Validate)
 	GuruUseCase := usecase.NewGuruUseCase(guruRepo, cfg.Log, cfg.Validate)
-	MemberUseCase := usecase.NewMemberUseCase(memberRepo, cfg.Log, cfg.Validate)
+	MemberUseCase := usecase.NewMemberUseCase(memberRepo, memberAchievementRepo, memberSocialLinkRepo, cfg.Log, cfg.Validate)
+	MemberSocialLinkUseCase := usecase.NewMemberSocialLinkUseCase(memberSocialLinkRepo, cfg.Log, cfg.Validate)
 
 	if !fiber.IsChild() {
 		cfg.Log.Info("Starting asset cleanup worker on master process...")
@@ -75,6 +78,7 @@ func Bootstrap(cfg BootstrapConfig) {
 	SekolahController := http.NewSekolahController(SekolahUseCase, cfg.Log)
 	GuruController := http.NewGuruController(GuruUseCase, cfg.Log)
 	MemberController := http.NewMemberController(MemberUseCase, cfg.Log)
+	MemberSocialLinkController := http.NewMemberSocialLinkController(MemberSocialLinkUseCase, cfg.Log)
 
 	// Create auth middleware
 	authMiddleware := middleware.NewAuthMiddleware(cfg.Secret, cfg.Log)
@@ -94,7 +98,8 @@ func Bootstrap(cfg BootstrapConfig) {
 		GroupController:           GroupController,
 		SekolahController:         SekolahController,
 		GuruController:            GuruController,
-		MemberController:          MemberController,
+		MemberController:               MemberController,
+		MemberSocialLinkController:     MemberSocialLinkController,
 		AuthMiddleware:            authMiddleware,
 	}
 

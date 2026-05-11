@@ -1,0 +1,3 @@
+DROP INDEX IF EXISTS uq_member_social_links_member_platform;
+DROP INDEX IF EXISTS idx_member_social_links_member_id;
+ALTER TABLE member_social_links DROP CONSTRAINT IF EXISTS member_social_links_member_id_fkey;

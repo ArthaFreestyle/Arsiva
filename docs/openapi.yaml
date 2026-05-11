@@ -93,6 +93,8 @@ tags:
     description: "CRUD manajemen data member (🔒 POST = super_admin + member-self\
       \ (self-register), DELETE = super_admin, GET/PUT = super_admin + member-self,\
       \ GET /me = member, PUT /me = member)"
+  - name: Member Social Links
+    description: "CRUD social media links milik member yang sedang login (🔒 member only)"
 paths:
   /api/v1/login:
     post:
@@ -2811,7 +2813,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/MemberWrapper"
         "400":
-          description: "Validasi gagal — termasuk nilai `jenis_kelamin` di luar `L`, `P`, `Lainnya`"
+          description: "Validasi gagal — termasuk nilai `jenis_kelamin` di luar `L`, `P`"
           content:
             application/json:
               schema:
@@ -2904,7 +2906,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/MemberWrapper"
         "400":
-          description: "Validasi gagal — termasuk nilai `jenis_kelamin` di luar `L`, `P`, `Lainnya`"
+          description: "Validasi gagal — termasuk nilai `jenis_kelamin` di luar `L`, `P`"
           content:
             application/json:
               schema:
@@ -2956,6 +2958,199 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "500":
           description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/member/profile:
+    get:
+      tags:
+        - Member
+      summary: Get full member profile (dashboard)
+      description: "Mengembalikan profil lengkap member yang sedang login: data member, gamifikasi (total_xp, level), sekolah, achievements, dan social links dalam satu request.\n\n🔒 **Role**: `member`\n"
+      operationId: getMemberProfile
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Profil member berhasil diambil
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemberProfileResponseWrapper"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "404":
+          description: Data member tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/member/social-links:
+    post:
+      tags:
+        - Member Social Links
+      summary: Tambah social link
+      description: "Menambahkan social media link baru untuk member yang sedang login. Setiap platform hanya boleh didaftarkan satu kali.\n\n🔒 **Role**: `member`\n"
+      operationId: createMemberSocialLink
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MemberSocialLinkRequest"
+            example:
+              platform: Instagram
+              url: https://instagram.com/arsiva.id
+      responses:
+        "201":
+          description: Social link berhasil ditambahkan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemberSocialLinkResponseWrapper"
+        "400":
+          description: Platform tidak valid atau URL tidak valid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          description: Platform sudah terdaftar untuk member ini
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                errors: platform sudah terdaftar
+    get:
+      tags:
+        - Member Social Links
+      summary: List semua social links milik saya
+      description: "Mengembalikan semua social links milik member yang sedang login.\n\n🔒 **Role**: `member`\n"
+      operationId: listMemberSocialLinks
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Daftar social links
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemberSocialLinkListResponseWrapper"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+  /api/v1/member/social-links/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: social_id dari social link
+    get:
+      tags:
+        - Member Social Links
+      summary: Get social link by ID
+      description: "Mengembalikan detail satu social link. Hanya bisa diakses oleh pemiliknya.\n\n🔒 **Role**: `member`\n"
+      operationId: getMemberSocialLinkById
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Detail social link
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemberSocialLinkResponseWrapper"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "404":
+          description: Social link tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      tags:
+        - Member Social Links
+      summary: Update social link
+      description: "Mengganti platform dan URL dari social link yang dimiliki member yang sedang login.\n\n🔒 **Role**: `member`\n"
+      operationId: updateMemberSocialLink
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MemberSocialLinkRequest"
+      responses:
+        "200":
+          description: Social link berhasil diupdate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemberSocialLinkResponseWrapper"
+        "400":
+          description: Platform tidak valid atau URL tidak valid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "404":
+          description: Social link tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Platform sudah terdaftar untuk member ini
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      tags:
+        - Member Social Links
+      summary: Hapus social link
+      description: "Menghapus social link milik member yang sedang login.\n\n🔒 **Role**: `member`\n"
+      operationId: deleteMemberSocialLink
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Social link berhasil dihapus
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: string
+                    example: Social link deleted successfully
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "404":
+          description: Social link tidak ditemukan
           content:
             application/json:
               schema:
@@ -4241,11 +4436,10 @@ components:
           example: "2010-05-15"
         jenis_kelamin:
           type: string
-          description: "Jenis kelamin — harus salah satu dari enum: `L`, `P`, `Lainnya`"
+          description: "Jenis kelamin — harus salah satu dari enum: `L`, `P`"
           enum:
             - L
             - P
-            - Lainnya
           example: L
         minat:
           type: string
@@ -4371,6 +4565,142 @@ components:
           $ref: "#/components/schemas/PageMetaData"
         errors:
           type: string
+    MemberSocialLinkRequest:
+      type: object
+      required:
+        - platform
+        - url
+      properties:
+        platform:
+          type: string
+          enum:
+            - Instagram
+            - X
+            - TikTok
+            - Facebook
+            - YouTube
+          example: Instagram
+        url:
+          type: string
+          format: uri
+          maxLength: 255
+          example: https://instagram.com/arsiva.id
+    MemberSocialLinkResponse:
+      type: object
+      properties:
+        social_id:
+          type: string
+          example: "7"
+        platform:
+          type: string
+          example: Instagram
+        url:
+          type: string
+          example: https://instagram.com/arsiva.id
+        created_at:
+          type: string
+          example: "2026-05-11 10:22:01"
+    MemberSocialLinkResponseWrapper:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/MemberSocialLinkResponse"
+    MemberSocialLinkListResponseWrapper:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/MemberSocialLinkResponse"
+    MemberAchievementResponse:
+      type: object
+      properties:
+        achievement_id:
+          type: string
+          example: "2"
+        nama:
+          type: string
+          example: Penjelajah Awal
+        deskripsi:
+          type: string
+          example: Selesaikan 10 cerita
+        badge_icon:
+          type: string
+          example: https://arsiva.test/uploads/badges/2.webp
+        xp_required:
+          type: integer
+          example: 500
+        tier:
+          type: string
+          enum:
+            - bronze
+            - silver
+            - gold
+            - platinum
+          example: silver
+        unlocked_at:
+          type: string
+          example: "2026-04-30 18:11:02"
+    MemberProfileResponse:
+      type: object
+      properties:
+        member_id:
+          type: string
+          example: "42"
+        username:
+          type: string
+          example: arumi
+        email:
+          type: string
+          format: email
+          example: arumi@example.com
+        nis:
+          type: string
+          example: "2026001"
+        foto_profil:
+          type: string
+          example: https://arsiva.test/uploads/profile/42.webp
+        bio:
+          type: string
+          example: suka sejarah
+        tanggal_lahir:
+          type: string
+          format: date
+          example: "2009-08-12"
+        jenis_kelamin:
+          type: string
+          enum:
+            - L
+            - P
+            - Lainnya
+          example: P
+        minat:
+          type: string
+          example: "sejarah, geografi"
+        last_active:
+          type: string
+          example: "2026-05-11 10:00:00"
+        total_xp:
+          type: integer
+          example: 1850
+        level:
+          type: integer
+          example: 6
+        sekolah:
+          $ref: "#/components/schemas/SekolahResponse"
+        achievements:
+          type: array
+          items:
+            $ref: "#/components/schemas/MemberAchievementResponse"
+        social_links:
+          type: array
+          items:
+            $ref: "#/components/schemas/MemberSocialLinkResponse"
+    MemberProfileResponseWrapper:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/MemberProfileResponse"
     MemberDetails:
       type: object
       description: "Payload `details` di dalam JWT untuk role `member`"
