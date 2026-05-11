@@ -3157,6 +3157,150 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/member/achievements:
+    post:
+      tags:
+        - Member Achievements
+      summary: Unlock achievement
+      description: "Member merekam unlock achievement baru. `member_id` diambil dari JWT claims — jangan kirim di body. `unlocked_at` di-set server.\n\n🔒 **Role**: `member`\n"
+      operationId: createMemberAchievement
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MemberAchievementCreateRequest"
+      responses:
+        "201":
+          description: Achievement berhasil di-unlock
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemberAchievementResponseWrapper"
+        "400":
+          description: Validasi gagal (achievement_id kosong / bukan angka)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: "XP belum mencukupi atau claims tidak valid"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                errors: XP belum mencukupi untuk membuka achievement ini
+        "404":
+          description: Achievement tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Achievement sudah pernah di-unlock
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                errors: achievement sudah pernah di-unlock
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+    get:
+      tags:
+        - Member Achievements
+      summary: Daftar achievement yang di-unlock member
+      description: "Mengembalikan semua achievement yang sudah di-unlock oleh member yang sedang login.\n\n🔒 **Role**: `member`\n"
+      operationId: listMemberAchievements
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Daftar achievement member
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemberAchievementListResponseWrapper"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+  /api/v1/member/achievements/{achievement_id}:
+    get:
+      tags:
+        - Member Achievements
+      summary: Detail satu achievement yang di-unlock
+      description: "Mengambil satu achievement unlock milik member yang sedang login berdasarkan `achievement_id`.\n\n🔒 **Role**: `member`\n"
+      operationId: getMemberAchievement
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: achievement_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Detail achievement unlock
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemberAchievementResponseWrapper"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "404":
+          description: Achievement belum di-unlock oleh member ini
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/member/achievements/{member_id}/{achievement_id}:
+    delete:
+      tags:
+        - Member Achievements
+      summary: Hapus unlock achievement (super_admin)
+      description: "Menghapus unlock achievement tertentu milik member. Hanya untuk koreksi data.\n\n🔒 **Role**: `super_admin`\n"
+      operationId: deleteMemberAchievement
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: member_id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: achievement_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Achievement unlock berhasil dihapus
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: string
+                    example: Member achievement deleted successfully
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "404":
+          description: Unlock tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/achievements:
     get:
       tags:
@@ -4850,6 +4994,15 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/MemberSocialLinkResponse"
+    MemberAchievementCreateRequest:
+      type: object
+      required:
+        - achievement_id
+      properties:
+        achievement_id:
+          type: string
+          description: ID achievement yang ingin di-unlock. member_id dan unlocked_at tidak dikirim — keduanya di-set server.
+          example: "2"
     MemberAchievementResponse:
       type: object
       properties:
@@ -4878,7 +5031,19 @@ components:
           example: silver
         unlocked_at:
           type: string
-          example: "2026-04-30 18:11:02"
+          example: "2026-05-11 10:14:33"
+    MemberAchievementResponseWrapper:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/MemberAchievementResponse"
+    MemberAchievementListResponseWrapper:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/MemberAchievementResponse"
     MemberProfileResponse:
       type: object
       properties:

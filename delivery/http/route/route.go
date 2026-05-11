@@ -23,6 +23,7 @@ type RouteConfig struct {
 	GuruController            http.GuruController
 	MemberController               http.MemberController
 	MemberSocialLinkController     http.MemberSocialLinkController
+	MemberAchievementController    http.MemberAchievementController
 	AchievementController          http.AchievementController
 	AuthMiddleware                 fiber.Handler
 }
@@ -231,4 +232,14 @@ func (c *RouteConfig) SetupAuthRoutes() {
 	auth.Get("/member/social-links/:id", memberOnly, c.MemberSocialLinkController.FindById)
 	auth.Put("/member/social-links/:id", memberOnly, c.MemberSocialLinkController.Update)
 	auth.Delete("/member/social-links/:id", memberOnly, c.MemberSocialLinkController.Delete)
+
+	// ==========================================
+	// MEMBER ACHIEVEMENTS
+	//   - create / read: member only (self)
+	//   - delete: super_admin only (corrective)
+	// ==========================================
+	auth.Post("/member/achievements", memberOnly, c.MemberAchievementController.Create)
+	auth.Get("/member/achievements", memberOnly, c.MemberAchievementController.FindAllMine)
+	auth.Get("/member/achievements/:achievement_id", memberOnly, c.MemberAchievementController.FindOne)
+	auth.Delete("/member/achievements/:member_id/:achievement_id", superadminOnly, c.MemberAchievementController.Delete)
 }
