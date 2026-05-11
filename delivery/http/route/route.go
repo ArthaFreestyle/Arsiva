@@ -23,6 +23,7 @@ type RouteConfig struct {
 	GuruController            http.GuruController
 	MemberController               http.MemberController
 	MemberSocialLinkController     http.MemberSocialLinkController
+	AchievementController          http.AchievementController
 	AuthMiddleware                 fiber.Handler
 }
 
@@ -210,6 +211,17 @@ func (c *RouteConfig) SetupAuthRoutes() {
 	auth.Get("/member/:id", superadminOrMember, c.MemberController.FindById)
 	auth.Put("/member/:id", superadminOrMember, c.MemberController.Update)
 	auth.Delete("/member/:id", superadminOnly, c.MemberController.Delete)
+
+	// ==========================================
+	// ACHIEVEMENTS
+	//   - read: semua role ter-autentikasi
+	//   - write: super_admin only
+	// ==========================================
+	auth.Get("/achievements", allRoles, c.AchievementController.FindAll)
+	auth.Get("/achievements/:id", allRoles, c.AchievementController.FindById)
+	auth.Post("/achievements", superadminOnly, c.AchievementController.Create)
+	auth.Put("/achievements/:id", superadminOnly, c.AchievementController.Update)
+	auth.Delete("/achievements/:id", superadminOnly, c.AchievementController.Delete)
 
 	// ==========================================
 	// MEMBER SOCIAL LINKS (member only)

@@ -42,6 +42,7 @@ func Bootstrap(cfg BootstrapConfig) {
 	memberRepo := repository.NewMemberRepository(cfg.DB, cfg.Log)
 	memberAchievementRepo := repository.NewMemberAchievementRepository(cfg.DB, cfg.Log)
 	memberSocialLinkRepo := repository.NewMemberSocialLinkRepository(cfg.DB, cfg.Log)
+	achievementRepo := repository.NewAchievementRepository(cfg.DB, cfg.Log)
 
 	AuthUseCase := usecase.NewAuthUseCase(userRepo, cfg.Secret, cfg.Validate, cfg.Log, cfg.DB, guruRepo)
 	UserUseCase := usecase.NewUserUseCase(userRepo, cfg.Log, cfg.DB, cfg.Validate)
@@ -58,6 +59,7 @@ func Bootstrap(cfg BootstrapConfig) {
 	GuruUseCase := usecase.NewGuruUseCase(guruRepo, cfg.Log, cfg.Validate)
 	MemberUseCase := usecase.NewMemberUseCase(memberRepo, memberAchievementRepo, memberSocialLinkRepo, cfg.Log, cfg.Validate)
 	MemberSocialLinkUseCase := usecase.NewMemberSocialLinkUseCase(memberSocialLinkRepo, cfg.Log, cfg.Validate)
+	AchievementUseCase := usecase.NewAchievementUseCase(achievementRepo, cfg.Log, cfg.Validate)
 
 	if !fiber.IsChild() {
 		cfg.Log.Info("Starting asset cleanup worker on master process...")
@@ -79,6 +81,7 @@ func Bootstrap(cfg BootstrapConfig) {
 	GuruController := http.NewGuruController(GuruUseCase, cfg.Log)
 	MemberController := http.NewMemberController(MemberUseCase, cfg.Log)
 	MemberSocialLinkController := http.NewMemberSocialLinkController(MemberSocialLinkUseCase, cfg.Log)
+	AchievementController := http.NewAchievementController(AchievementUseCase, cfg.Log)
 
 	// Create auth middleware
 	authMiddleware := middleware.NewAuthMiddleware(cfg.Secret, cfg.Log)
@@ -100,6 +103,7 @@ func Bootstrap(cfg BootstrapConfig) {
 		GuruController:            GuruController,
 		MemberController:               MemberController,
 		MemberSocialLinkController:     MemberSocialLinkController,
+		AchievementController:          AchievementController,
 		AuthMiddleware:            authMiddleware,
 	}
 

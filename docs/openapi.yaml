@@ -95,6 +95,8 @@ tags:
       \ GET /me = member, PUT /me = member)"
   - name: Member Social Links
     description: "CRUD social media links milik member yang sedang login (🔒 member only)"
+  - name: Achievements
+    description: "CRUD badge/achievement catalog (🔒 GET = semua role, POST/PUT/DELETE = super_admin)"
 paths:
   /api/v1/login:
     post:
@@ -3155,6 +3157,242 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/achievements:
+    get:
+      tags:
+        - Achievements
+      summary: List achievements
+      description: "Mengembalikan daftar achievement dengan pagination. Mendukung filter berdasarkan `tier` dan pencarian `nama`.\n\n🔒 **Role**: `member`, `guru`, `super_admin`\n"
+      operationId: listAchievements
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Nomor halaman
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 10
+            maximum: 50
+          description: Jumlah item per halaman (max 50)
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Filter nama achievement (case-insensitive)
+        - name: tier
+          in: query
+          schema:
+            type: string
+            enum: [bronze, silver, gold, platinum]
+          description: Filter berdasarkan tier. Nilai di luar enum diabaikan (bukan error).
+      responses:
+        "200":
+          description: Daftar achievement berhasil diambil
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AchievementListResponseWrapper"
+              example:
+                data:
+                  - achievement_id: "1"
+                    nama: Penjelajah Awal
+                    deskripsi: Selesaikan 10 cerita interaktif
+                    badge_icon: https://arsiva.test/uploads/badges/penjelajah-awal.webp
+                    xp_required: 500
+                    tier: silver
+                paging:
+                  page: 1
+                  size: 10
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      tags:
+        - Achievements
+      summary: Buat achievement baru
+      description: "Membuat achievement baru di katalog badge.\n\n`tier` harus salah satu dari `bronze`, `silver`, `gold`, `platinum` (case-sensitive). Nilai lain menghasilkan `400`.\n\n`xp_required` harus ≥ 0. `nama` harus unik — duplikat menghasilkan `409`.\n\n🔒 **Role**: `super_admin`\n"
+      operationId: createAchievement
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AchievementCreateRequest"
+            example:
+              nama: Penjelajah Awal
+              deskripsi: Selesaikan 10 cerita interaktif
+              badge_icon: https://arsiva.test/uploads/badges/penjelajah-awal.webp
+              xp_required: 500
+              tier: silver
+      responses:
+        "201":
+          description: Achievement berhasil dibuat
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AchievementResponseWrapper"
+              example:
+                data:
+                  achievement_id: "2"
+                  nama: Penjelajah Awal
+                  deskripsi: Selesaikan 10 cerita interaktif
+                  badge_icon: https://arsiva.test/uploads/badges/penjelajah-awal.webp
+                  xp_required: 500
+                  tier: silver
+        "400":
+          description: "Validasi gagal — tier tidak valid, xp_required negatif, atau field wajib kosong"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          description: Nama achievement sudah terdaftar
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                errors: nama achievement sudah terdaftar
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/achievements/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: achievement_id dari achievement
+    get:
+      tags:
+        - Achievements
+      summary: Get achievement by ID
+      description: "Mengembalikan detail satu achievement.\n\n🔒 **Role**: `member`, `guru`, `super_admin`\n"
+      operationId: getAchievementById
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Detail achievement
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AchievementResponseWrapper"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "404":
+          description: Achievement tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      tags:
+        - Achievements
+      summary: Update achievement
+      description: "Mengganti seluruh data achievement (full replace). Nama unik diperiksa — jika nama baru sudah dipakai achievement lain, menghasilkan `409`.\n\n🔒 **Role**: `super_admin`\n"
+      operationId: updateAchievement
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AchievementUpdateRequest"
+      responses:
+        "200":
+          description: Achievement berhasil diupdate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AchievementResponseWrapper"
+        "400":
+          description: Validasi gagal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "404":
+          description: Achievement tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Nama achievement sudah dipakai achievement lain
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                errors: nama achievement sudah terdaftar
+    delete:
+      tags:
+        - Achievements
+      summary: Hapus achievement
+      description: "Menghapus achievement dari katalog. Gagal dengan `409` jika ada member yang sudah mendapatkan badge ini — tidak boleh merusak data progres member.\n\n🔒 **Role**: `super_admin`\n"
+      operationId: deleteAchievement
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Achievement berhasil dihapus
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: string
+                    example: Achievement deleted successfully
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "404":
+          description: Achievement tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Achievement sudah pernah di-unlock oleh member
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                errors: "achievement sudah pernah di-unlock oleh member; tidak bisa dihapus"
 components:
   responses:
     UnauthorizedResponse:
@@ -4701,6 +4939,100 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/MemberProfileResponse"
+    AchievementCreateRequest:
+      type: object
+      required:
+        - nama
+        - badge_icon
+        - tier
+      properties:
+        nama:
+          type: string
+          minLength: 1
+          maxLength: 50
+          example: Penjelajah Awal
+        deskripsi:
+          type: string
+          maxLength: 2000
+          example: Selesaikan 10 cerita interaktif
+        badge_icon:
+          type: string
+          format: uri
+          maxLength: 255
+          example: https://arsiva.test/uploads/badges/penjelajah-awal.webp
+        xp_required:
+          type: integer
+          minimum: 0
+          example: 500
+        tier:
+          type: string
+          enum: [bronze, silver, gold, platinum]
+          example: silver
+    AchievementUpdateRequest:
+      type: object
+      required:
+        - nama
+        - badge_icon
+        - tier
+      properties:
+        nama:
+          type: string
+          minLength: 1
+          maxLength: 50
+          example: Penjelajah Awal
+        deskripsi:
+          type: string
+          maxLength: 2000
+          example: Selesaikan 10 cerita interaktif
+        badge_icon:
+          type: string
+          format: uri
+          maxLength: 255
+          example: https://arsiva.test/uploads/badges/penjelajah-awal.webp
+        xp_required:
+          type: integer
+          minimum: 0
+          example: 500
+        tier:
+          type: string
+          enum: [bronze, silver, gold, platinum]
+          example: silver
+    AchievementResponse:
+      type: object
+      properties:
+        achievement_id:
+          type: string
+          example: "1"
+        nama:
+          type: string
+          example: Penjelajah Awal
+        deskripsi:
+          type: string
+          example: Selesaikan 10 cerita interaktif
+        badge_icon:
+          type: string
+          example: https://arsiva.test/uploads/badges/penjelajah-awal.webp
+        xp_required:
+          type: integer
+          example: 500
+        tier:
+          type: string
+          enum: [bronze, silver, gold, platinum]
+          example: silver
+    AchievementResponseWrapper:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/AchievementResponse"
+    AchievementListResponseWrapper:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AchievementResponse"
+        paging:
+          $ref: "#/components/schemas/PageMetaData"
     MemberDetails:
       type: object
       description: "Payload `details` di dalam JWT untuk role `member`"
