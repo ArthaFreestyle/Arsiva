@@ -1,1 +1,41 @@
+# Git
+.git
+.gitignore
+.github
+
+# Config & secrets
+config.json
+*.env
+.env*
+
+# Uploads & local data
+uploads/
+
+# Test files
+**/*_test.go
+**/*.test
+
+# Build artifacts
+server_app
+*.exe
+
+# Docker files (not needed inside image)
+.dockerignore
+docker-compose*.yml
+Dockerfile*
+
+# Dev & editor
+.vscode/
+.idea/
+*.code-workspace
+.claude/
+CLAUDE.md
+
+# SSL certs (managed by certbot on host)
 certbot/
+
+# Logs
+*.log
+
+# Makefile (not needed at runtime)
+Makefile
