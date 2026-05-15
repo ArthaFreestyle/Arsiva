@@ -25,7 +25,8 @@ type RouteConfig struct {
 	MemberSocialLinkController     http.MemberSocialLinkController
 	MemberAchievementController    http.MemberAchievementController
 	AchievementController          http.AchievementController
-	AuthMiddleware                 fiber.Handler
+	AuthMiddleware             fiber.Handler
+	ProfileCompleteMiddleware  fiber.Handler
 }
 
 func (c *RouteConfig) SetupRoutes() {
@@ -44,12 +45,15 @@ func (c *RouteConfig) SetupAuthRoutes() {
 	// Auth group — hanya prefix + auth middleware
 	auth := c.App.Group("/v1", c.AuthMiddleware)
 
-	// Role middleware disimpan dalam variabel
+	// Role middleware helpers
 	superadminOnly := middleware.RoleMiddleware("super_admin")
 	allRoles := middleware.RoleMiddleware("member", "guru", "super_admin")
-	guruAdmin := middleware.RoleMiddleware("guru", "super_admin")
-	guruOnly := middleware.RoleMiddleware("guru")
-	memberOnly := middleware.RoleMiddleware("member")
+
+	// guruAdmin/guruOnly/memberOnly include ProfileCompleteMiddleware so half-onboarded
+	// users cannot call action endpoints before finishing their profile.
+	guruAdmin  := []fiber.Handler{middleware.RoleMiddleware("guru", "super_admin"), c.ProfileCompleteMiddleware}
+	guruOnly   := []fiber.Handler{middleware.RoleMiddleware("guru"), c.ProfileCompleteMiddleware}
+	memberOnly := []fiber.Handler{middleware.RoleMiddleware("member"), c.ProfileCompleteMiddleware}
 
 	// ==========================================
 	// SUPERADMIN ONLY
@@ -192,27 +196,34 @@ func (c *RouteConfig) SetupAuthRoutes() {
 	// ==========================================
 	// GURU MANAGEMENT
 	// ==========================================
+	// POST /guru and GET /guru/me are allowed while profile is incomplete
+	// (POST creates the profile, GET lets the FE detect "no profile yet").
+	guruOnlyRaw    := middleware.RoleMiddleware("guru")
 	superadminOrGuru := middleware.RoleMiddleware("super_admin", "guru")
+	superadminOrGuruReady := []fiber.Handler{middleware.RoleMiddleware("super_admin", "guru"), c.ProfileCompleteMiddleware}
 
-	auth.Post("/guru", superadminOrGuru, c.GuruController.Create)
+	auth.Post("/guru", superadminOrGuru, c.GuruController.Create)       // profile creation — no check
 	auth.Get("/guru", superadminOnly, c.GuruController.FindAll)
-	auth.Get("/guru/me", guruOnly, c.GuruController.GetMe)
-	auth.Get("/guru/:id", superadminOrGuru, c.GuruController.FindById)
-	auth.Put("/guru/:id", superadminOrGuru, c.GuruController.Update)
+	auth.Get("/guru/me", guruOnlyRaw, c.GuruController.GetMe)           // allowed while incomplete
+	auth.Get("/guru/:id", superadminOrGuruReady, c.GuruController.FindById)
+	auth.Put("/guru/:id", superadminOrGuruReady, c.GuruController.Update)
 	auth.Delete("/guru/:id", superadminOnly, c.GuruController.Delete)
 
 	// ==========================================
 	// MEMBER MANAGEMENT
 	// ==========================================
+	// POST /member and GET /member/me are allowed while profile is incomplete.
+	memberOnlyRaw      := middleware.RoleMiddleware("member")
 	superadminOrMember := middleware.RoleMiddleware("super_admin", "member")
+	superadminOrMemberReady := []fiber.Handler{middleware.RoleMiddleware("super_admin", "member"), c.ProfileCompleteMiddleware}
 
-	auth.Post("/member", superadminOrMember, c.MemberController.Create)
+	auth.Post("/member", superadminOrMember, c.MemberController.Create)  // profile creation — no check
 	auth.Get("/member", superadminOnly, c.MemberController.FindAll)
-	auth.Get("/member/me", memberOnly, c.MemberController.GetMe)
+	auth.Get("/member/me", memberOnlyRaw, c.MemberController.GetMe)      // allowed while incomplete
 	auth.Put("/member/me", memberOnly, c.MemberController.UpdateMe)
 	auth.Get("/member/profile", memberOnly, c.MemberController.GetProfile)
-	auth.Get("/member/:id", superadminOrMember, c.MemberController.FindById)
-	auth.Put("/member/:id", superadminOrMember, c.MemberController.Update)
+	auth.Get("/member/:id", superadminOrMemberReady, c.MemberController.FindById)
+	auth.Put("/member/:id", superadminOrMemberReady, c.MemberController.Update)
 	auth.Delete("/member/:id", superadminOnly, c.MemberController.Delete)
 
 	// ==========================================

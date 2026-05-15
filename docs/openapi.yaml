@@ -28,9 +28,26 @@ info:
     | `super_admin` | Administrator | Semua akses termasuk **manajemen user** |
 
 
-    Response `401 Unauthorized` jika token tidak valid/expired. \ 
+    Response `401 Unauthorized` jika token tidak valid/expired. \
 
     Response `403 Forbidden` jika role tidak memiliki izin.
+
+    Response `409 PROFILE_INCOMPLETE` jika user belum menyelesaikan onboarding profil.
+
+
+    ## Onboarding & Profile Completion
+
+    Setelah registrasi, user hanya memiliki baris `users` — profil `guru`/`member`
+    belum ada. Semua endpoint yang dilindungi `ProfileCompleteMiddleware` akan
+    mengembalikan **409** dengan `code: PROFILE_INCOMPLETE` hingga profil dibuat.
+
+    Endpoint yang **boleh dipanggil sebelum profil lengkap**:
+    - `POST /v1/guru` dan `POST /v1/member` — untuk membuat profil.
+    - `GET /v1/guru/me` dan `GET /v1/member/me` — agar frontend bisa mendeteksi
+      status onboarding.
+
+    JWT menyertakan field `details` jika profil sudah ada — jika `null`, profil
+    belum dibuat.
 
 
     ## Format Response
@@ -103,10 +120,27 @@ paths:
       tags:
         - Auth
       summary: Login
-      description: "Autentikasi user dengan email dan password. \ 
+      description: |
+        Autentikasi user dengan email dan password.
 
-        Mengembalikan **access token** (expired 60 menit) dan **refresh token**
-        (expired 7 hari).\n"
+        Mengembalikan **access token** (expired 60 menit) dan **refresh token** (expired 7 hari).
+
+        ### Field `expected_role` (opsional)
+        Digunakan oleh frontend yang memiliki halaman login terpisah untuk member dan guru.
+        Jika diisi:
+        - Cocok dengan role akun → 200 OK seperti biasa.
+        - Tidak cocok → **403 Forbidden** (pesan generik, role sebenarnya tidak diungkap).
+        - Password salah → tetap **401**, role check tidak dijalankan.
+
+        `super_admin` tidak boleh diisi sebagai `expected_role` (validasi 400).
+        Login super_admin: kirim request tanpa field `expected_role`.
+
+        ### Field `details` di JWT
+        JWT yang dikembalikan menyertakan field `details` di payload jika profil sudah lengkap:
+        - Role `guru` → objek `GuruDetails` (guru_id, nip, bidang_ajar, sekolah_id).
+        - Role `member` → objek `MemberDetails` (member_id, nis, sekolah_id, level).
+        - Jika `details` kosong/null → profil belum dilengkapi; endpoint yang dilindungi
+          `ProfileCompleteMiddleware` akan mengembalikan **409 PROFILE_INCOMPLETE**.
       operationId: login
       requestBody:
         required: true
@@ -114,9 +148,18 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/LoginRequest"
-            example:
-              email: admin@example.com
-              password: rahasia123
+            examples:
+              tanpa_expected_role:
+                summary: Login biasa (backward-compatible)
+                value:
+                  email: admin@example.com
+                  password: rahasia123
+              dengan_expected_role:
+                summary: Login dari halaman member
+                value:
+                  email: siswa01@example.com
+                  password: Rahasia123!
+                  expected_role: member
       responses:
         "200":
           description: Login berhasil
@@ -127,20 +170,20 @@ paths:
               example:
                 data:
                   user:
-                    id: 550e8400-e29b-41d4-a716-446655440000
-                    username: admin
-                    email: admin@example.com
-                    role: admin
+                    id: "1"
+                    username: siswa01
+                    email: siswa01@example.com
+                    role: member
                   access_token: eyJhbGciOiJIUzI1NiIs...
                   refresh_token: eyJhbGciOiJIUzI1NiIs...
         "400":
-          description: Request body tidak valid
+          description: "Validasi gagal — field wajib kosong, format email salah, atau `expected_role: super_admin`"
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
               example:
-                error: Bad Request
+                errors: bad request
         "401":
           description: Email atau password salah
           content:
@@ -148,7 +191,15 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
               example:
-                error: Unauthorized
+                errors: Unauthorized
+        "403":
+          description: "`expected_role` diisi tetapi tidak cocok dengan role akun (pesan tidak mengungkap role sebenarnya)"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                errors: wrong login page for this account
   /api/v1/register/member:
     post:
       tags:
@@ -389,6 +440,8 @@ paths:
           $ref: "#/components/responses/UnauthorizedResponse"
         "403":
           $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
   /api/v1/users/{id}:
     parameters:
       - name: id
@@ -428,6 +481,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
     put:
       tags:
         - Users
@@ -477,6 +534,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
     delete:
       tags:
         - Users
@@ -507,6 +568,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
   /api/v1/categories/article:
     get:
       tags:
@@ -552,6 +617,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
   /api/v1/categories/article/{id}:
     parameters:
       - name: id
@@ -596,6 +667,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ArticleCategoryWrapper"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
     delete:
       tags:
         - Article Categories
@@ -615,6 +692,12 @@ paths:
                   data:
                     type: string
                     example: Article Category Deleted
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
   /api/v1/categories/story:
     get:
       tags:
@@ -678,6 +761,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
   /api/v1/categories/story/{id}:
     parameters:
       - name: id
@@ -722,6 +811,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/StoryCategoryWrapper"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
     delete:
       tags:
         - Story Categories
@@ -741,6 +836,12 @@ paths:
                   data:
                     type: string
                     example: Story Category Deleted
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
   /api/v1/categories/quiz:
     get:
       tags:
@@ -805,6 +906,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
   /api/v1/categories/quiz/{id}:
     parameters:
       - name: id
@@ -849,6 +956,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/QuizCategoryWrapper"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
     delete:
       tags:
         - Quiz Categories
@@ -868,6 +981,12 @@ paths:
                   data:
                     type: string
                     example: Quiz Category Deleted
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
   /api/v1/articles:
     get:
       tags:
@@ -947,6 +1066,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
   /api/v1/articles/{slug}:
     parameters:
       - name: slug
@@ -1058,6 +1183,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
     delete:
       tags:
         - Articles
@@ -1085,6 +1216,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
   /api/v1/upload/image:
     post:
       tags:
@@ -1147,6 +1284,12 @@ paths:
           type: string
         description: Path file gambar
         example: 2026/03/majapahit.jpg
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
     get:
       tags:
         - Upload
@@ -1236,6 +1379,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
   /api/v1/puzzles/{id}:
     parameters:
       - name: id
@@ -1298,6 +1447,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
     delete:
       tags:
         - Puzzles
@@ -1323,6 +1478,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
   /api/v1/quizzes:
     get:
       tags:
@@ -1398,6 +1559,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
   /api/v1/quizzes/{id}:
     parameters:
       - name: id
@@ -1465,6 +1632,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
     delete:
       tags:
         - Quizzes
@@ -1490,6 +1663,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
   /api/v1/stories:
     get:
       tags:
@@ -1548,16 +1727,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          $ref: "#/components/responses/UnauthorizedResponse"
-        "403":
-          $ref: "#/components/responses/ForbiddenResponse"
         "500":
           description: Internal server error
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
   /api/v1/stories/{id}:
     parameters:
       - name: id
@@ -1622,16 +1803,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          $ref: "#/components/responses/UnauthorizedResponse"
-        "403":
-          $ref: "#/components/responses/ForbiddenResponse"
         "500":
           description: Internal server error
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
     delete:
       tags:
         - Stories
@@ -1651,16 +1834,18 @@ paths:
                   data:
                     type: string
                     example: story deleted successfully
-        "401":
-          $ref: "#/components/responses/UnauthorizedResponse"
-        "403":
-          $ref: "#/components/responses/ForbiddenResponse"
         "500":
           description: Internal server error
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
   /api/v1/stories/{id}/scenes:
     parameters:
       - name: id
@@ -1698,16 +1883,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          $ref: "#/components/responses/UnauthorizedResponse"
-        "403":
-          $ref: "#/components/responses/ForbiddenResponse"
         "500":
           description: Internal server error
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
   /api/v1/stories/{id}/scenes/{scene_id}:
     parameters:
       - name: id
@@ -1751,16 +1938,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          $ref: "#/components/responses/UnauthorizedResponse"
-        "403":
-          $ref: "#/components/responses/ForbiddenResponse"
         "500":
           description: Internal server error
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
     delete:
       tags:
         - Stories
@@ -1782,16 +1971,18 @@ paths:
                   data:
                     type: string
                     example: scene deleted successfully
-        "401":
-          $ref: "#/components/responses/UnauthorizedResponse"
-        "403":
-          $ref: "#/components/responses/ForbiddenResponse"
         "500":
           description: Internal server error
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
   /api/v1/groups:
     get:
       tags:
@@ -1806,6 +1997,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/GroupListWrapper"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
       parameters:
         - name: page
           in: query
@@ -1838,6 +2035,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/GroupWrapper"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
       requestBody:
         required: true
         content:
@@ -1864,6 +2067,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/GroupDetailWrapper"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
     put:
       tags:
         - Groups
@@ -1883,6 +2092,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/GroupWrapper"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
       requestBody:
         required: true
         content:
@@ -1908,6 +2123,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MessageWrapper"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
   /api/v1/groups/{id}/invite:
     post:
       tags:
@@ -1928,6 +2149,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MessageWrapper"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
       requestBody:
         required: true
         content:
@@ -1954,6 +2181,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/GroupInviteWrapper"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
   /api/v1/groups/join:
     post:
       tags:
@@ -1968,6 +2201,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MessageWrapper"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
       requestBody:
         required: true
         content:
@@ -1994,6 +2233,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/GroupMemberListWrapper"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
   /api/v1/groups/{id}/members/{member_id}:
     delete:
       tags:
@@ -2019,6 +2264,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MessageWrapper"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
   /api/v1/groups/{id}/contents:
     parameters:
       - name: id
@@ -2066,10 +2317,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          $ref: "#/components/responses/UnauthorizedResponse"
-        "403":
-          $ref: "#/components/responses/ForbiddenResponse"
         "404":
           description: Grup tidak ditemukan
           content:
@@ -2092,6 +2339,12 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
               example:
                 errors: Content not found or not published
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
     get:
       tags:
         - Groups
@@ -2184,16 +2437,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          $ref: "#/components/responses/UnauthorizedResponse"
-        "403":
-          $ref: "#/components/responses/ForbiddenResponse"
         "404":
           description: Konten atau grup tidak ditemukan
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
   /api/v1/sekolah:
     get:
       tags:
@@ -2619,16 +2874,18 @@ paths:
                   groups:
                     - group_id: uuid-xxx
                       group_name: Kelas 9A
-        "401":
-          $ref: "#/components/responses/UnauthorizedResponse"
-        "403":
-          $ref: "#/components/responses/ForbiddenResponse"
         "404":
           description: Guru tidak ditemukan
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
     put:
       tags:
         - Guru
@@ -2660,10 +2917,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          $ref: "#/components/responses/UnauthorizedResponse"
-        "403":
-          $ref: "#/components/responses/ForbiddenResponse"
         "404":
           description: Guru tidak ditemukan
           content:
@@ -2684,6 +2937,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
     delete:
       tags:
         - Guru
@@ -2922,16 +3181,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          $ref: "#/components/responses/UnauthorizedResponse"
-        "403":
-          $ref: "#/components/responses/ForbiddenResponse"
         "404":
           description: Member tidak ditemukan
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
   /api/v1/member/{id}:
     parameters:
       - name: id
@@ -2973,16 +3234,18 @@ paths:
                     sekolah_id: "1"
                     nama_sekolah: SMP Negeri 1 Jakarta
                     alamat_sekolah: Jl. Merdeka No. 1
-        "401":
-          $ref: "#/components/responses/UnauthorizedResponse"
-        "403":
-          $ref: "#/components/responses/ForbiddenResponse"
         "404":
           description: Member tidak ditemukan
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
     put:
       tags:
         - Member
@@ -3015,10 +3278,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          $ref: "#/components/responses/UnauthorizedResponse"
-        "403":
-          $ref: "#/components/responses/ForbiddenResponse"
         "404":
           description: Member tidak ditemukan
           content:
@@ -3031,6 +3290,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
     delete:
       tags:
         - Member
@@ -3082,16 +3347,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MemberProfileResponseWrapper"
-        "401":
-          $ref: "#/components/responses/UnauthorizedResponse"
-        "403":
-          $ref: "#/components/responses/ForbiddenResponse"
         "404":
           description: Data member tidak ditemukan
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
   /api/v1/member/social-links:
     post:
       tags:
@@ -3123,10 +3390,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          $ref: "#/components/responses/UnauthorizedResponse"
-        "403":
-          $ref: "#/components/responses/ForbiddenResponse"
         "409":
           description: Platform sudah terdaftar untuk member ini
           content:
@@ -3135,6 +3398,12 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
               example:
                 errors: platform sudah terdaftar
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
     get:
       tags:
         - Member Social Links
@@ -3154,6 +3423,8 @@ paths:
           $ref: "#/components/responses/UnauthorizedResponse"
         "403":
           $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
   /api/v1/member/social-links/{id}:
     parameters:
       - name: id
@@ -3177,16 +3448,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MemberSocialLinkResponseWrapper"
-        "401":
-          $ref: "#/components/responses/UnauthorizedResponse"
-        "403":
-          $ref: "#/components/responses/ForbiddenResponse"
         "404":
           description: Social link tidak ditemukan
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
     put:
       tags:
         - Member Social Links
@@ -3214,10 +3487,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          $ref: "#/components/responses/UnauthorizedResponse"
-        "403":
-          $ref: "#/components/responses/ForbiddenResponse"
         "404":
           description: Social link tidak ditemukan
           content:
@@ -3230,6 +3499,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
     delete:
       tags:
         - Member Social Links
@@ -3249,16 +3524,18 @@ paths:
                   data:
                     type: string
                     example: Social link deleted successfully
-        "401":
-          $ref: "#/components/responses/UnauthorizedResponse"
-        "403":
-          $ref: "#/components/responses/ForbiddenResponse"
         "404":
           description: Social link tidak ditemukan
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
   /api/v1/member/achievements:
     post:
       tags:
@@ -3330,6 +3607,8 @@ paths:
           $ref: "#/components/responses/UnauthorizedResponse"
         "403":
           $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
   /api/v1/member/achievements/{achievement_id}:
     get:
       tags:
@@ -3352,16 +3631,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MemberAchievementResponseWrapper"
-        "401":
-          $ref: "#/components/responses/UnauthorizedResponse"
-        "403":
-          $ref: "#/components/responses/ForbiddenResponse"
         "404":
           description: Achievement belum di-unlock oleh member ini
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
   /api/v1/member/achievements/{member_id}/{achievement_id}:
     delete:
       tags:
@@ -3661,6 +3942,18 @@ components:
               errors:
                 type: string
                 example: "forbidden: insufficient role"
+    ProfileIncompleteResponse:
+      description: >
+        User sudah login (JWT valid) tetapi profil guru/member belum dibuat.
+        Selesaikan onboarding via endpoint yang ditunjuk di `next_action`.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ProfileIncompleteResponse"
+          example:
+            errors: profile incomplete
+            code: PROFILE_INCOMPLETE
+            next_action: POST /v1/guru
   securitySchemes:
     BearerAuth:
       type: http
@@ -3713,6 +4006,37 @@ components:
           format: password
           description: Password user
           example: rahasia123
+        expected_role:
+          type: string
+          enum: [member, guru]
+          description: >
+            Opsional. Diisi oleh halaman login yang spesifik per-role (halaman
+            login member atau halaman login guru). Jika diisi dan tidak cocok
+            dengan role akun, server mengembalikan 403 tanpa mengungkap role
+            sebenarnya. Jika tidak diisi, endpoint berperilaku seperti
+            sebelumnya (backward-compatible). Nilai `super_admin` tidak
+            diperbolehkan di sini — kirim request tanpa field ini untuk login
+            sebagai super_admin.
+          example: member
+    ProfileIncompleteResponse:
+      type: object
+      description: >
+        Dikembalikan oleh `ProfileCompleteMiddleware` (HTTP 409) ketika user
+        sudah terdaftar (`users` row ada) tetapi belum menyelesaikan onboarding
+        (baris `guru` / `member` belum dibuat). Frontend harus membaca field
+        `code` untuk membedakan 409 ini dari 409 konflik biasa.
+      properties:
+        errors:
+          type: string
+          example: profile incomplete
+        code:
+          type: string
+          enum: [PROFILE_INCOMPLETE]
+          example: PROFILE_INCOMPLETE
+        next_action:
+          type: string
+          description: Endpoint yang harus dipanggil untuk menyelesaikan onboarding
+          example: POST /v1/guru
     UserRequest:
       type: object
       required:

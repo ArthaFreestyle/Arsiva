@@ -22,22 +22,24 @@ type AuthUseCase interface {
 }
 
 type AuthUseCaseImpl struct {
-	DB             *pgxpool.Pool
-	Log            *logrus.Logger
-	Validate       *validator.Validate
-	Repo           repository.UserRepository
-	GuruRepository repository.GuruRepository
-	Secret         []byte
+	DB               *pgxpool.Pool
+	Log              *logrus.Logger
+	Validate         *validator.Validate
+	Repo             repository.UserRepository
+	GuruRepository   repository.GuruRepository
+	MemberRepository repository.MemberRepository
+	Secret           []byte
 }
 
-func NewAuthUseCase(repo repository.UserRepository, secret []byte, validate *validator.Validate, log *logrus.Logger, DB *pgxpool.Pool, guruRepo repository.GuruRepository) AuthUseCase {
+func NewAuthUseCase(repo repository.UserRepository, secret []byte, validate *validator.Validate, log *logrus.Logger, DB *pgxpool.Pool, guruRepo repository.GuruRepository, memberRepo repository.MemberRepository) AuthUseCase {
 	return &AuthUseCaseImpl{
-		Repo:           repo,
-		Secret:         secret,
-		Validate:       validate,
-		DB:             DB,
-		Log:            log,
-		GuruRepository: guruRepo,
+		Repo:             repo,
+		Secret:           secret,
+		Validate:         validate,
+		DB:               DB,
+		Log:              log,
+		GuruRepository:   guruRepo,
+		MemberRepository: memberRepo,
 	}
 }
 
@@ -60,15 +62,35 @@ func (c *AuthUseCaseImpl) Login(ctx context.Context, request *model.LoginRequest
 		return nil, fiber.ErrUnauthorized
 	}
 
+	// Role check AFTER password verification so a wrong expected_role
+	// cannot be used to enumerate roles on accounts with bad passwords.
+	if request.ExpectedRole != "" && request.ExpectedRole != user.Role {
+		c.Log.Warnf("Login role mismatch: expected_role=%s actual=%s", request.ExpectedRole, user.Role)
+		return nil, fiber.NewError(fiber.StatusForbidden, "wrong login page for this account")
+	}
+
 	var details any
-	if user.Role == "guru" && c.GuruRepository != nil {
-		guru, err := c.GuruRepository.FindByUserId(ctx, user.UserId)
-		if err == nil {
-			details = model.GuruDetails{
-				GuruId:     guru.GuruId,
-				NIP:        guru.NIP,
-				BidangAjar: guru.BidangAjar,
-				SekolahId:  guru.SekolahId,
+	switch user.Role {
+	case "guru":
+		if c.GuruRepository != nil {
+			if guru, err := c.GuruRepository.FindByUserId(ctx, user.UserId); err == nil {
+				details = model.GuruDetails{
+					GuruId:     guru.GuruId,
+					NIP:        guru.NIP,
+					BidangAjar: guru.BidangAjar,
+					SekolahId:  guru.SekolahId,
+				}
+			}
+		}
+	case "member":
+		if c.MemberRepository != nil {
+			if member, err := c.MemberRepository.FindByUserId(ctx, user.UserId); err == nil {
+				details = model.MemberDetails{
+					MemberId:  member.MemberId,
+					NIS:       member.NIS,
+					SekolahId: member.SekolahId,
+					Level:     member.Level,
+				}
 			}
 		}
 	}

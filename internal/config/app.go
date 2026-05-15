@@ -44,7 +44,7 @@ func Bootstrap(cfg BootstrapConfig) {
 	memberSocialLinkRepo := repository.NewMemberSocialLinkRepository(cfg.DB, cfg.Log)
 	achievementRepo := repository.NewAchievementRepository(cfg.DB, cfg.Log)
 
-	AuthUseCase := usecase.NewAuthUseCase(userRepo, cfg.Secret, cfg.Validate, cfg.Log, cfg.DB, guruRepo)
+	AuthUseCase := usecase.NewAuthUseCase(userRepo, cfg.Secret, cfg.Validate, cfg.Log, cfg.DB, guruRepo, memberRepo)
 	UserUseCase := usecase.NewUserUseCase(userRepo, cfg.Log, cfg.DB, cfg.Validate)
 	ArticleCategoryUseCase := usecase.NewArticleCategoryUseCase(articleCategoryRepo, cfg.Redis, cfg.Log, cfg.Validate)
 	ArticleUseCase := usecase.NewArticleUseCase(articleRepo, assetRepo, cfg.Log, cfg.Validate)
@@ -85,8 +85,9 @@ func Bootstrap(cfg BootstrapConfig) {
 	AchievementController := http.NewAchievementController(AchievementUseCase, cfg.Log)
 	MemberAchievementController := http.NewMemberAchievementController(MemberAchievementUseCase, cfg.Log)
 
-	// Create auth middleware
-	authMiddleware := middleware.NewAuthMiddleware(cfg.Secret, cfg.Log)
+	// Create middleware
+	authMiddleware            := middleware.NewAuthMiddleware(cfg.Secret, cfg.Log)
+	profileCompleteMiddleware := middleware.RequireProfileComplete()
 
 	routeConfig := route.RouteConfig{
 		App:                       cfg.App,
@@ -103,11 +104,12 @@ func Bootstrap(cfg BootstrapConfig) {
 		GroupController:           GroupController,
 		SekolahController:         SekolahController,
 		GuruController:            GuruController,
-		MemberController:               MemberController,
-		MemberSocialLinkController:     MemberSocialLinkController,
-		MemberAchievementController:    MemberAchievementController,
-		AchievementController:          AchievementController,
-		AuthMiddleware:            authMiddleware,
+		MemberController:            MemberController,
+		MemberSocialLinkController:  MemberSocialLinkController,
+		MemberAchievementController: MemberAchievementController,
+		AchievementController:       AchievementController,
+		AuthMiddleware:              authMiddleware,
+		ProfileCompleteMiddleware:   profileCompleteMiddleware,
 	}
 
 	routeConfig.SetupRoutes()
