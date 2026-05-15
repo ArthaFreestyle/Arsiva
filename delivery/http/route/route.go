@@ -42,219 +42,220 @@ func (c *RouteConfig) SetupGuestRoutes() {
 }
 
 func (c *RouteConfig) SetupAuthRoutes() {
-	// Auth group — hanya prefix + auth middleware
+	// Auth group — prefix + auth middleware
 	auth := c.App.Group("/v1", c.AuthMiddleware)
 
-	// Role middleware helpers
-	superadminOnly := middleware.RoleMiddleware("super_admin")
-	allRoles := middleware.RoleMiddleware("member", "guru", "super_admin")
+	// Role-only sub-groups (no profile-complete check).
+	superadmin := auth.Group("", middleware.RoleMiddleware("super_admin"))
+	allRoles   := auth.Group("", middleware.RoleMiddleware("member", "guru", "super_admin"))
 
-	// guruAdmin/guruOnly/memberOnly include ProfileCompleteMiddleware so half-onboarded
-	// users cannot call action endpoints before finishing their profile.
-	guruAdmin  := []fiber.Handler{middleware.RoleMiddleware("guru", "super_admin"), c.ProfileCompleteMiddleware}
-	guruOnly   := []fiber.Handler{middleware.RoleMiddleware("guru"), c.ProfileCompleteMiddleware}
-	memberOnly := []fiber.Handler{middleware.RoleMiddleware("member"), c.ProfileCompleteMiddleware}
+	// Raw role sub-groups: role check only — used for profile creation / "me"
+	// endpoints that must work BEFORE the profile is complete.
+	guruRaw            := auth.Group("", middleware.RoleMiddleware("guru"))
+	memberRaw          := auth.Group("", middleware.RoleMiddleware("member"))
+	superadminOrGuru   := auth.Group("", middleware.RoleMiddleware("super_admin", "guru"))
+	superadminOrMember := auth.Group("", middleware.RoleMiddleware("super_admin", "member"))
+
+	// Action sub-groups: role check + profile-complete check. Half-onboarded
+	// users cannot reach these endpoints.
+	guruAdmin               := auth.Group("", middleware.RoleMiddleware("guru", "super_admin"), c.ProfileCompleteMiddleware)
+	guruOnly                := auth.Group("", middleware.RoleMiddleware("guru"), c.ProfileCompleteMiddleware)
+	memberOnly              := auth.Group("", middleware.RoleMiddleware("member"), c.ProfileCompleteMiddleware)
+	superadminOrGuruReady   := auth.Group("", middleware.RoleMiddleware("super_admin", "guru"), c.ProfileCompleteMiddleware)
+	superadminOrMemberReady := auth.Group("", middleware.RoleMiddleware("super_admin", "member"), c.ProfileCompleteMiddleware)
 
 	// ==========================================
 	// SUPERADMIN ONLY
 	// ==========================================
 
 	// users
-	auth.Get("/users", superadminOnly, c.UserController.GetAllUsers)
-	auth.Get("/users/search", guruOnly, c.UserController.SearchUsersByEmail)
-	auth.Get("/users/:id", superadminOnly, c.UserController.GetUserById)
-	auth.Post("/users", superadminOnly, c.UserController.CreateUser)
-	auth.Put("/users/:id", superadminOnly, c.UserController.UpdateUser)
-	auth.Delete("/users/:id", superadminOnly, c.UserController.DeleteUser)
+	superadmin.Get("/users", c.UserController.GetAllUsers)
+	guruOnly.Get("/users/search", c.UserController.SearchUsersByEmail)
+	superadmin.Get("/users/:id", c.UserController.GetUserById)
+	superadmin.Post("/users", c.UserController.CreateUser)
+	superadmin.Put("/users/:id", c.UserController.UpdateUser)
+	superadmin.Delete("/users/:id", c.UserController.DeleteUser)
 
 	// ==========================================
 	// ALL AUTHENTICATED (member, guru, superadmin)
 	// ==========================================
 
 	// article category - read
-	auth.Get("/categories/article", allRoles, c.ArticleCategoryController.GetAllArticleCategories)
-	auth.Get("/categories/article/:id", allRoles, c.ArticleCategoryController.GetArticleCategoryById)
+	allRoles.Get("/categories/article", c.ArticleCategoryController.GetAllArticleCategories)
+	allRoles.Get("/categories/article/:id", c.ArticleCategoryController.GetArticleCategoryById)
 
 	// article - read
-	auth.Get("/articles", allRoles, c.ArticleController.GetAllArticle)
-	auth.Get("/articles/detail/:id", allRoles, c.ArticleController.GetArticleById)
-	auth.Get("/articles/:slug", allRoles, c.ArticleController.GetArticleBySlug)
+	allRoles.Get("/articles", c.ArticleController.GetAllArticle)
+	allRoles.Get("/articles/detail/:id", c.ArticleController.GetArticleById)
+	allRoles.Get("/articles/:slug", c.ArticleController.GetArticleBySlug)
 
 	// puzzle - read
-	auth.Get("/puzzles", allRoles, c.PuzzleController.GetAllPuzzle)
-	auth.Get("/puzzles/:id", allRoles, c.PuzzleController.GetPuzzleById)
+	allRoles.Get("/puzzles", c.PuzzleController.GetAllPuzzle)
+	allRoles.Get("/puzzles/:id", c.PuzzleController.GetPuzzleById)
 
 	// quiz - read
-	auth.Get("/quizzes", allRoles, c.QuizController.GetAllQuiz)
-	auth.Get("/quizzes/:id", allRoles, c.QuizController.GetQuizById)
+	allRoles.Get("/quizzes", c.QuizController.GetAllQuiz)
+	allRoles.Get("/quizzes/:id", c.QuizController.GetQuizById)
 
 	// cerita interaktif - read
-	auth.Get("/stories", allRoles, c.CeritaController.GetAllCerita)
-	auth.Get("/stories/:id", allRoles, c.CeritaController.GetCeritaById)
+	allRoles.Get("/stories", c.CeritaController.GetAllCerita)
+	allRoles.Get("/stories/:id", c.CeritaController.GetCeritaById)
 
 	// story category - read
-	auth.Get("/categories/story", allRoles, c.StoryCategoryController.GetAllStoryCategories)
-	auth.Get("/categories/story/:id", allRoles, c.StoryCategoryController.GetStoryCategoryById)
+	allRoles.Get("/categories/story", c.StoryCategoryController.GetAllStoryCategories)
+	allRoles.Get("/categories/story/:id", c.StoryCategoryController.GetStoryCategoryById)
 
 	// quiz category - read
-	auth.Get("/categories/quiz", allRoles, c.QuizCategoryController.GetAllQuizCategories)
-	auth.Get("/categories/quiz/:id", allRoles, c.QuizCategoryController.GetQuizCategoryById)
+	allRoles.Get("/categories/quiz", c.QuizCategoryController.GetAllQuizCategories)
+	allRoles.Get("/categories/quiz/:id", c.QuizCategoryController.GetQuizCategoryById)
 
 	// ==========================================
 	// GURU + SUPERADMIN (content management)
 	// ==========================================
 
 	// management READ endpoints (role-aware)
-	auth.Get("/manage/articles", guruAdmin, c.ArticleController.GetAllArticleManage)
-	auth.Get("/manage/articles/:id", guruAdmin, c.ArticleController.GetArticleByIdManage)
-	auth.Get("/manage/puzzles", guruAdmin, c.PuzzleController.GetAllPuzzleManage)
-	auth.Get("/manage/puzzles/:id", guruAdmin, c.PuzzleController.GetPuzzleByIdManage)
-	auth.Get("/manage/quizzes", guruAdmin, c.QuizController.GetAllQuizManage)
-	auth.Get("/manage/quizzes/:id", guruAdmin, c.QuizController.GetQuizByIdManage)
-	auth.Get("/manage/stories", guruAdmin, c.CeritaController.GetAllCeritaManage)
-	auth.Get("/manage/stories/:id", guruAdmin, c.CeritaController.GetCeritaByIdManage)
+	guruAdmin.Get("/manage/articles", c.ArticleController.GetAllArticleManage)
+	guruAdmin.Get("/manage/articles/:id", c.ArticleController.GetArticleByIdManage)
+	guruAdmin.Get("/manage/puzzles", c.PuzzleController.GetAllPuzzleManage)
+	guruAdmin.Get("/manage/puzzles/:id", c.PuzzleController.GetPuzzleByIdManage)
+	guruAdmin.Get("/manage/quizzes", c.QuizController.GetAllQuizManage)
+	guruAdmin.Get("/manage/quizzes/:id", c.QuizController.GetQuizByIdManage)
+	guruAdmin.Get("/manage/stories", c.CeritaController.GetAllCeritaManage)
+	guruAdmin.Get("/manage/stories/:id", c.CeritaController.GetCeritaByIdManage)
 
 	// article category - write
-	auth.Post("/categories/article", guruAdmin, c.ArticleCategoryController.CreateArticleCategory)
-	auth.Put("/categories/article/:id", guruAdmin, c.ArticleCategoryController.UpdateArticleCategory)
-	auth.Delete("/categories/article/:id", guruAdmin, c.ArticleCategoryController.DeleteArticleCategory)
+	guruAdmin.Post("/categories/article", c.ArticleCategoryController.CreateArticleCategory)
+	guruAdmin.Put("/categories/article/:id", c.ArticleCategoryController.UpdateArticleCategory)
+	guruAdmin.Delete("/categories/article/:id", c.ArticleCategoryController.DeleteArticleCategory)
 
 	// article - write
-	auth.Post("/articles", guruAdmin, c.ArticleController.CreateArticle)
-	auth.Put("/articles/:id", guruAdmin, c.ArticleController.UpdateArticle)
-	auth.Delete("/articles/:id", guruAdmin, c.ArticleController.DeleteArticle)
+	guruAdmin.Post("/articles", c.ArticleController.CreateArticle)
+	guruAdmin.Put("/articles/:id", c.ArticleController.UpdateArticle)
+	guruAdmin.Delete("/articles/:id", c.ArticleController.DeleteArticle)
 
 	// puzzle - write
-	auth.Post("/puzzles", guruAdmin, c.PuzzleController.CreatePuzzle)
-	auth.Put("/puzzles/:id", guruAdmin, c.PuzzleController.UpdatePuzzle)
-	auth.Delete("/puzzles/:id", guruAdmin, c.PuzzleController.DeletePuzzle)
+	guruAdmin.Post("/puzzles", c.PuzzleController.CreatePuzzle)
+	guruAdmin.Put("/puzzles/:id", c.PuzzleController.UpdatePuzzle)
+	guruAdmin.Delete("/puzzles/:id", c.PuzzleController.DeletePuzzle)
 
 	// quiz - write
-	auth.Post("/quizzes", guruAdmin, c.QuizController.CreateQuiz)
-	auth.Put("/quizzes/:id", guruAdmin, c.QuizController.UpdateQuiz)
-	auth.Delete("/quizzes/:id", guruAdmin, c.QuizController.DeleteQuiz)
+	guruAdmin.Post("/quizzes", c.QuizController.CreateQuiz)
+	guruAdmin.Put("/quizzes/:id", c.QuizController.UpdateQuiz)
+	guruAdmin.Delete("/quizzes/:id", c.QuizController.DeleteQuiz)
 
 	// cerita interaktif - write
-	auth.Post("/stories", guruAdmin, c.CeritaController.CreateCerita)
-	auth.Put("/stories/:id", guruAdmin, c.CeritaController.UpdateCerita)
-	auth.Post("/stories/:id/scenes", guruAdmin, c.CeritaController.CreateScene)
-	auth.Put("/stories/:id/scenes/:scene_id", guruAdmin, c.CeritaController.UpdateScene)
-	auth.Delete("/stories/:id/scenes/:scene_id", guruAdmin, c.CeritaController.DeleteScene)
-	auth.Delete("/stories/:id", guruAdmin, c.CeritaController.DeleteCerita)
+	guruAdmin.Post("/stories", c.CeritaController.CreateCerita)
+	guruAdmin.Put("/stories/:id", c.CeritaController.UpdateCerita)
+	guruAdmin.Post("/stories/:id/scenes", c.CeritaController.CreateScene)
+	guruAdmin.Put("/stories/:id/scenes/:scene_id", c.CeritaController.UpdateScene)
+	guruAdmin.Delete("/stories/:id/scenes/:scene_id", c.CeritaController.DeleteScene)
+	guruAdmin.Delete("/stories/:id", c.CeritaController.DeleteCerita)
 
 	// story category - write
-	auth.Post("/categories/story", guruAdmin, c.StoryCategoryController.CreateStoryCategory)
-	auth.Put("/categories/story/:id", guruAdmin, c.StoryCategoryController.UpdateStoryCategory)
-	auth.Delete("/categories/story/:id", guruAdmin, c.StoryCategoryController.DeleteStoryCategory)
+	guruAdmin.Post("/categories/story", c.StoryCategoryController.CreateStoryCategory)
+	guruAdmin.Put("/categories/story/:id", c.StoryCategoryController.UpdateStoryCategory)
+	guruAdmin.Delete("/categories/story/:id", c.StoryCategoryController.DeleteStoryCategory)
 
 	// quiz category - write
-	auth.Post("/categories/quiz", guruAdmin, c.QuizCategoryController.CreateQuizCategory)
-	auth.Put("/categories/quiz/:id", guruAdmin, c.QuizCategoryController.UpdateQuizCategory)
-	auth.Delete("/categories/quiz/:id", guruAdmin, c.QuizCategoryController.DeleteQuizCategory)
+	guruAdmin.Post("/categories/quiz", c.QuizCategoryController.CreateQuizCategory)
+	guruAdmin.Put("/categories/quiz/:id", c.QuizCategoryController.UpdateQuizCategory)
+	guruAdmin.Delete("/categories/quiz/:id", c.QuizCategoryController.DeleteQuizCategory)
 
 	// upload
-	auth.Post("/upload/image", guruAdmin, c.UploadController.UploadImage)
+	guruAdmin.Post("/upload/image", c.UploadController.UploadImage)
 
 	// ==========================================
 	// GURU ONLY (group management)
 	// ==========================================
 
 	// Group CRUD
-	auth.Post("/groups", guruOnly, c.GroupController.CreateGroup)
-	auth.Get("/groups", guruOnly, c.GroupController.GetAllGroups)
-	auth.Get("/groups/:id", guruOnly, c.GroupController.GetGroupDetail)
-	auth.Put("/groups/:id", guruOnly, c.GroupController.UpdateGroup)
-	auth.Delete("/groups/:id", guruOnly, c.GroupController.DeleteGroup)
+	guruOnly.Post("/groups", c.GroupController.CreateGroup)
+	guruOnly.Get("/groups", c.GroupController.GetAllGroups)
+	guruOnly.Get("/groups/:id", c.GroupController.GetGroupDetail)
+	guruOnly.Put("/groups/:id", c.GroupController.UpdateGroup)
+	guruOnly.Delete("/groups/:id", c.GroupController.DeleteGroup)
 
 	// Group Member Management (Guru)
-	auth.Post("/groups/:id/invite", guruOnly, c.GroupController.InviteMembersByEmail)
-	auth.Get("/groups/:id/invite-link", guruOnly, c.GroupController.GenerateInviteLink)
-	auth.Get("/groups/:id/members", guruOnly, c.GroupController.GetGroupMembers)
-	auth.Delete("/groups/:id/members/:member_id", guruOnly, c.GroupController.RemoveMember)
+	guruOnly.Post("/groups/:id/invite", c.GroupController.InviteMembersByEmail)
+	guruOnly.Get("/groups/:id/invite-link", c.GroupController.GenerateInviteLink)
+	guruOnly.Get("/groups/:id/members", c.GroupController.GetGroupMembers)
+	guruOnly.Delete("/groups/:id/members/:member_id", c.GroupController.RemoveMember)
 
 	// Group Content Management
-	auth.Post("/groups/:id/contents", guruOnly, c.GroupController.AddContent)
-	auth.Delete("/groups/:id/contents/:content_id", guruOnly, c.GroupController.RemoveContent)
+	guruOnly.Post("/groups/:id/contents", c.GroupController.AddContent)
+	guruOnly.Delete("/groups/:id/contents/:content_id", c.GroupController.RemoveContent)
 
 	// View group contents — usecase handles ownership (guru) vs membership (member) check
-	auth.Get("/groups/:id/contents", allRoles, c.GroupController.GetGroupContents)
+	allRoles.Get("/groups/:id/contents", c.GroupController.GetGroupContents)
 
 	// ==========================================
 	// MEMBER ONLY (join group)
 	// ==========================================
-	auth.Post("/groups/join", memberOnly, c.GroupController.JoinGroup)
+	memberOnly.Post("/groups/join", c.GroupController.JoinGroup)
 
 	// ==========================================
 	// SEKOLAH
 	//   - read: semua role ter-autentikasi
 	//   - write: super_admin only
 	// ==========================================
-	auth.Get("/sekolah", allRoles, c.SekolahController.FindAll)
-	auth.Get("/sekolah/:id", allRoles, c.SekolahController.FindById)
-	auth.Post("/sekolah", superadminOnly, c.SekolahController.Create)
-	auth.Put("/sekolah/:id", superadminOnly, c.SekolahController.Update)
-	auth.Delete("/sekolah/:id", superadminOnly, c.SekolahController.Delete)
+	allRoles.Get("/sekolah", c.SekolahController.FindAll)
+	allRoles.Get("/sekolah/:id", c.SekolahController.FindById)
+	superadmin.Post("/sekolah", c.SekolahController.Create)
+	superadmin.Put("/sekolah/:id", c.SekolahController.Update)
+	superadmin.Delete("/sekolah/:id", c.SekolahController.Delete)
 
 	// ==========================================
 	// GURU MANAGEMENT
 	// ==========================================
 	// POST /guru and GET /guru/me are allowed while profile is incomplete
 	// (POST creates the profile, GET lets the FE detect "no profile yet").
-	guruOnlyRaw    := middleware.RoleMiddleware("guru")
-	superadminOrGuru := middleware.RoleMiddleware("super_admin", "guru")
-	superadminOrGuruReady := []fiber.Handler{middleware.RoleMiddleware("super_admin", "guru"), c.ProfileCompleteMiddleware}
-
-	auth.Post("/guru", superadminOrGuru, c.GuruController.Create)       // profile creation — no check
-	auth.Get("/guru", superadminOnly, c.GuruController.FindAll)
-	auth.Get("/guru/me", guruOnlyRaw, c.GuruController.GetMe)           // allowed while incomplete
-	auth.Get("/guru/:id", superadminOrGuruReady, c.GuruController.FindById)
-	auth.Put("/guru/:id", superadminOrGuruReady, c.GuruController.Update)
-	auth.Delete("/guru/:id", superadminOnly, c.GuruController.Delete)
+	superadminOrGuru.Post("/guru", c.GuruController.Create)       // profile creation — no check
+	superadmin.Get("/guru", c.GuruController.FindAll)
+	guruRaw.Get("/guru/me", c.GuruController.GetMe)               // allowed while incomplete
+	superadminOrGuruReady.Get("/guru/:id", c.GuruController.FindById)
+	superadminOrGuruReady.Put("/guru/:id", c.GuruController.Update)
+	superadmin.Delete("/guru/:id", c.GuruController.Delete)
 
 	// ==========================================
 	// MEMBER MANAGEMENT
 	// ==========================================
 	// POST /member and GET /member/me are allowed while profile is incomplete.
-	memberOnlyRaw      := middleware.RoleMiddleware("member")
-	superadminOrMember := middleware.RoleMiddleware("super_admin", "member")
-	superadminOrMemberReady := []fiber.Handler{middleware.RoleMiddleware("super_admin", "member"), c.ProfileCompleteMiddleware}
-
-	auth.Post("/member", superadminOrMember, c.MemberController.Create)  // profile creation — no check
-	auth.Get("/member", superadminOnly, c.MemberController.FindAll)
-	auth.Get("/member/me", memberOnlyRaw, c.MemberController.GetMe)      // allowed while incomplete
-	auth.Put("/member/me", memberOnly, c.MemberController.UpdateMe)
-	auth.Get("/member/profile", memberOnly, c.MemberController.GetProfile)
-	auth.Get("/member/:id", superadminOrMemberReady, c.MemberController.FindById)
-	auth.Put("/member/:id", superadminOrMemberReady, c.MemberController.Update)
-	auth.Delete("/member/:id", superadminOnly, c.MemberController.Delete)
+	superadminOrMember.Post("/member", c.MemberController.Create) // profile creation — no check
+	superadmin.Get("/member", c.MemberController.FindAll)
+	memberRaw.Get("/member/me", c.MemberController.GetMe)         // allowed while incomplete
+	memberOnly.Put("/member/me", c.MemberController.UpdateMe)
+	memberOnly.Get("/member/profile", c.MemberController.GetProfile)
+	superadminOrMemberReady.Get("/member/:id", c.MemberController.FindById)
+	superadminOrMemberReady.Put("/member/:id", c.MemberController.Update)
+	superadmin.Delete("/member/:id", c.MemberController.Delete)
 
 	// ==========================================
 	// ACHIEVEMENTS
 	//   - read: semua role ter-autentikasi
 	//   - write: super_admin only
 	// ==========================================
-	auth.Get("/achievements", allRoles, c.AchievementController.FindAll)
-	auth.Get("/achievements/:id", allRoles, c.AchievementController.FindById)
-	auth.Post("/achievements", superadminOnly, c.AchievementController.Create)
-	auth.Put("/achievements/:id", superadminOnly, c.AchievementController.Update)
-	auth.Delete("/achievements/:id", superadminOnly, c.AchievementController.Delete)
+	allRoles.Get("/achievements", c.AchievementController.FindAll)
+	allRoles.Get("/achievements/:id", c.AchievementController.FindById)
+	superadmin.Post("/achievements", c.AchievementController.Create)
+	superadmin.Put("/achievements/:id", c.AchievementController.Update)
+	superadmin.Delete("/achievements/:id", c.AchievementController.Delete)
 
 	// ==========================================
 	// MEMBER SOCIAL LINKS (member only)
 	// ==========================================
-	auth.Post("/member/social-links", memberOnly, c.MemberSocialLinkController.Create)
-	auth.Get("/member/social-links", memberOnly, c.MemberSocialLinkController.FindAllMine)
-	auth.Get("/member/social-links/:id", memberOnly, c.MemberSocialLinkController.FindById)
-	auth.Put("/member/social-links/:id", memberOnly, c.MemberSocialLinkController.Update)
-	auth.Delete("/member/social-links/:id", memberOnly, c.MemberSocialLinkController.Delete)
+	memberOnly.Post("/member/social-links", c.MemberSocialLinkController.Create)
+	memberOnly.Get("/member/social-links", c.MemberSocialLinkController.FindAllMine)
+	memberOnly.Get("/member/social-links/:id", c.MemberSocialLinkController.FindById)
+	memberOnly.Put("/member/social-links/:id", c.MemberSocialLinkController.Update)
+	memberOnly.Delete("/member/social-links/:id", c.MemberSocialLinkController.Delete)
 
 	// ==========================================
 	// MEMBER ACHIEVEMENTS
 	//   - create / read: member only (self)
 	//   - delete: super_admin only (corrective)
 	// ==========================================
-	auth.Post("/member/achievements", memberOnly, c.MemberAchievementController.Create)
-	auth.Get("/member/achievements", memberOnly, c.MemberAchievementController.FindAllMine)
-	auth.Get("/member/achievements/:achievement_id", memberOnly, c.MemberAchievementController.FindOne)
-	auth.Delete("/member/achievements/:member_id/:achievement_id", superadminOnly, c.MemberAchievementController.Delete)
+	memberOnly.Post("/member/achievements", c.MemberAchievementController.Create)
+	memberOnly.Get("/member/achievements", c.MemberAchievementController.FindAllMine)
+	memberOnly.Get("/member/achievements/:achievement_id", c.MemberAchievementController.FindOne)
+	superadmin.Delete("/member/achievements/:member_id/:achievement_id", c.MemberAchievementController.Delete)
 }
