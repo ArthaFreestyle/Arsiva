@@ -35,6 +35,8 @@ func (c *RouteConfig) SetupRoutes() {
 
 func (c *RouteConfig) SetupGuestRoutes() {
 	c.App.Post("/v1/login", c.AuthController.Login)
+	c.App.Post("/v1/register/member", c.AuthController.RegisterMember)
+	c.App.Post("/v1/register/guru", c.AuthController.RegisterGuru)
 	c.App.Get("uploads/*", c.UploadController.GetFile)
 }
 

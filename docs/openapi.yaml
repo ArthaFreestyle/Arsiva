@@ -149,6 +149,108 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
               example:
                 error: Unauthorized
+  /api/v1/register/member:
+    post:
+      tags:
+        - Auth
+      summary: Register as member
+      description: "Registrasi akun baru dengan role **member** (siswa). Endpoint ini terbuka untuk umum — tidak memerlukan token. Role dikunci server-side; field `role` di body diabaikan."
+      operationId: registerMember
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+            example:
+              username: siswa01
+              email: siswa01@example.com
+              password: Rahasia123!
+      responses:
+        "201":
+          description: Registrasi berhasil
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponseWrapper"
+              example:
+                data:
+                  id: "42"
+                  username: siswa01
+                  email: siswa01@example.com
+                  role: member
+                  created_at: "2026-05-15T10:23:11Z"
+        "400":
+          description: Validasi gagal (field wajib kosong, format email salah, password < 8 karakter)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Email atau username sudah digunakan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: email or username already in use
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/register/guru:
+    post:
+      tags:
+        - Auth
+      summary: Register as guru
+      description: "Registrasi akun baru dengan role **guru** (pengajar). Endpoint ini terbuka untuk umum — tidak memerlukan token. Role dikunci server-side; field `role` di body diabaikan."
+      operationId: registerGuru
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+            example:
+              username: guru01
+              email: guru01@example.com
+              password: Rahasia123!
+      responses:
+        "201":
+          description: Registrasi berhasil
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponseWrapper"
+              example:
+                data:
+                  id: "43"
+                  username: guru01
+                  email: guru01@example.com
+                  role: guru
+                  created_at: "2026-05-15T10:24:00Z"
+        "400":
+          description: Validasi gagal (field wajib kosong, format email salah, password < 8 karakter)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Email atau username sudah digunakan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: email or username already in use
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/users:
     get:
       tags:
@@ -3570,6 +3672,31 @@ components:
 
         Token berisi claims: `user_id`, `email`, `username`, `role`, `details` (role-specific: `GuruDetails` untuk guru, `MemberDetails` untuk member, `null` untuk super_admin)\n"
   schemas:
+    RegisterRequest:
+      type: object
+      required:
+        - username
+        - email
+        - password
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 50
+          description: Nama pengguna (unik, 3–50 karakter)
+          example: siswa01
+        email:
+          type: string
+          format: email
+          maxLength: 100
+          description: Alamat email (unik, di-lowercase sebelum disimpan)
+          example: siswa01@example.com
+        password:
+          type: string
+          format: password
+          minLength: 8
+          description: Password minimal 8 karakter
+          example: Rahasia123!
     LoginRequest:
       type: object
       required:
