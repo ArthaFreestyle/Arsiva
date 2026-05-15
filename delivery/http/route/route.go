@@ -185,11 +185,13 @@ func (c *RouteConfig) SetupAuthRoutes() {
 	auth.Post("/groups/join", memberOnly, c.GroupController.JoinGroup)
 
 	// ==========================================
-	// SUPERADMIN ONLY (sekolah management)
+	// SEKOLAH
+	//   - read: semua role ter-autentikasi
+	//   - write: super_admin only
 	// ==========================================
+	auth.Get("/sekolah", allRoles, c.SekolahController.FindAll)
+	auth.Get("/sekolah/:id", allRoles, c.SekolahController.FindById)
 	auth.Post("/sekolah", superadminOnly, c.SekolahController.Create)
-	auth.Get("/sekolah", superadminOnly, c.SekolahController.FindAll)
-	auth.Get("/sekolah/:id", superadminOnly, c.SekolahController.FindById)
 	auth.Put("/sekolah/:id", superadminOnly, c.SekolahController.Update)
 	auth.Delete("/sekolah/:id", superadminOnly, c.SekolahController.Delete)
 

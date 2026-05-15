@@ -1284,12 +1284,6 @@ paths:
           type: string
         description: Path file gambar
         example: 2026/03/majapahit.jpg
-        "401":
-          $ref: "#/components/responses/UnauthorizedResponse"
-        "403":
-          $ref: "#/components/responses/ForbiddenResponse"
-        "409":
-          $ref: "#/components/responses/ProfileIncompleteResponse"
     get:
       tags:
         - Upload
@@ -2343,8 +2337,6 @@ paths:
           $ref: "#/components/responses/UnauthorizedResponse"
         "403":
           $ref: "#/components/responses/ForbiddenResponse"
-        "409":
-          $ref: "#/components/responses/ProfileIncompleteResponse"
     get:
       tags:
         - Groups
@@ -2455,7 +2447,7 @@ paths:
         - Sekolah
       summary: Get all sekolah
       description: "Mengambil daftar sekolah dengan pagination dan pencarian. \n\n🔒
-        **Role**: `super_admin`\n"
+        **Role**: `member`, `guru`, `super_admin`\n"
       operationId: getAllSekolah
       security:
         - BearerAuth: []
@@ -2561,7 +2553,7 @@ paths:
         - Sekolah
       summary: Get sekolah by ID
       description: "Mengambil detail sekolah beserta daftar guru yang terdaftar. \n\n🔒
-        **Role**: `super_admin`\n"
+        **Role**: `member`, `guru`, `super_admin`\n"
       operationId: getSekolahById
       security:
         - BearerAuth: []
@@ -2941,8 +2933,6 @@ paths:
           $ref: "#/components/responses/UnauthorizedResponse"
         "403":
           $ref: "#/components/responses/ForbiddenResponse"
-        "409":
-          $ref: "#/components/responses/ProfileIncompleteResponse"
     delete:
       tags:
         - Guru
@@ -3402,8 +3392,6 @@ paths:
           $ref: "#/components/responses/UnauthorizedResponse"
         "403":
           $ref: "#/components/responses/ForbiddenResponse"
-        "409":
-          $ref: "#/components/responses/ProfileIncompleteResponse"
     get:
       tags:
         - Member Social Links
@@ -3503,8 +3491,6 @@ paths:
           $ref: "#/components/responses/UnauthorizedResponse"
         "403":
           $ref: "#/components/responses/ForbiddenResponse"
-        "409":
-          $ref: "#/components/responses/ProfileIncompleteResponse"
     delete:
       tags:
         - Member Social Links
