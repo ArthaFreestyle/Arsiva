@@ -3910,6 +3910,246 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
               example:
                 errors: "achievement sudah pernah di-unlock oleh member; tidak bisa dihapus"
+
+  # =====================================================================
+  /api/v1/progress/start:
+    post:
+      tags:
+        - Game Progress
+      summary: Mulai sesi bermain
+      description: "Memvalidasi konten (harus `is_published = true`), menghitung `max_score`, lalu membuat sesi Redis.\n\nAturan:\n- `content_type` ∈ `kuis` | `cerita` | `puzzle`\n- `duration_seconds` harus antara 10–3600\n- Jika sesi aktif untuk triple `(member_id, content_type, content_id)` sudah ada → **409**\n\n🔒 **Role**: `member`\n"
+      operationId: startProgressSession
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProgressStartRequest"
+      responses:
+        "201":
+          description: Sesi berhasil dibuat
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProgressStartResponseWrapper"
+        "400":
+          description: Validasi gagal (content_type / duration_seconds tidak valid)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "404":
+          description: Konten tidak ditemukan atau belum dipublikasikan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: "Sesi aktif sudah ada untuk konten ini. Response body menyertakan `expires_at` dari sesi yang sedang berjalan."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/progress/answer:
+    post:
+      tags:
+        - Game Progress
+      summary: Kirim jawaban (kuis)
+      description: "Mencatat jawaban untuk satu pertanyaan kuis. `pilihan_kuis.score` dari pilihan yang dipilih ditambahkan ke `running_skor` di Redis — **tidak ada write ke Postgres**.\n\nAturan:\n- `pertanyaan_id` harus milik `content_id` (kuis) yang sama\n- Jawaban kedua untuk `pertanyaan_id` yang sama → **409** (idempoten)\n\n🔒 **Role**: `member`\n"
+      operationId: submitProgressAnswer
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProgressAnswerRequest"
+      responses:
+        "200":
+          description: Jawaban diterima, mengembalikan skor terkini
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProgressAnswerResponseWrapper"
+        "400":
+          description: Validasi gagal atau pertanyaan tidak ada dalam kuis ini
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "404":
+          description: Sesi tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Pertanyaan ini sudah dijawab (idempotency guard)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/progress/scene:
+    post:
+      tags:
+        - Game Progress
+      summary: Rekam scene yang dikunjungi (cerita)
+      description: "Mencatat bahwa member mencapai scene tertentu. Jika `is_ending = true`, skor di-set ke `ending_point` scene tersebut dan sesi langsung di-finalize (ditulis ke Postgres).\n\nAturan:\n- `scene_id` harus milik `content_id` (cerita) yang sama\n\n🔒 **Role**: `member`\n"
+      operationId: submitProgressScene
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProgressSceneRequest"
+      responses:
+        "200":
+          description: "Scene dicatat. Jika bukan ending: `data` = null. Jika ending: `data` berisi `progres_id`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProgressFinalizeResponseWrapper"
+        "400":
+          description: Validasi gagal atau scene tidak ada dalam cerita ini
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "404":
+          description: Sesi tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/progress/solve:
+    post:
+      tags:
+        - Game Progress
+      summary: Submit hasil solve puzzle
+      description: "Mencatat apakah puzzle berhasil diselesaikan (`solved: true` → skor 1, `false` → skor 0). Sesi langsung di-finalize setelah endpoint ini dipanggil.\n\n🔒 **Role**: `member`\n"
+      operationId: submitProgressSolve
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProgressSolveRequest"
+      responses:
+        "200":
+          description: Puzzle dicatat dan sesi di-finalize
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProgressFinalizeResponseWrapper"
+        "400":
+          description: Validasi gagal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "404":
+          description: Sesi tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/progress/submit:
+    post:
+      tags:
+        - Game Progress
+      summary: Submit manual (kuis)
+      description: "Finalisasi manual untuk sesi kuis — menulis satu baris `member_progress` ke Postgres, menghapus sesi Redis, dan (jika skor sempurna) menambah `total_xp` member.\n\n**Catatan**: Untuk `cerita` dan `puzzle`, finalize otomatis terjadi saat endpoint `/scene` (ending) atau `/solve` dipanggil.\n\n🔒 **Role**: `member`\n"
+      operationId: submitProgressManual
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProgressSubmitRequest"
+      responses:
+        "200":
+          description: Sesi di-finalize, progres tersimpan ke database
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProgressFinalizeResponseWrapper"
+        "400":
+          description: Validasi gagal
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+  /api/v1/progress/session/{content_type}/{content_id}:
+    get:
+      tags:
+        - Game Progress
+      summary: Baca state sesi aktif
+      description: "Mengembalikan state sesi Redis saat ini (untuk FE recovery setelah refresh). Mengembalikan **404** jika tidak ada sesi aktif.\n\n🔒 **Role**: `member`\n"
+      operationId: getProgressSession
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: content_type
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [kuis, cerita, puzzle]
+          example: kuis
+        - name: content_id
+          in: path
+          required: true
+          schema:
+            type: integer
+          example: 3
+      responses:
+        "200":
+          description: State sesi aktif
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProgressSessionResponseWrapper"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "404":
+          description: Tidak ada sesi aktif untuk konten ini
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    # =====================================================================
 components:
   responses:
     UnauthorizedResponse:
@@ -5657,247 +5897,7 @@ components:
           example: 2
 
   # =====================================================================
-  # GAME PROGRESS
-  # =====================================================================
-  /api/v1/progress/start:
-    post:
-      tags:
-        - Game Progress
-      summary: Mulai sesi bermain
-      description: "Memvalidasi konten (harus `is_published = true`), menghitung `max_score`, lalu membuat sesi Redis.\n\nAturan:\n- `content_type` ∈ `kuis` | `cerita` | `puzzle`\n- `duration_seconds` harus antara 10–3600\n- Jika sesi aktif untuk triple `(member_id, content_type, content_id)` sudah ada → **409**\n\n🔒 **Role**: `member`\n"
-      operationId: startProgressSession
-      security:
-        - BearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ProgressStartRequest"
-      responses:
-        "201":
-          description: Sesi berhasil dibuat
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ProgressStartResponseWrapper"
-        "400":
-          description: Validasi gagal (content_type / duration_seconds tidak valid)
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          $ref: "#/components/responses/UnauthorizedResponse"
-        "403":
-          $ref: "#/components/responses/ForbiddenResponse"
-        "404":
-          description: Konten tidak ditemukan atau belum dipublikasikan
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "409":
-          description: "Sesi aktif sudah ada untuk konten ini. Response body menyertakan `expires_at` dari sesi yang sedang berjalan."
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-  /api/v1/progress/answer:
-    post:
-      tags:
-        - Game Progress
-      summary: Kirim jawaban (kuis)
-      description: "Mencatat jawaban untuk satu pertanyaan kuis. `pilihan_kuis.score` dari pilihan yang dipilih ditambahkan ke `running_skor` di Redis — **tidak ada write ke Postgres**.\n\nAturan:\n- `pertanyaan_id` harus milik `content_id` (kuis) yang sama\n- Jawaban kedua untuk `pertanyaan_id` yang sama → **409** (idempoten)\n\n🔒 **Role**: `member`\n"
-      operationId: submitProgressAnswer
-      security:
-        - BearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ProgressAnswerRequest"
-      responses:
-        "200":
-          description: Jawaban diterima, mengembalikan skor terkini
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ProgressAnswerResponseWrapper"
-        "400":
-          description: Validasi gagal atau pertanyaan tidak ada dalam kuis ini
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          $ref: "#/components/responses/UnauthorizedResponse"
-        "403":
-          $ref: "#/components/responses/ForbiddenResponse"
-        "404":
-          description: Sesi tidak ditemukan
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "409":
-          description: Pertanyaan ini sudah dijawab (idempotency guard)
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-  /api/v1/progress/scene:
-    post:
-      tags:
-        - Game Progress
-      summary: Rekam scene yang dikunjungi (cerita)
-      description: "Mencatat bahwa member mencapai scene tertentu. Jika `is_ending = true`, skor di-set ke `ending_point` scene tersebut dan sesi langsung di-finalize (ditulis ke Postgres).\n\nAturan:\n- `scene_id` harus milik `content_id` (cerita) yang sama\n\n🔒 **Role**: `member`\n"
-      operationId: submitProgressScene
-      security:
-        - BearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ProgressSceneRequest"
-      responses:
-        "200":
-          description: "Scene dicatat. Jika bukan ending: `data` = null. Jika ending: `data` berisi `progres_id`."
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ProgressFinalizeResponseWrapper"
-        "400":
-          description: Validasi gagal atau scene tidak ada dalam cerita ini
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          $ref: "#/components/responses/UnauthorizedResponse"
-        "403":
-          $ref: "#/components/responses/ForbiddenResponse"
-        "404":
-          description: Sesi tidak ditemukan
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-  /api/v1/progress/solve:
-    post:
-      tags:
-        - Game Progress
-      summary: Submit hasil solve puzzle
-      description: "Mencatat apakah puzzle berhasil diselesaikan (`solved: true` → skor 1, `false` → skor 0). Sesi langsung di-finalize setelah endpoint ini dipanggil.\n\n🔒 **Role**: `member`\n"
-      operationId: submitProgressSolve
-      security:
-        - BearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ProgressSolveRequest"
-      responses:
-        "200":
-          description: Puzzle dicatat dan sesi di-finalize
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ProgressFinalizeResponseWrapper"
-        "400":
-          description: Validasi gagal
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          $ref: "#/components/responses/UnauthorizedResponse"
-        "403":
-          $ref: "#/components/responses/ForbiddenResponse"
-        "404":
-          description: Sesi tidak ditemukan
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-  /api/v1/progress/submit:
-    post:
-      tags:
-        - Game Progress
-      summary: Submit manual (kuis)
-      description: "Finalisasi manual untuk sesi kuis — menulis satu baris `member_progress` ke Postgres, menghapus sesi Redis, dan (jika skor sempurna) menambah `total_xp` member.\n\n**Catatan**: Untuk `cerita` dan `puzzle`, finalize otomatis terjadi saat endpoint `/scene` (ending) atau `/solve` dipanggil.\n\n🔒 **Role**: `member`\n"
-      operationId: submitProgressManual
-      security:
-        - BearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/ProgressSubmitRequest"
-      responses:
-        "200":
-          description: Sesi di-finalize, progres tersimpan ke database
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ProgressFinalizeResponseWrapper"
-        "400":
-          description: Validasi gagal
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          $ref: "#/components/responses/UnauthorizedResponse"
-        "403":
-          $ref: "#/components/responses/ForbiddenResponse"
-  /api/v1/progress/session/{content_type}/{content_id}:
-    get:
-      tags:
-        - Game Progress
-      summary: Baca state sesi aktif
-      description: "Mengembalikan state sesi Redis saat ini (untuk FE recovery setelah refresh). Mengembalikan **404** jika tidak ada sesi aktif.\n\n🔒 **Role**: `member`\n"
-      operationId: getProgressSession
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: content_type
-          in: path
-          required: true
-          schema:
-            type: string
-            enum: [kuis, cerita, puzzle]
-          example: kuis
-        - name: content_id
-          in: path
-          required: true
-          schema:
-            type: integer
-          example: 3
-      responses:
-        "200":
-          description: State sesi aktif
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ProgressSessionResponseWrapper"
-        "401":
-          $ref: "#/components/responses/UnauthorizedResponse"
-        "403":
-          $ref: "#/components/responses/ForbiddenResponse"
-        "404":
-          description: Tidak ada sesi aktif untuk konten ini
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
 
-    # =====================================================================
-    # GAME PROGRESS SCHEMAS
     # =====================================================================
     ProgressStartRequest:
       type: object
