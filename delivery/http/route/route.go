@@ -25,6 +25,7 @@ type RouteConfig struct {
 	MemberSocialLinkController     http.MemberSocialLinkController
 	MemberAchievementController    http.MemberAchievementController
 	AchievementController          http.AchievementController
+	ProgressController             http.ProgressController
 	AuthMiddleware             fiber.Handler
 	ProfileCompleteMiddleware  fiber.Handler
 }
@@ -251,4 +252,14 @@ func (c *RouteConfig) SetupAuthRoutes() {
 	auth.Get("/member/achievements", memberRole, pc, c.MemberAchievementController.FindAllMine)
 	auth.Get("/member/achievements/:achievement_id", memberRole, pc, c.MemberAchievementController.FindOne)
 	auth.Delete("/member/achievements/:member_id/:achievement_id", superadminOnly, c.MemberAchievementController.Delete)
+
+	// ==========================================
+	// GAME PROGRESS (member only)
+	// ==========================================
+	auth.Post("/progress/start", memberRole, pc, c.ProgressController.Start)
+	auth.Post("/progress/answer", memberRole, pc, c.ProgressController.Answer)
+	auth.Post("/progress/scene", memberRole, pc, c.ProgressController.Scene)
+	auth.Post("/progress/solve", memberRole, pc, c.ProgressController.Solve)
+	auth.Post("/progress/submit", memberRole, pc, c.ProgressController.Submit)
+	auth.Get("/progress/session/:content_type/:content_id", memberRole, pc, c.ProgressController.GetSession)
 }

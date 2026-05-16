@@ -43,6 +43,7 @@ func Bootstrap(cfg BootstrapConfig) {
 	memberAchievementRepo := repository.NewMemberAchievementRepository(cfg.DB, cfg.Log)
 	memberSocialLinkRepo := repository.NewMemberSocialLinkRepository(cfg.DB, cfg.Log)
 	achievementRepo := repository.NewAchievementRepository(cfg.DB, cfg.Log)
+	memberProgressRepo := repository.NewMemberProgressRepository(cfg.DB, cfg.Log)
 
 	AuthUseCase := usecase.NewAuthUseCase(userRepo, cfg.Secret, cfg.Validate, cfg.Log, cfg.DB, guruRepo, memberRepo)
 	UserUseCase := usecase.NewUserUseCase(userRepo, cfg.Log, cfg.DB, cfg.Validate)
@@ -61,10 +62,13 @@ func Bootstrap(cfg BootstrapConfig) {
 	MemberSocialLinkUseCase := usecase.NewMemberSocialLinkUseCase(memberSocialLinkRepo, cfg.Log, cfg.Validate)
 	AchievementUseCase := usecase.NewAchievementUseCase(achievementRepo, cfg.Log, cfg.Validate)
 	MemberAchievementUseCase := usecase.NewMemberAchievementUseCase(memberAchievementRepo, memberRepo, achievementRepo, cfg.Log, cfg.Validate)
+	ProgressSessionUseCase := usecase.NewProgressSessionUseCase(memberProgressRepo, cfg.Redis, cfg.Log, cfg.Validate)
 
 	if !fiber.IsChild() {
 		cfg.Log.Info("Starting asset cleanup worker on master process...")
 		go startAssetCleanupCron(AssetUseCase, cfg.Log)
+		cfg.Log.Info("Starting progress flush worker on master process...")
+		go startProgressFlushWorker(ProgressSessionUseCase, cfg.Log)
 	}
 
 	AuthController := http.NewAuthController(cfg.Log, AuthUseCase)
@@ -84,6 +88,7 @@ func Bootstrap(cfg BootstrapConfig) {
 	MemberSocialLinkController := http.NewMemberSocialLinkController(MemberSocialLinkUseCase, cfg.Log)
 	AchievementController := http.NewAchievementController(AchievementUseCase, cfg.Log)
 	MemberAchievementController := http.NewMemberAchievementController(MemberAchievementUseCase, cfg.Log)
+	ProgressController := http.NewProgressController(ProgressSessionUseCase, cfg.Log)
 
 	// Create middleware
 	authMiddleware            := middleware.NewAuthMiddleware(cfg.Secret, cfg.Log)
@@ -108,6 +113,7 @@ func Bootstrap(cfg BootstrapConfig) {
 		MemberSocialLinkController:  MemberSocialLinkController,
 		MemberAchievementController: MemberAchievementController,
 		AchievementController:       AchievementController,
+		ProgressController:          ProgressController,
 		AuthMiddleware:              authMiddleware,
 		ProfileCompleteMiddleware:   profileCompleteMiddleware,
 	}

@@ -1,0 +1,246 @@
+package repository
+
+import (
+	"context"
+	"errors"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/sirupsen/logrus"
+
+	"ArthaFreestyle/Arsiva/internal/entity"
+)
+
+var ErrContentNotFound = errors.New("content not found or not published")
+
+type MemberProgressRepository interface {
+	// Content validation — checks exists + is_published in one query.
+	CheckContentExists(ctx context.Context, contentType string, contentId int) (bool, error)
+
+	// Max score per content type — fetched once at session start and cached in Redis.
+	GetKuisMaxScore(ctx context.Context, kuisId int) (int, error)
+	GetCeritaMaxScore(ctx context.Context, ceritaId int) (int, error)
+	// Puzzle max score is always 1 (binary), no DB query needed.
+
+	// Validates that a pertanyaan belongs to the given kuis.
+	CheckPertanyaanBelongsToKuis(ctx context.Context, pertanyaanId, kuisId int) (bool, error)
+
+	// Validates that a scene belongs to the given cerita.
+	CheckSceneBelongsToCerita(ctx context.Context, sceneId, ceritaId int) (bool, error)
+
+	// Returns the score of a selected jawaban choice.
+	GetJawabanScore(ctx context.Context, jawabanId, pertanyaanId int) (int, error)
+
+	// Returns the scene's is_ending and ending_point fields.
+	GetSceneEndingInfo(ctx context.Context, sceneId int) (isEnding bool, endingPoint int, err error)
+
+	// Returns the xp_reward from the content table (read fresh at finalize time).
+	GetContentXpReward(ctx context.Context, contentType string, contentId int) (int, error)
+
+	// Atomically inserts member_progress and optionally credits total_xp.
+	// Returns the new progres_id.
+	SaveProgress(ctx context.Context, progress *entity.MemberProgress, awardedXp int) (int, error)
+}
+
+type memberProgressRepositoryImpl struct {
+	DB  *pgxpool.Pool
+	Log *logrus.Logger
+}
+
+func NewMemberProgressRepository(db *pgxpool.Pool, log *logrus.Logger) MemberProgressRepository {
+	return &memberProgressRepositoryImpl{DB: db, Log: log}
+}
+
+func (r *memberProgressRepositoryImpl) CheckContentExists(ctx context.Context, contentType string, contentId int) (bool, error) {
+	var query string
+	switch contentType {
+	case "kuis":
+		query = `SELECT 1 FROM kuis WHERE kuis_id = $1 AND is_published = true`
+	case "cerita":
+		query = `SELECT 1 FROM cerita_interaktif WHERE cerita_id = $1 AND is_published = true`
+	case "puzzle":
+		query = `SELECT 1 FROM puzzles WHERE puzzle_id = $1 AND is_published = true`
+	default:
+		return false, ErrContentNotFound
+	}
+
+	var dummy int
+	err := r.DB.QueryRow(ctx, query, contentId).Scan(&dummy)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		r.Log.Errorf("CheckContentExists %s/%d: %v", contentType, contentId, err)
+		return false, err
+	}
+	return true, nil
+}
+
+func (r *memberProgressRepositoryImpl) GetKuisMaxScore(ctx context.Context, kuisId int) (int, error) {
+	// Sum of the highest-scoring choice per question — no N+1, done in one query.
+	query := `
+		SELECT COALESCE(SUM(max_choice.score), 0)
+		FROM pertanyaan_kuis q
+		JOIN LATERAL (
+			SELECT MAX(score) AS score
+			FROM pilihan_kuis
+			WHERE pertanyaan_id = q.pertanyaan_id
+		) max_choice ON true
+		WHERE q.kuis_id = $1
+	`
+	var maxScore int
+	err := r.DB.QueryRow(ctx, query, kuisId).Scan(&maxScore)
+	if err != nil {
+		r.Log.Errorf("GetKuisMaxScore kuis_id=%d: %v", kuisId, err)
+		return 0, err
+	}
+	return maxScore, nil
+}
+
+func (r *memberProgressRepositoryImpl) GetCeritaMaxScore(ctx context.Context, ceritaId int) (int, error) {
+	query := `
+		SELECT COALESCE(MAX(ending_point), 0)
+		FROM scene
+		WHERE cerita_id = $1 AND is_ending = true
+	`
+	var maxScore int
+	err := r.DB.QueryRow(ctx, query, ceritaId).Scan(&maxScore)
+	if err != nil {
+		r.Log.Errorf("GetCeritaMaxScore cerita_id=%d: %v", ceritaId, err)
+		return 0, err
+	}
+	return maxScore, nil
+}
+
+func (r *memberProgressRepositoryImpl) CheckPertanyaanBelongsToKuis(ctx context.Context, pertanyaanId, kuisId int) (bool, error) {
+	var dummy int
+	err := r.DB.QueryRow(ctx,
+		`SELECT 1 FROM pertanyaan_kuis WHERE pertanyaan_id = $1 AND kuis_id = $2`,
+		pertanyaanId, kuisId).Scan(&dummy)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		r.Log.Errorf("CheckPertanyaanBelongsToKuis: %v", err)
+		return false, err
+	}
+	return true, nil
+}
+
+func (r *memberProgressRepositoryImpl) CheckSceneBelongsToCerita(ctx context.Context, sceneId, ceritaId int) (bool, error) {
+	var dummy int
+	err := r.DB.QueryRow(ctx,
+		`SELECT 1 FROM scene WHERE scene_id = $1 AND cerita_id = $2`,
+		sceneId, ceritaId).Scan(&dummy)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		r.Log.Errorf("CheckSceneBelongsToCerita: %v", err)
+		return false, err
+	}
+	return true, nil
+}
+
+func (r *memberProgressRepositoryImpl) GetJawabanScore(ctx context.Context, jawabanId, pertanyaanId int) (int, error) {
+	var score int
+	err := r.DB.QueryRow(ctx,
+		`SELECT score FROM pilihan_kuis WHERE jawaban_id = $1 AND pertanyaan_id = $2`,
+		jawabanId, pertanyaanId).Scan(&score)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, pgx.ErrNoRows
+	}
+	if err != nil {
+		r.Log.Errorf("GetJawabanScore jawaban_id=%d: %v", jawabanId, err)
+		return 0, err
+	}
+	return score, nil
+}
+
+func (r *memberProgressRepositoryImpl) GetSceneEndingInfo(ctx context.Context, sceneId int) (bool, int, error) {
+	var isEnding bool
+	var endingPoint int
+	err := r.DB.QueryRow(ctx,
+		`SELECT is_ending, COALESCE(ending_point, 0) FROM scene WHERE scene_id = $1`,
+		sceneId).Scan(&isEnding, &endingPoint)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, 0, pgx.ErrNoRows
+	}
+	if err != nil {
+		r.Log.Errorf("GetSceneEndingInfo scene_id=%d: %v", sceneId, err)
+		return false, 0, err
+	}
+	return isEnding, endingPoint, nil
+}
+
+func (r *memberProgressRepositoryImpl) GetContentXpReward(ctx context.Context, contentType string, contentId int) (int, error) {
+	var query string
+	switch contentType {
+	case "kuis":
+		query = `SELECT xp_reward FROM kuis WHERE kuis_id = $1`
+	case "cerita":
+		query = `SELECT xp_reward FROM cerita_interaktif WHERE cerita_id = $1`
+	case "puzzle":
+		query = `SELECT xp_reward FROM puzzles WHERE puzzle_id = $1`
+	default:
+		return 0, ErrContentNotFound
+	}
+
+	var xpReward int
+	err := r.DB.QueryRow(ctx, query, contentId).Scan(&xpReward)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, ErrContentNotFound
+	}
+	if err != nil {
+		r.Log.Errorf("GetContentXpReward %s/%d: %v", contentType, contentId, err)
+		return 0, err
+	}
+	return xpReward, nil
+}
+
+func (r *memberProgressRepositoryImpl) SaveProgress(ctx context.Context, progress *entity.MemberProgress, awardedXp int) (int, error) {
+	tx, err := r.DB.Begin(ctx)
+	if err != nil {
+		r.Log.Errorf("SaveProgress begin tx: %v", err)
+		return 0, err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback(ctx)
+		}
+	}()
+
+	var groupId *string
+	if progress.GroupId != "" {
+		groupId = &progress.GroupId
+	}
+
+	var progresId int
+	err = tx.QueryRow(ctx, `
+		INSERT INTO member_progress
+			(member_id, group_id, content_type, content_id, skor, xp_reward, completed_at, duration)
+		VALUES ($1, $2, $3::content_type_enum, $4, $5, $6, NOW(), $7)
+		RETURNING progres_id
+	`, progress.MemberId, groupId, progress.ContentType, progress.ContentId,
+		progress.Skor, awardedXp, progress.Duration).Scan(&progresId)
+	if err != nil {
+		r.Log.Errorf("SaveProgress insert: %v", err)
+		return 0, err
+	}
+
+	if awardedXp > 0 {
+		_, err = tx.Exec(ctx,
+			`UPDATE members SET total_xp = total_xp + $1 WHERE member_id = $2`,
+			awardedXp, progress.MemberId)
+		if err != nil {
+			r.Log.Errorf("SaveProgress update xp: %v", err)
+			return 0, err
+		}
+	}
+
+	if err = tx.Commit(ctx); err != nil {
+		r.Log.Errorf("SaveProgress commit: %v", err)
+		return 0, err
+	}
+	return progresId, nil
+}
