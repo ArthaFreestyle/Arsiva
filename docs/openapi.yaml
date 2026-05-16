@@ -118,6 +118,8 @@ tags:
     description: "Unlock & baca achievement milik member yang sedang login (🔒 member only)"
   - name: Game Progress
     description: "Sesi bermain quiz / cerita / puzzle — scoring real-time via Redis, flush ke member_progress saat selesai (🔒 member only)"
+  - name: Leaderboard
+    description: "Ranking publik (alltime & monthly) dan ranking per-group (🔒 semua role ter-autentikasi)"
 paths:
   /api/v1/login:
     post:
@@ -4149,6 +4151,119 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  # =====================================================================
+  # LEADERBOARD
+  # =====================================================================
+  /api/v1/leaderboard:
+    get:
+      tags:
+        - Leaderboard
+      summary: Public / global leaderboard
+      description: "Mengembalikan ranking semua member berdasarkan XP.\n\n**`period=alltime`** (default) — urut berdasarkan `total_xp` DESC. Semua member masuk, termasuk yang XP = 0.\n\n**`period=monthly`** — urut berdasarkan XP yang didapat bulan kalender ini (zona waktu **Asia/Jakarta**). Hanya member yang punya minimal satu `member_progress.completed_at` dalam bulan ini yang muncul.\n\n`rank` adalah dense rank (`RANK()`) — ties berbagi rank yang sama (1, 1, 3, ...).\n\n🔒 **Role**: `member`, `guru`, `super_admin` — tidak memerlukan ProfileComplete.\n"
+      operationId: getPublicLeaderboard
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [alltime, monthly]
+            default: alltime
+          description: "Periode ranking. `alltime` = semua waktu; `monthly` = bulan kalender ini (WIB)"
+        - name: sekolah_id
+          in: query
+          schema:
+            type: integer
+          description: "Filter ranking ke satu sekolah. Rank 1 = teratas di sekolah tersebut."
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: Leaderboard berhasil diambil
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicLeaderboardResponseWrapper"
+        "400":
+          description: "Parameter tidak valid (page/size di luar range, sekolah_id bukan angka, period tidak dikenal)"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+  /api/v1/groups/{id}/leaderboard:
+    get:
+      tags:
+        - Leaderboard
+      summary: Group leaderboard
+      description: "Mengembalikan ranking member dalam sebuah group berdasarkan XP yang didapat dari konten group tersebut.\n\nSemua member group tampil, termasuk yang belum punya `member_progress` sama sekali (muncul dengan `group_xp: 0, completed_count: 0`).\n\nTiebreaker: `group_xp DESC → completed_count DESC → total_xp DESC → member_id ASC`.\n\nAkses: pemilik group (guru yang membuat), member yang bergabung, atau `super_admin`.\n\n🔒 **Role**: `member`, `guru`, `super_admin` — memerlukan ProfileComplete.\n"
+      operationId: getGroupLeaderboard
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: group_id (UUID / VARCHAR 191)
+          example: abc123-def456
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+      responses:
+        "200":
+          description: Group leaderboard berhasil diambil
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupLeaderboardResponseWrapper"
+        "400":
+          description: Parameter pagination tidak valid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          description: Caller bukan member / owner / super_admin dari group ini
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Group tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
     # =====================================================================
 components:
   responses:
@@ -6096,3 +6211,145 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/ProgressSessionResponse"
+    # =====================================================================
+    # LEADERBOARD SCHEMAS
+    # =====================================================================
+    LeaderboardSekolah:
+      type: object
+      properties:
+        sekolah_id:
+          type: integer
+          example: 7
+        nama_sekolah:
+          type: string
+          example: SMAN 1 Bandung
+    PublicLeaderboardItem:
+      type: object
+      properties:
+        rank:
+          type: integer
+          description: "RANK() — ties berbagi rank yang sama (1, 1, 3, ...)"
+          example: 1
+        member_id:
+          type: integer
+          example: 42
+        username:
+          type: string
+          example: ayu
+        foto_profil:
+          type: string
+          nullable: true
+          example: /uploads/abc.webp
+        level:
+          type: integer
+          example: 3
+        total_xp:
+          type: integer
+          example: 1850
+        monthly_xp:
+          type: integer
+          description: "0 untuk period=alltime; nilai XP bulan ini untuk period=monthly"
+          example: 320
+        sekolah:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/LeaderboardSekolah"
+    PublicLeaderboardResponse:
+      type: object
+      properties:
+        period:
+          type: string
+          enum: [alltime, monthly]
+          example: monthly
+        period_start:
+          type: string
+          nullable: true
+          description: "ISO-8601 dengan offset +07:00 (Jakarta). null untuk alltime."
+          example: "2026-05-01T00:00:00+07:00"
+        page:
+          type: integer
+          example: 1
+        size:
+          type: integer
+          example: 20
+        total:
+          type: integer
+          description: "Jumlah total member (sebelum LIMIT/OFFSET)"
+          example: 137
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/PublicLeaderboardItem"
+    PublicLeaderboardResponseWrapper:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/PublicLeaderboardResponse"
+    GroupLeaderboardHeader:
+      type: object
+      properties:
+        group_id:
+          type: string
+          example: abc123-def456
+        group_name:
+          type: string
+          example: Kelas XI IPA 3
+        group_thumbnail:
+          type: string
+          nullable: true
+          example: /uploads/group-thumb.webp
+    GroupLeaderboardItem:
+      type: object
+      properties:
+        rank:
+          type: integer
+          description: "RANK() — ties berbagi rank yang sama (1, 1, 3, ...)"
+          example: 1
+        member_id:
+          type: integer
+          example: 42
+        username:
+          type: string
+          example: ayu
+        foto_profil:
+          type: string
+          nullable: true
+          example: /uploads/abc.webp
+        level:
+          type: integer
+          example: 3
+        group_xp:
+          type: integer
+          description: "Total XP dari konten group ini"
+          example: 450
+        completed_count:
+          type: integer
+          description: "Jumlah konten yang diselesaikan dalam group ini"
+          example: 6
+        total_xp:
+          type: integer
+          description: "Total XP member (semua waktu, semua group) — digunakan sebagai tiebreaker"
+          example: 1850
+    GroupLeaderboardResponse:
+      type: object
+      properties:
+        group:
+          $ref: "#/components/schemas/GroupLeaderboardHeader"
+        page:
+          type: integer
+          example: 1
+        size:
+          type: integer
+          example: 20
+        total:
+          type: integer
+          example: 32
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/GroupLeaderboardItem"
+    GroupLeaderboardResponseWrapper:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/GroupLeaderboardResponse"
