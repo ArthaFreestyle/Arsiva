@@ -401,6 +401,40 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/users/deleted:
+    get:
+      tags:
+        - Users
+      summary: List soft-deleted users
+      description: "Mengambil seluruh user yang sudah dihapus secara soft-delete (`is_active = false`). \
+
+        🔒 **Role**: `super_admin`\n"
+      operationId: getDeletedUsers
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Daftar user yang telah dihapus
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserListResponseWrapper"
+              example:
+                data:
+                  - id: 550e8400-e29b-41d4-a716-446655440000
+                    username: olduser
+                    email: olduser@example.com
+                    role: member
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/users/search:
     get:
       tags:
@@ -578,6 +612,67 @@ paths:
           $ref: "#/components/responses/UnauthorizedResponse"
         "403":
           $ref: "#/components/responses/ForbiddenResponse"
+  /api/v1/users/{id}/restore:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        description: UUID user yang akan di-restore
+        schema:
+          type: string
+          format: uuid
+        example: 550e8400-e29b-41d4-a716-446655440000
+    patch:
+      tags:
+        - Users
+      summary: Restore soft-deleted user
+      description: "Mengaktifkan kembali user yang sudah dihapus (`is_active = false → true`). \
+
+        Mengembalikan `409 Conflict` jika user sudah aktif. \
+
+        🔒 **Role**: `super_admin`\n"
+      operationId: restoreUser
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: User berhasil di-restore
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponseWrapper"
+              example:
+                data:
+                  id: 550e8400-e29b-41d4-a716-446655440000
+                  username: olduser
+                  email: olduser@example.com
+                  role: member
+        "404":
+          description: User tidak ditemukan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: Not Found
+        "409":
+          description: User sudah aktif
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: Conflict
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "500":
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /api/v1/categories/article:
     get:
       tags:

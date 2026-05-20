@@ -7,20 +7,24 @@ import (
 	"ArthaFreestyle/Arsiva/internal/repository"
 	"ArthaFreestyle/Arsiva/internal/utils"
 	"context"
+	"errors"
 	"strings"
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v3"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sirupsen/logrus"
 )
 
 type UserUseCase interface {
 	GetAllUsers(ctx context.Context) ([]*model.UserResponse, error)
+	GetDeletedUsers(ctx context.Context) ([]*model.UserResponse, error)
 	GetUserById(ctx context.Context,UserId string) (*model.UserResponse, error)
 	SearchUsersByEmail(ctx context.Context,emailQuery string) ([]*model.UserResponse, error)
 	CreateUser(ctx context.Context,user *model.UserRequest) (*model.UserResponse, error)
 	UpdateUser(ctx context.Context,user *model.UserRequest, UserId string) (*model.UserResponse, error)
 	DeleteUser(ctx context.Context,UserId string) (error)
+	RestoreUser(ctx context.Context,UserId string) (*model.UserResponse, error)
 }
 
 type UserUseCaseImpl struct {
@@ -147,4 +151,37 @@ func (c *UserUseCaseImpl) DeleteUser(ctx context.Context,UserId string) (error) 
 	}
 
 	return nil
+}
+
+func (c *UserUseCaseImpl) GetDeletedUsers(ctx context.Context) ([]*model.UserResponse, error) {
+	users,err := c.UserRepository.GetDeletedUsers(ctx)
+	if err != nil {
+		return nil,err
+	}
+
+	return converter.ToUsersResponse(users),nil
+}
+
+func (c *UserUseCaseImpl) RestoreUser(ctx context.Context,UserId string) (*model.UserResponse, error) {
+	user,err := c.UserRepository.GetUserById(ctx,UserId)
+	if err != nil {
+		c.Log.Warnf("Error getting user for restore: %v", err)
+		if errors.Is(err,pgx.ErrNoRows) {
+			return nil,fiber.ErrNotFound
+		}
+		return nil,fiber.ErrInternalServerError
+	}
+
+	if user.IsActive {
+		return nil,fiber.ErrConflict
+	}
+
+	err = c.UserRepository.RestoreUser(ctx,user)
+	if err != nil {
+		c.Log.Warnf("Error restoring user: %v", err)
+		return nil,fiber.ErrInternalServerError
+	}
+
+	user.IsActive = true
+	return converter.ToUserResponse(user),nil
 }

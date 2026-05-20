@@ -9,11 +9,13 @@ import (
 
 type UserController interface {
 	GetAllUsers(ctx fiber.Ctx) error
+	GetDeletedUsers(ctx fiber.Ctx) error
 	GetUserById(ctx fiber.Ctx) error
 	SearchUsersByEmail(ctx fiber.Ctx) error
 	CreateUser(ctx fiber.Ctx) error
 	UpdateUser(ctx fiber.Ctx) error
 	DeleteUser(ctx fiber.Ctx) error
+	RestoreUser(ctx fiber.Ctx) error
 }
 
 type UserControllerImpl struct {
@@ -119,6 +121,34 @@ func (u *UserControllerImpl) DeleteUser(ctx fiber.Ctx) error {
 
 	res := model.WebResponse[string]{
 		Data: "User deleted successfully",
+	}
+
+	return ctx.Status(fiber.StatusOK).JSON(res)
+}
+
+func (u *UserControllerImpl) GetDeletedUsers(ctx fiber.Ctx) error {
+	users,err := u.UserUseCase.GetDeletedUsers(ctx)
+	if err != nil {
+		return err
+	}
+
+	res := model.WebResponse[[]*model.UserResponse]{
+		Data: users,
+	}
+
+	return ctx.Status(fiber.StatusOK).JSON(res)
+}
+
+func (u *UserControllerImpl) RestoreUser(ctx fiber.Ctx) error {
+	userId := ctx.Params("id")
+	user,err := u.UserUseCase.RestoreUser(ctx,userId)
+	if err != nil {
+		u.Log.Warnf("Failed restore user : %+v", err)
+		return err
+	}
+
+	res := model.WebResponse[*model.UserResponse]{
+		Data: user,
 	}
 
 	return ctx.Status(fiber.StatusOK).JSON(res)

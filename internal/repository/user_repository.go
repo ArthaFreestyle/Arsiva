@@ -11,11 +11,13 @@ import (
 type UserRepository interface {
 	FindByEmail(ctx context.Context,email string) (*entity.User, error)
 	GetAllUsers(ctx context.Context) ([]*entity.User, error)
+	GetDeletedUsers(ctx context.Context) ([]*entity.User, error)
 	GetUserById(ctx context.Context,userId string) (*entity.User, error)
 	SearchByEmail(ctx context.Context,emailQuery string,limit int) ([]*entity.User, error)
 	CreateUser(ctx context.Context,user *entity.User) (*entity.User, error)
 	UpdateUser(ctx context.Context,user *entity.User) (*entity.User, error)
 	DeleteUser(ctx context.Context,user *entity.User) (error)
+	RestoreUser(ctx context.Context,user *entity.User) error
 }
 
 type UserRepositoryImpl struct {
@@ -68,7 +70,7 @@ func (r *UserRepositoryImpl) GetAllUsers(ctx context.Context) ([]*entity.User, e
 }
 
 func (r *UserRepositoryImpl) GetUserById(ctx context.Context,userId string) (*entity.User, error) {
-	SQL := `SELECT u.user_id, u.username, u.email, u.role FROM users u
+	SQL := `SELECT u.user_id, u.username, u.email, u.role, u.is_active FROM users u
 	WHERE u.user_id = $1`
 	
 	rows,err := r.DB.Query(context.Background(),SQL,userId)
@@ -138,7 +140,38 @@ func (r *UserRepositoryImpl) UpdateUser(ctx context.Context,user *entity.User) (
 
 func (r *UserRepositoryImpl) DeleteUser(ctx context.Context,user *entity.User) (error) {
 	SQL := `UPDATE users SET is_active = false WHERE user_id = $1`
-	
+
+	_,err := r.DB.Exec(context.Background(),SQL,user.UserId)
+	if err != nil {
+		return err
+	}
+
+	r.Log.Info("query : ",SQL)
+
+	return nil
+}
+
+func (r *UserRepositoryImpl) GetDeletedUsers(ctx context.Context) ([]*entity.User, error) {
+	SQL := `SELECT u.user_id, u.username, u.email, u.role FROM users u
+	WHERE u.is_active = false`
+
+	rows,err := r.DB.Query(context.Background(),SQL)
+	if err != nil {
+		return nil,err
+	}
+
+	r.Log.Info("query : ",SQL)
+	users,err := pgx.CollectRows(rows,pgx.RowToAddrOfStructByNameLax[entity.User])
+	if err != nil {
+		return nil,err
+	}
+
+	return users,nil
+}
+
+func (r *UserRepositoryImpl) RestoreUser(ctx context.Context,user *entity.User) error {
+	SQL := `UPDATE users SET is_active = true WHERE user_id = $1`
+
 	_,err := r.DB.Exec(context.Background(),SQL,user.UserId)
 	if err != nil {
 		return err
