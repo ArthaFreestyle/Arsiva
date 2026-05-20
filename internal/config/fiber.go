@@ -13,9 +13,16 @@ import (
 func NewFiber(config *viper.Viper) *fiber.App {
 	var app = fiber.New(
 		fiber.Config{
-			AppName : config.GetString("app.name"),
+			AppName:      config.GetString("app.name"),
 			ErrorHandler: NewErrorHandler(),
-			
+			// Trust the real client IP forwarded by nginx (X-Real-IP header).
+			// Private covers all Docker bridge / RFC-1918 ranges automatically.
+			TrustProxy: config.GetBool("app.trust_proxy"),
+			TrustProxyConfig: fiber.TrustProxyConfig{
+				Private:  true,
+				Loopback: true,
+			},
+			ProxyHeader: "X-Real-IP",
 		},
 	)
 

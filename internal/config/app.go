@@ -7,13 +7,14 @@ import (
 	"ArthaFreestyle/Arsiva/internal/repository"
 	"ArthaFreestyle/Arsiva/internal/usecase"
 	"context"
+	"time"
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v3"
+	"github.com/gofiber/fiber/v3/middleware/limiter"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
-	"time"
 )
 
 type BootstrapConfig struct {
@@ -96,6 +97,10 @@ func Bootstrap(cfg BootstrapConfig) {
 	// Create middleware
 	authMiddleware            := middleware.NewAuthMiddleware(cfg.Secret, cfg.Log)
 	profileCompleteMiddleware := middleware.RequireProfileComplete()
+	authLimiter              := limiter.New(limiter.Config{
+		Max:        cfg.Config.GetInt("app.rate_limit.max"),
+		Expiration: time.Duration(cfg.Config.GetInt("app.rate_limit.expiration_seconds")) * time.Second,
+	})
 
 	routeConfig := route.RouteConfig{
 		App:                       cfg.App,
@@ -120,6 +125,7 @@ func Bootstrap(cfg BootstrapConfig) {
 		LeaderboardController:       LeaderboardController,
 		AuthMiddleware:              authMiddleware,
 		ProfileCompleteMiddleware:   profileCompleteMiddleware,
+		AuthLimiter:                 authLimiter,
 	}
 
 	routeConfig.SetupRoutes()

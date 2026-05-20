@@ -206,6 +206,14 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
               example:
                 errors: wrong login page for this account
+        "429":
+          description: Terlalu banyak percobaan login — coba lagi setelah satu menit
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                errors: Too Many Requests
   /api/v1/register/member:
     post:
       tags:
@@ -251,6 +259,14 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
               example:
                 error: email or username already in use
+        "429":
+          description: Terlalu banyak percobaan registrasi — coba lagi setelah satu menit
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                errors: Too Many Requests
         "500":
           description: Internal server error
           content:
@@ -302,6 +318,14 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
               example:
                 error: email or username already in use
+        "429":
+          description: Terlalu banyak percobaan registrasi — coba lagi setelah satu menit
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                errors: Too Many Requests
         "500":
           description: Internal server error
           content:

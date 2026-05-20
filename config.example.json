@@ -1,7 +1,12 @@
 {
     "app":{
         "name" : "Arsiva",
-        "version" : "1.0.0"
+        "version" : "1.0.0",
+        "trust_proxy" : true,
+        "rate_limit" : {
+            "max" : 10,
+            "expiration_seconds" : 60
+        }
     },
     "web" :{
         "prefork" : false,
