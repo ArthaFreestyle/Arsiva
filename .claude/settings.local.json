@@ -14,7 +14,16 @@
       "Bash(Select-Object Name, PSIsContainer)",
       "Bash(xargs grep -l \"Claims\\\\|SekolahResponse\")",
       "Bash(go test *)",
-      "Bash(Test-Path *)"
+      "Bash(Test-Path *)",
+      "Bash(awk ' *)",
+      "Bash(python3 *)",
+      "Read(//tmp/**)",
+      "Bash(go list *)",
+      "Bash(go get *)",
+      "Bash(go vet *)",
+      "Bash(grep -n \"awardedXp = xpReward\\\\|total_xp.*total_xp.*awardedXp\\\\|total_xp + \\\\$1\" /home/artha/Documents/Arsiva/internal/usecase/progress_session_usecase.go /home/artha/Documents/Arsiva/internal/repository/member_progress_repository.go)",
+      "Bash(grep -v \"total_xp + \\\\$1\\\\|total_xp.*awardedXp\\\\|comment\\\\|//\")",
+      "Bash(gh label *)"
     ]
   }
 }

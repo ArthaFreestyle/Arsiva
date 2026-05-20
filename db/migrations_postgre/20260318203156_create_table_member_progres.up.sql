@@ -5,6 +5,7 @@ CREATE TABLE member_progress (
     content_type content_type_enum NOT NULL,
     content_id INTEGER NOT NULL,
     skor INTEGER NULL,
+    xp_reward INTEGER NOT NULL DEFAULT 0,
     completed_at TIMESTAMP(0) NULL,
     duration INTEGER NOT NULL,
 

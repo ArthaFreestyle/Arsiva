@@ -174,9 +174,17 @@ The application manages these core domains:
 
 ### JWT-Based Auth
 - Users login via `/v1/login` endpoint with email + password
+- Login also accepts an `expected_role` field; the server rejects mismatched roles (prevents a member token being issued to someone using the guru login form, etc.)
 - Server returns `access_token` and `refresh_token`
 - Tokens are validated using `AuthMiddleware` on protected routes
 - JWT secret configured in `config.json` under `app.jwt-secret`
+
+### Profile Completion Gate
+After auth, most action endpoints additionally pass through `ProfileCompleteMiddleware` so half-onboarded users (account exists but `guru`/`member` profile row not yet filled in) cannot reach action endpoints. Routes that intentionally skip this check:
+- `POST /v1/guru`, `POST /v1/member` — profile creation itself
+- `GET /v1/guru/me`, `GET /v1/member/me` — let the FE detect "no profile yet"
+
+The middleware is wired in `internal/config/app.go` and applied per-route in `delivery/http/route/route.go`.
 
 ### Role-Based Access Control (RBAC)
 Three roles defined in database enum `role_enum`:
@@ -186,16 +194,27 @@ Three roles defined in database enum `role_enum`:
 
 ### Route Protection
 Routes are protected via middleware chain:
-1. `AuthMiddleware` - Validates JWT token, extracts user claims
-2. `RoleMiddleware` - Checks user role against allowed roles
+1. `AuthMiddleware` — validates JWT token, extracts user claims (applied at the `/v1` group level)
+2. `RoleMiddleware` — checks user role against allowed roles (per-route)
+3. `ProfileCompleteMiddleware` — gates action endpoints on profile completion (per-route, see above)
 
 Example from `delivery/http/route/route.go`:
 ```go
 superadminOnly := middleware.RoleMiddleware("super_admin")
-guruAdmin := middleware.RoleMiddleware("guru", "super_admin")
+guruAdminRole  := middleware.RoleMiddleware("guru", "super_admin")
 auth.Get("/users", superadminOnly, c.UserController.GetAllUsers)
-auth.Post("/articles", guruAdmin, c.ArticleController.CreateArticle)
+auth.Post("/articles", guruAdminRole, c.ProfileCompleteMiddleware, c.ArticleController.CreateArticle)
 ```
+
+### Fiber v3 middleware gotcha (IMPORTANT)
+Fiber v3's `Group(prefix, ...handlers)` registers the handlers via `app.Use(prefix, ...)` under the hood. **Empty-prefix sub-groups leak middleware to every route under the parent prefix** — e.g. `auth.Group("", roleMW)` causes `roleMW` to run on every `/v1` route, not just routes registered on that sub-group. With multiple role-based sub-groups this means every role check runs on every request and the strictest one wins, so every endpoint returns 403.
+
+To compose per-route middleware, **pass it inline** on the route call:
+```go
+auth.Get(path, roleMW, profileCompleteMW, handler)
+```
+
+Also: route methods (`Get`/`Post`/etc.) take individual `fiber.Handler` args, not a `[]fiber.Handler`. Defining middleware as a slice and passing the slice as one argument panics at startup with `group: invalid handler #0 ([]func(fiber.Ctx) error)`. Build each role middleware once at the top of `SetupAuthRoutes` and reuse the variable across calls.
 
 ### Password Security
 - Passwords hashed with bcrypt (cost factor 12) via `internal/utils/password.go`
@@ -253,11 +272,16 @@ All runs on self-hosted runner.
 
 ## Code Organization
 
+Notable non-obvious entries:
+- `cmd/worker/main.go` — placeholder entrypoint for future background jobs; not built or run by anything today.
+- `testing/script.js` — load-test script (k6-style), not Go tests. Unit tests are still `go test ./...`.
+- `architecture.png` — Clean Architecture diagram referenced from README.
+
 ```
 Arsiva/
 ├── cmd/
 │   ├── web/main.go           # HTTP server entry point
-│   └── worker/main.go        # (placeholder for background jobs)
+│   └── worker/main.go        # placeholder, no jobs wired yet
 ├── delivery/
 │   └── http/
 │       ├── middleware/       # Auth & role middleware
@@ -301,15 +325,13 @@ func TestNewUserUseCase(t *testing.T) {
 
 ## API Documentation
 
-OpenAPI/Swagger documentation is served at `/docs` endpoint and at:
-- **Docs folder**: `docs/openapi.yaml`
-- **Live URL**: [Swagger UI](https://petstore.swagger.io/?url=https://raw.githubusercontent.com/ArthaFreestyle/Arsiva/main/docs/openapi.yaml)
+The OpenAPI spec lives at `docs/openapi.yaml`. The server mounts that folder as static files at `/docs/*` (`app.Get("/docs/*", static.New("./docs"))` in `internal/config/fiber.go`) — it serves the raw YAML, not a Swagger UI. Use the petstore.swagger.io link in `README.md` to view it rendered.
 
 Routes are organized by resource and role requirements in `delivery/http/route/route.go`:
-- Guest routes: `/v1/login`, `/uploads/*`
-- Authenticated routes: Protected by `AuthMiddleware`
-- Admin routes: Protected by `RoleMiddleware` (super_admin only)
-- Content management: Protected by `RoleMiddleware` (guru, super_admin)
+- Guest routes: `POST /v1/login`, `POST /v1/register/member`, `POST /v1/register/guru`, `GET /uploads/*`
+- Authenticated routes: protected by `AuthMiddleware` (applied at `/v1` group level)
+- Admin routes: additionally guarded by `RoleMiddleware("super_admin")`
+- Content management: additionally guarded by `RoleMiddleware("guru", "super_admin")` + `ProfileCompleteMiddleware`
 
 ## Important Configuration Details
 
@@ -339,19 +361,12 @@ Configured in `config.json` under `app.jwt-secret`. Used by auth middleware to v
 
 ## Adding a New API Endpoint
 
-1. **Create entity** in `internal/entity/` if needed
-2. **Create repository interface & implementation** in `internal/repository/`
-3. **Create use case interface & implementation** in `internal/usecase/`
-4. **Create request/response models** in `internal/model/`
-5. **Create converter functions** in `internal/model/converter/`
-6. **Create controller** in `internal/delivery/http/`
-7. **Register route** in `delivery/http/route/route.go`
-8. **Wire dependencies** in `internal/config/app.go` Bootstrap function
+Follow the existing layer layout (entity → repository → usecase → model/converter → controller → route → wire in `internal/config/app.go` Bootstrap). Mirror a nearby domain (e.g. `sekolah` or `achievement`) for boilerplate — every layer pairs an interface with a `*Impl` implementation.
 
 ### Adding Database Schema
-1. Create migration: `migrate create -ext sql -dir db/migrations_postgre create_table_xxx`
-2. Implement up and down SQL files
-3. Run: `make migrate`
+1. `migrate create -ext sql -dir db/migrations_postgre create_table_xxx`
+2. Fill in up/down SQL
+3. `make migrate`
 
 ## Debugging
 
