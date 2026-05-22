@@ -74,6 +74,9 @@ func (m *mockGroupRepoForLeaderboard) CreateGroup(_ context.Context, g *entity.G
 func (m *mockGroupRepoForLeaderboard) GetAllGroupsByGuru(_ context.Context, _ int, _, _ int, _ string) ([]*entity.Group, int, error) {
 	return nil, 0, nil
 }
+func (m *mockGroupRepoForLeaderboard) GetAllGroupsByMember(_ context.Context, _ int, _, _ int, _ string) ([]*entity.Group, int, error) {
+	return nil, 0, nil
+}
 func (m *mockGroupRepoForLeaderboard) UpdateGroup(_ context.Context, g *entity.Group) (*entity.Group, error) {
 	return g, nil
 }

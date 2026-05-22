@@ -21,7 +21,7 @@ import (
 type GroupUseCase interface {
 	// CRUD
 	CreateGroup(ctx context.Context, req *model.GroupCreateRequest, userId string) (*model.GroupResponse, error)
-	GetAllGroups(ctx context.Context, userId string, page int, size int, search string) ([]*model.GroupResponse, int, error)
+	GetAllGroups(ctx context.Context, userId string, role string, page int, size int, search string) ([]*model.GroupResponse, int, error)
 	GetGroupDetail(ctx context.Context, groupId string, userId string) (*model.GroupDetailResponse, error)
 	UpdateGroup(ctx context.Context, groupId string, req *model.GroupUpdateRequest, userId string) (*model.GroupResponse, error)
 	DeleteGroup(ctx context.Context, groupId string, userId string) error
@@ -82,12 +82,25 @@ func (u *groupUseCaseImpl) CreateGroup(ctx context.Context, req *model.GroupCrea
 	return converter.ToGroupResponse(createdGroup), nil
 }
 
-func (u *groupUseCaseImpl) GetAllGroups(ctx context.Context, userId string, page int, size int, search string) ([]*model.GroupResponse, int, error) {
+func (u *groupUseCaseImpl) GetAllGroups(ctx context.Context, userId string, role string, page int, size int, search string) ([]*model.GroupResponse, int, error) {
 	if page < 1 {
 		page = 1
 	}
 	if size < 1 || size > 50 {
 		size = 10
+	}
+
+	if role == "member" {
+		memberId, err := u.GroupRepository.GetMemberIdByUserId(ctx, userId)
+		if err != nil {
+			u.Log.Warnf("Member not found for userId %s: %v", userId, err)
+			return nil, 0, fiber.ErrForbidden
+		}
+		groups, total, err := u.GroupRepository.GetAllGroupsByMember(ctx, memberId, page, size, search)
+		if err != nil {
+			return nil, 0, fiber.ErrInternalServerError
+		}
+		return converter.ToGroupResponses(groups), total, nil
 	}
 
 	guruId, err := u.GroupRepository.GetGuruIdByUserId(ctx, userId)

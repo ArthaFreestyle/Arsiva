@@ -168,7 +168,7 @@ func (c *RouteConfig) SetupAuthRoutes() {
 
 	// Group CRUD
 	auth.Post("/groups", guruRole, pc, c.GroupController.CreateGroup)
-	auth.Get("/groups", guruRole, pc, c.GroupController.GetAllGroups)
+	auth.Get("/groups", allRoles, pc, c.GroupController.GetAllGroups)
 	auth.Get("/groups/:id", guruRole, pc, c.GroupController.GetGroupDetail)
 	auth.Put("/groups/:id", guruRole, pc, c.GroupController.UpdateGroup)
 	auth.Delete("/groups/:id", guruRole, pc, c.GroupController.DeleteGroup)

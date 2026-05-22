@@ -60,8 +60,11 @@ func (c *groupControllerImpl) GetAllGroups(ctx fiber.Ctx) error {
 	size, _ := strconv.Atoi(ctx.Query("size", "10"))
 	search := ctx.Query("search", "")
 
-	userId := ctx.Locals("userId").(string)
-	groups, _, err := c.GroupUseCase.GetAllGroups(ctx.Context(), userId, page, size, search)
+	claims := ctx.Locals("user").(*model.Claims)
+	userId := claims.UserId
+	role := claims.Role
+
+	groups, _, err := c.GroupUseCase.GetAllGroups(ctx.Context(), userId, role, page, size, search)
 	if err != nil {
 		c.Log.Warnf("Failed get all groups: %v", err)
 		return err

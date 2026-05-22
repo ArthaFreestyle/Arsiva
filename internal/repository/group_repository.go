@@ -17,6 +17,7 @@ type GroupRepository interface {
 	// Group CRUD
 	CreateGroup(ctx context.Context, group *entity.Group) (*entity.Group, error)
 	GetAllGroupsByGuru(ctx context.Context, guruId int, page int, size int, search string) ([]*entity.Group, int, error)
+	GetAllGroupsByMember(ctx context.Context, memberId int, page int, size int, search string) ([]*entity.Group, int, error)
 	GetGroupById(ctx context.Context, groupId string) (*entity.Group, error)
 	UpdateGroup(ctx context.Context, group *entity.Group) (*entity.Group, error)
 	DeleteGroup(ctx context.Context, groupId string) error
@@ -116,6 +117,61 @@ func (r *groupRepositoryImpl) GetAllGroupsByGuru(ctx context.Context, guruId int
 	groups, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByNameLax[entity.Group])
 	if err != nil {
 		r.Log.Errorf("Error collecting rows GetAllGroupsByGuru: %v", err)
+		return nil, 0, err
+	}
+
+	return groups, total, nil
+}
+
+func (r *groupRepositoryImpl) GetAllGroupsByMember(ctx context.Context, memberId int, page int, size int, search string) ([]*entity.Group, int, error) {
+	searchPattern := "%" + search + "%"
+	limit := size
+	offset := (page - 1) * size
+
+	countQuery := `SELECT COUNT(*) FROM groups g JOIN group_members gm ON gm.group_id = g.group_id WHERE gm.member_id = $1 AND g.group_name ILIKE $2`
+	var total int
+	err := r.DB.QueryRow(ctx, countQuery, memberId, searchPattern).Scan(&total)
+	if err != nil {
+		r.Log.Errorf("Error counting GetAllGroupsByMember: %v", err)
+		return nil, 0, err
+	}
+
+	query := `
+		SELECT
+			g.group_id,
+			g.group_name,
+			COALESCE(a.url, '') AS group_thumbnail,
+			g.group_thumbnail_asset_id,
+			g.created_by,
+			g.created_at,
+			g.updated_at,
+			JSON_BUILD_OBJECT(
+				'GuruId', gu.guru_id::text,
+				'NIP', gu.nip,
+				'BidangAjar', gu.bidang_ajar,
+				'Username', u.username
+			) AS guru,
+			(SELECT COUNT(*) FROM group_members gm2 WHERE gm2.group_id = g.group_id) AS member_count
+		FROM groups g
+		JOIN group_members gm ON gm.group_id = g.group_id
+		LEFT JOIN guru gu ON g.created_by = gu.guru_id
+		LEFT JOIN users u ON gu.user_id = u.user_id
+		LEFT JOIN assets a ON g.group_thumbnail_asset_id = a.asset_id
+		WHERE gm.member_id = $1 AND g.group_name ILIKE $2
+		ORDER BY g.created_at DESC
+		LIMIT $3 OFFSET $4
+	`
+
+	rows, err := r.DB.Query(ctx, query, memberId, searchPattern, limit, offset)
+	if err != nil {
+		r.Log.Errorf("Error query GetAllGroupsByMember: %v", err)
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	groups, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByNameLax[entity.Group])
+	if err != nil {
+		r.Log.Errorf("Error collecting rows GetAllGroupsByMember: %v", err)
 		return nil, 0, err
 	}
 
