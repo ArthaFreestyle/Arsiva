@@ -23,7 +23,10 @@
       "Bash(go vet *)",
       "Bash(grep -n \"awardedXp = xpReward\\\\|total_xp.*total_xp.*awardedXp\\\\|total_xp + \\\\$1\" /home/artha/Documents/Arsiva/internal/usecase/progress_session_usecase.go /home/artha/Documents/Arsiva/internal/repository/member_progress_repository.go)",
       "Bash(grep -v \"total_xp + \\\\$1\\\\|total_xp.*awardedXp\\\\|comment\\\\|//\")",
-      "Bash(gh label *)"
+      "Bash(gh label *)",
+      "Bash(xargs cat)",
+      "Bash(git checkout *)",
+      "Bash(git ls-remote *)"
     ]
   }
 }

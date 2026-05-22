@@ -223,9 +223,11 @@ func (c *RouteConfig) SetupAuthRoutes() {
 	auth.Get("/member/me", memberRole, c.MemberController.GetMe)            // allowed while incomplete
 	auth.Put("/member/me", memberRole, pc, c.MemberController.UpdateMe)
 	auth.Get("/member/profile", memberRole, pc, c.MemberController.GetProfile)
-	auth.Get("/member/:id", superadminOrMemberRole, pc, c.MemberController.FindById)
-	auth.Put("/member/:id", superadminOrMemberRole, pc, c.MemberController.Update)
-	auth.Delete("/member/:id", superadminOnly, c.MemberController.Delete)
+	// NOTE: the wildcard "/member/:id" routes are registered AFTER the static
+	// "/member/social-links" and "/member/achievements" routes below. Fiber
+	// matches routes in registration order, so a "/member/:id" registered here
+	// would greedily capture "/member/achievements" (:id="achievements") and
+	// shadow the static route, returning 403 from FindById's self-only check.
 
 	// ==========================================
 	// ACHIEVEMENTS
@@ -256,6 +258,14 @@ func (c *RouteConfig) SetupAuthRoutes() {
 	auth.Get("/member/achievements", memberRole, pc, c.MemberAchievementController.FindAllMine)
 	auth.Get("/member/achievements/:achievement_id", memberRole, pc, c.MemberAchievementController.FindOne)
 	auth.Delete("/member/achievements/:member_id/:achievement_id", superadminOnly, c.MemberAchievementController.Delete)
+
+	// ==========================================
+	// MEMBER BY ID (wildcard — registered last so static "/member/*" routes
+	// above take precedence under Fiber's registration-order matching)
+	// ==========================================
+	auth.Get("/member/:id", superadminOrMemberRole, pc, c.MemberController.FindById)
+	auth.Put("/member/:id", superadminOrMemberRole, pc, c.MemberController.Update)
+	auth.Delete("/member/:id", superadminOnly, c.MemberController.Delete)
 
 	// ==========================================
 	// LEADERBOARD
