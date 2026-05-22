@@ -7,10 +7,12 @@ import (
 	"ArthaFreestyle/Arsiva/internal/repository"
 	"ArthaFreestyle/Arsiva/internal/utils"
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v3"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sirupsen/logrus"
 )
@@ -69,28 +71,49 @@ func (c *AuthUseCaseImpl) Login(ctx context.Context, request *model.LoginRequest
 		return nil, fiber.NewError(fiber.StatusForbidden, "wrong login page for this account")
 	}
 
+	// Embed the profile details into the JWT so downstream stateless checks
+	// (RequireProfileComplete, member_id extraction) work without DB hits.
+	// A missing profile row (pgx.ErrNoRows) is legitimate — the user just hasn't
+	// completed onboarding, so leave details nil and let ProfileCompleteMiddleware
+	// gate them. Any OTHER error must NOT be swallowed: doing so mints a token
+	// with empty Details that permanently 403s every member_id/profile-based
+	// endpoint with no way to diagnose it.
 	var details any
 	switch user.Role {
 	case "guru":
 		if c.GuruRepository != nil {
-			if guru, err := c.GuruRepository.FindByUserId(ctx, user.UserId); err == nil {
+			guru, err := c.GuruRepository.FindByUserId(ctx, user.UserId)
+			switch {
+			case err == nil:
 				details = model.GuruDetails{
 					GuruId:     guru.GuruId,
 					NIP:        guru.NIP,
 					BidangAjar: guru.BidangAjar,
 					SekolahId:  guru.SekolahId,
 				}
+			case errors.Is(err, pgx.ErrNoRows):
+				c.Log.Infof("Guru profile not yet created for user %s; issuing token without details", user.UserId)
+			default:
+				c.Log.Errorf("Failed to load guru profile for user %s: %+v", user.UserId, err)
+				return nil, fiber.ErrInternalServerError
 			}
 		}
 	case "member":
 		if c.MemberRepository != nil {
-			if member, err := c.MemberRepository.FindByUserId(ctx, user.UserId); err == nil {
+			member, err := c.MemberRepository.FindByUserId(ctx, user.UserId)
+			switch {
+			case err == nil:
 				details = model.MemberDetails{
 					MemberId:  member.MemberId,
 					NIS:       member.NIS,
 					SekolahId: member.SekolahId,
 					Level:     member.Level,
 				}
+			case errors.Is(err, pgx.ErrNoRows):
+				c.Log.Infof("Member profile not yet created for user %s; issuing token without details", user.UserId)
+			default:
+				c.Log.Errorf("Failed to load member profile for user %s: %+v", user.UserId, err)
+				return nil, fiber.ErrInternalServerError
 			}
 		}
 	}
