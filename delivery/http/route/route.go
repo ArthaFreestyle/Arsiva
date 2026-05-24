@@ -43,6 +43,12 @@ func (c *RouteConfig) SetupGuestRoutes() {
 	c.App.Post("/v1/register/member", c.AuthLimiter, c.AuthController.RegisterMember)
 	c.App.Post("/v1/register/guru", c.AuthLimiter, c.AuthController.RegisterGuru)
 	c.App.Get("uploads/*", c.UploadController.GetFile)
+
+	// Article reads are public (no login required) for SEO/crawlers.
+	// Register specific routes before the :slug wildcard to avoid shadowing.
+	c.App.Get("/v1/articles", c.ArticleController.GetAllArticle)
+	c.App.Get("/v1/articles/detail/:id", c.ArticleController.GetArticleById)
+	c.App.Get("/v1/articles/:slug", c.ArticleController.GetArticleBySlug)
 }
 
 func (c *RouteConfig) SetupAuthRoutes() {
@@ -82,11 +88,6 @@ func (c *RouteConfig) SetupAuthRoutes() {
 	// article category - read
 	auth.Get("/categories/article", allRoles, c.ArticleCategoryController.GetAllArticleCategories)
 	auth.Get("/categories/article/:id", allRoles, c.ArticleCategoryController.GetArticleCategoryById)
-
-	// article - read
-	auth.Get("/articles", allRoles, c.ArticleController.GetAllArticle)
-	auth.Get("/articles/detail/:id", allRoles, c.ArticleController.GetArticleById)
-	auth.Get("/articles/:slug", allRoles, c.ArticleController.GetArticleBySlug)
 
 	// puzzle - read
 	auth.Get("/puzzles", allRoles, c.PuzzleController.GetAllPuzzle)

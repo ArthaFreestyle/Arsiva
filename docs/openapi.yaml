@@ -1121,9 +1121,7 @@ paths:
         - Articles
       summary: Get all articles
       description: "Mengambil semua artikel yang aktif (tanpa konten, untuk listing).
-        \ 
-
-        🔒 **Role**: `member`, `guru`, `super_admin`\n"
+        Hanya artikel berstatus **published** yang dikembalikan. Endpoint ini publik — tidak memerlukan token.\n"
       operationId: getAllArticles
       parameters:
         - name: page
@@ -1143,8 +1141,7 @@ paths:
           schema:
             type: string
           description: Pencarian berdasarkan judul artikel
-      security:
-        - BearerAuth: []
+      security: []
       responses:
         "200":
           description: Daftar artikel
@@ -1213,12 +1210,9 @@ paths:
       tags:
         - Articles
       summary: Get article by slug
-      description: "Mengambil detail artikel lengkap beserta konten. \ 
-
-        🔒 **Role**: `member`, `guru`, `super_admin`\n"
+      description: "Mengambil detail artikel lengkap beserta konten. Hanya artikel berstatus **published** yang dikembalikan. Endpoint ini publik — tidak memerlukan token.\n"
       operationId: getArticleBySlug
-      security:
-        - BearerAuth: []
+      security: []
       responses:
         "200":
           description: Detail artikel
@@ -1244,13 +1238,9 @@ paths:
       tags:
         - Articles
       summary: Get article by ID
-      description: "Mengambil detail artikel lengkap berdasarkan ID (untuk halaman
-        edit). \ 
-
-        🔒 **Role**: `member`, `guru`, `super_admin`\n"
+      description: "Mengambil detail artikel lengkap berdasarkan ID. Hanya artikel berstatus **published** yang dikembalikan. Endpoint ini publik — tidak memerlukan token.\n"
       operationId: getArticleById
-      security:
-        - BearerAuth: []
+      security: []
       responses:
         "200":
           description: Detail artikel
