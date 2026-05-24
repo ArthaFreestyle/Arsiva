@@ -159,8 +159,10 @@ func (c *RouteConfig) SetupAuthRoutes() {
 	auth.Put("/categories/quiz/:id", guruAdminRole, pc, c.QuizCategoryController.UpdateQuizCategory)
 	auth.Delete("/categories/quiz/:id", guruAdminRole, pc, c.QuizCategoryController.DeleteQuizCategory)
 
-	// upload
-	auth.Post("/upload/image", guruAdminRole, pc, c.UploadController.UploadImage)
+	// upload — open to all authenticated roles; pc intentionally omitted so
+	// members can upload their profile photo before their profile row exists (Flow A).
+	// Orphan assets (uploaded but never referenced) are cleaned up by the 24h asset cron.
+	auth.Post("/upload/image", allRoles, c.UploadController.UploadImage)
 
 	// ==========================================
 	// GURU ONLY (group management)
