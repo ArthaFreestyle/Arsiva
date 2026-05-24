@@ -433,6 +433,10 @@ func (u *progressSessionUseCaseImpl) Finalize(ctx context.Context, key string, c
 		}
 		// Restore state so a retry can succeed.
 		_ = u.Redis.HSet(ctx, key, "state", "active").Err()
+		// A missing content row is a client-visible condition, not a server fault.
+		if errors.Is(err, repository.ErrContentNotFound) {
+			return 0, fiber.NewError(fiber.StatusNotFound, "konten tidak ditemukan")
+		}
 		return 0, fiber.ErrInternalServerError
 	}
 
@@ -459,6 +463,12 @@ func (u *progressSessionUseCaseImpl) Finalize(ctx context.Context, key string, c
 		}
 		// Leave the key intact with state=active so a retry can succeed.
 		_ = u.Redis.HSet(ctx, key, "state", "active").Err()
+		// A foreign-key violation we couldn't recover from means the session carried
+		// bad data (e.g. an unknown member_id) — that's a 4xx, not a server fault, and
+		// retrying won't help, so report it precisely instead of a blank 500.
+		if errors.Is(err, repository.ErrInvalidReference) {
+			return 0, fiber.NewError(fiber.StatusBadRequest, "sesi progres menunjuk data yang tidak valid")
+		}
 		return 0, fiber.ErrInternalServerError
 	}
 

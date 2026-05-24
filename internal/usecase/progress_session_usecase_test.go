@@ -11,10 +11,12 @@ import (
 
 	"github.com/alicebob/miniredis/v2"
 	"github.com/go-playground/validator/v10"
+	"github.com/gofiber/fiber/v3"
 	"github.com/redis/go-redis/v9"
 
 	"ArthaFreestyle/Arsiva/internal/entity"
 	"ArthaFreestyle/Arsiva/internal/model"
+	"ArthaFreestyle/Arsiva/internal/repository"
 )
 
 // ─── Mock repository ──────────────────────────────────────────────────────────
@@ -398,6 +400,83 @@ func TestGetSession_NotFound(t *testing.T) {
 	_, err := uc.GetSession(context.Background(), "kuis", 1, progressMemberClaims("42"))
 	if err == nil {
 		t.Fatal("expected not-found error for missing session")
+	}
+}
+
+// ─── Regression: issue #38 — ending scene must finalize, not 500 ──────────────
+
+// Walking a cerita to an is_ending scene must run Finalize → SaveProgress and return
+// the progres_id (HTTP 200), not an opaque error. Mirrors the issue's repro.
+func TestScene_EndingScene_FinalizesAndReturnsProgresId(t *testing.T) {
+	repo := &mockProgressRepo{
+		contentExists: true, ceritaMaxScore: 100,
+		xpReward: 150, saveProgressId: 77,
+		sceneOk: true, sceneIsEnding: true, sceneEndingPoint: 100,
+	}
+	uc, _ := newTestUseCase(t, repo)
+	claims := progressMemberClaims("42")
+
+	startReq := &model.ProgressStartRequest{ContentType: "cerita", ContentId: 1, DurationSeconds: 60}
+	if _, err := uc.Start(context.Background(), startReq, claims); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	sceneReq := &model.ProgressSceneRequest{ContentType: "cerita", ContentId: 1, SceneId: 9}
+	resp, err := uc.Scene(context.Background(), sceneReq, claims)
+	if err != nil {
+		t.Fatalf("Scene (ending): expected success, got error: %v", err)
+	}
+	if resp == nil {
+		t.Fatal("Scene (ending): expected finalize response, got nil")
+	}
+	if resp.ProgresId != 77 {
+		t.Errorf("expected progresId=77, got %d", resp.ProgresId)
+	}
+
+	repo.mu.Lock()
+	calls := repo.saveProgressCalls
+	repo.mu.Unlock()
+	if calls != 1 {
+		t.Errorf("expected 1 SaveProgress call on ending, got %d", calls)
+	}
+}
+
+// A foreign-key violation that the repository couldn't recover from is bad input —
+// finalize must surface it as 400, not 500.
+func TestFinalize_InvalidReference_Returns400(t *testing.T) {
+	repo := &mockProgressRepo{
+		contentExists: true, kuisMaxScore: 100, xpReward: 100,
+		saveProgressErr: fmt.Errorf("%w: member_progress_member_id_fkey", repository.ErrInvalidReference),
+	}
+	uc, _ := newTestUseCase(t, repo)
+	claims := progressMemberClaims("42")
+	if _, err := uc.Start(context.Background(), defaultStartReq(), claims); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	_, err := uc.Finalize(context.Background(), sessionKey("42", "kuis", 1), "submit")
+	var fe *fiber.Error
+	if !errors.As(err, &fe) || fe.Code != fiber.StatusBadRequest {
+		t.Fatalf("expected 400 fiber error for invalid reference, got %v", err)
+	}
+}
+
+// A missing content row at finalize is a 404, not a 500.
+func TestFinalize_ContentNotFound_Returns404(t *testing.T) {
+	repo := &mockProgressRepo{
+		contentExists: true, kuisMaxScore: 100,
+		xpRewardErr: repository.ErrContentNotFound,
+	}
+	uc, _ := newTestUseCase(t, repo)
+	claims := progressMemberClaims("42")
+	if _, err := uc.Start(context.Background(), defaultStartReq(), claims); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	_, err := uc.Finalize(context.Background(), sessionKey("42", "kuis", 1), "submit")
+	var fe *fiber.Error
+	if !errors.As(err, &fe) || fe.Code != fiber.StatusNotFound {
+		t.Fatalf("expected 404 fiber error for missing content, got %v", err)
 	}
 }
 

@@ -3,8 +3,10 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sirupsen/logrus"
 
@@ -12,6 +14,11 @@ import (
 )
 
 var ErrContentNotFound = errors.New("content not found or not published")
+
+// ErrInvalidReference is returned when SaveProgress hits a foreign-key violation it
+// cannot recover from (e.g. member_id does not reference a real member). The caller
+// should treat this as bad input (4xx) rather than an opaque server error.
+var ErrInvalidReference = errors.New("progress references a row that does not exist")
 
 type MemberProgressRepository interface {
 	// Content validation — checks exists + is_published in one query.
@@ -199,6 +206,42 @@ func (r *memberProgressRepositoryImpl) GetContentXpReward(ctx context.Context, c
 }
 
 func (r *memberProgressRepositoryImpl) SaveProgress(ctx context.Context, progress *entity.MemberProgress, awardedXp int) (int, error) {
+	var groupId *string
+	if progress.GroupId != "" {
+		groupId = &progress.GroupId
+	}
+
+	progresId, err := r.insertProgress(ctx, progress, awardedXp, groupId)
+	if err == nil {
+		return progresId, nil
+	}
+
+	// Classify the failure. A foreign-key violation means the row references something
+	// that no longer exists — member_progress has FKs on member_id and group_id
+	// (migration 20260318204005). The most common cause of an ending-scene 500 is a
+	// stale/invalid group_id that was attached at /start: the session plays through but
+	// the finalize INSERT trips member_progress_group_id_fkey. Losing the whole
+	// completion over a dropped group reference is the wrong trade-off, so we retry once
+	// with group_id = NULL (keeping the score + XP) and only surface a hard error when
+	// the broken reference is something we can't shed.
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23503" { // foreign_key_violation
+		if pgErr.ConstraintName == "member_progress_group_id_fkey" && groupId != nil {
+			r.Log.Warnf("SaveProgress: group_id=%q does not reference a valid group; persisting progress without it", *groupId)
+			if progresId, err = r.insertProgress(ctx, progress, awardedXp, nil); err == nil {
+				return progresId, nil
+			}
+		}
+		r.Log.Errorf("SaveProgress foreign-key violation (constraint=%s detail=%s): %v", pgErr.ConstraintName, pgErr.Detail, err)
+		return 0, fmt.Errorf("%w: %s", ErrInvalidReference, pgErr.ConstraintName)
+	}
+
+	return 0, err
+}
+
+// insertProgress runs the member_progress INSERT (and optional XP credit) in a single
+// transaction and returns the new progres_id.
+func (r *memberProgressRepositoryImpl) insertProgress(ctx context.Context, progress *entity.MemberProgress, awardedXp int, groupId *string) (int, error) {
 	tx, err := r.DB.Begin(ctx)
 	if err != nil {
 		r.Log.Errorf("SaveProgress begin tx: %v", err)
@@ -209,11 +252,6 @@ func (r *memberProgressRepositoryImpl) SaveProgress(ctx context.Context, progres
 			_ = tx.Rollback(ctx)
 		}
 	}()
-
-	var groupId *string
-	if progress.GroupId != "" {
-		groupId = &progress.GroupId
-	}
 
 	var progresId int
 	err = tx.QueryRow(ctx, `
