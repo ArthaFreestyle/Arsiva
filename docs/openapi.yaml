@@ -120,6 +120,8 @@ tags:
     description: "Sesi bermain quiz / cerita / puzzle — scoring real-time via Redis, flush ke member_progress saat selesai (🔒 member only)"
   - name: Leaderboard
     description: "Ranking publik (alltime & monthly) dan ranking per-group (🔒 semua role ter-autentikasi)"
+  - name: Gamification
+    description: "Daily streak & daily tasks milik member yang sedang login — diperbarui otomatis saat menyelesaikan konten, tidak ada endpoint tulis (🔒 member only)"
 paths:
   /api/v1/login:
     post:
@@ -4382,6 +4384,82 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /api/v1/streak:
+    get:
+      tags:
+        - Gamification
+      summary: Get my daily streak
+      description: "Mengembalikan streak member yang sedang login (identitas diambil dari JWT, bukan body).\n\nStreak bertambah maksimal **satu kali per hari** (zona waktu **Asia/Jakarta**) saat member menyelesaikan konten apa pun. Melewatkan satu hari dengan `freezes_available > 0` akan memakai satu freeze dan mempertahankan streak; tanpa freeze, `current_streak` reset ke 1. Satu freeze diberikan setiap kelipatan 7 hari (maksimal 2).\n\nJika member belum pernah aktif, semua nilai 0 dan `last_active_date` kosong.\n\n🔒 **Role**: `member` — memerlukan ProfileComplete.\n"
+      operationId: getMyStreak
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Streak berhasil diambil
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StreakResponseWrapper"
+              example:
+                data:
+                  current_streak: 5
+                  longest_streak: 12
+                  freezes_available: 1
+                  last_active_date: "2026-05-24"
+                  active_today: true
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
+  /api/v1/daily-tasks:
+    get:
+      tags:
+        - Gamification
+      summary: Get today's daily tasks
+      description: "Membuat (lazy, jika belum ada) dan mengembalikan daftar tugas harian member untuk hari ini (zona waktu **Asia/Jakarta**). Idempoten terhadap pemanggilan bersamaan.\n\nSet tugas tetap per hari: `complete_quiz` (target 1, 20 XP), `complete_story` (target 1, 20 XP), `solve_puzzle` (target 1, 20 XP), `earn_xp` (target 100, 30 XP). Progress bertambah otomatis saat member menyelesaikan konten — tidak ada endpoint tulis. Menyelesaikan satu tugas memberi `xp_reward`-nya tepat satu kali; menyelesaikan **semua** tugas memberi bonus 50 XP (dilacak via baris tersembunyi yang tidak ikut ditampilkan).\n\n`all_completed` bernilai `true` hanya jika seluruh tugas yang tampil sudah selesai.\n\n🔒 **Role**: `member` — memerlukan ProfileComplete.\n"
+      operationId: getTodayTasks
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Daftar tugas harian berhasil diambil
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DailyTasksResponseWrapper"
+              example:
+                data:
+                  task_date: "2026-05-24"
+                  all_completed: false
+                  tasks:
+                    - task_type: complete_quiz
+                      target_count: 1
+                      current_count: 1
+                      xp_reward: 20
+                      completed: true
+                    - task_type: complete_story
+                      target_count: 1
+                      current_count: 0
+                      xp_reward: 20
+                      completed: false
+                    - task_type: solve_puzzle
+                      target_count: 1
+                      current_count: 0
+                      xp_reward: 20
+                      completed: false
+                    - task_type: earn_xp
+                      target_count: 100
+                      current_count: 20
+                      xp_reward: 30
+                      completed: false
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
 
     # =====================================================================
 components:
@@ -6472,3 +6550,75 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/GroupLeaderboardResponse"
+    StreakResponse:
+      type: object
+      properties:
+        current_streak:
+          type: integer
+          description: "Jumlah hari beruntun member aktif"
+          example: 5
+        longest_streak:
+          type: integer
+          description: "Streak terpanjang yang pernah dicapai member"
+          example: 12
+        freezes_available:
+          type: integer
+          description: "Jumlah streak-shield (freeze) yang dimiliki — menutup satu hari yang terlewat (maks 2)"
+          example: 1
+        last_active_date:
+          type: string
+          description: "Hari terakhir (Asia/Jakarta) streak bertambah, format `2006-01-02`. Kosong jika belum pernah aktif"
+          example: "2026-05-24"
+        active_today:
+          type: boolean
+          description: "True jika streak sudah bertambah hari ini"
+          example: true
+    StreakResponseWrapper:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/StreakResponse"
+    DailyTaskItem:
+      type: object
+      properties:
+        task_type:
+          type: string
+          description: "Jenis tugas harian"
+          enum: [complete_quiz, complete_story, solve_puzzle, earn_xp]
+          example: complete_quiz
+        target_count:
+          type: integer
+          description: "Target penyelesaian (untuk `earn_xp`, ini adalah jumlah XP)"
+          example: 1
+        current_count:
+          type: integer
+          description: "Progress saat ini"
+          example: 1
+        xp_reward:
+          type: integer
+          description: "XP yang diberikan saat tugas selesai"
+          example: 20
+        completed:
+          type: boolean
+          description: "True jika `current_count >= target_count`"
+          example: true
+    DailyTasksResponse:
+      type: object
+      properties:
+        task_date:
+          type: string
+          description: "Tanggal kalender tugas (Asia/Jakarta), format `2006-01-02`"
+          example: "2026-05-24"
+        all_completed:
+          type: boolean
+          description: "True jika semua tugas yang tampil sudah selesai (memicu bonus 50 XP sekali)"
+          example: false
+        tasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/DailyTaskItem"
+    DailyTasksResponseWrapper:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/DailyTasksResponse"
