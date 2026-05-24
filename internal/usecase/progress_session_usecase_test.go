@@ -85,7 +85,7 @@ func newTestUseCase(t *testing.T, repo *mockProgressRepo) (ProgressSessionUseCas
 	t.Cleanup(mr.Close)
 
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	uc := NewProgressSessionUseCase(repo, rdb, nil, validator.New())
+	uc := NewProgressSessionUseCase(repo, rdb, nil, validator.New(), nil)
 	return uc, mr
 }
 
@@ -109,7 +109,7 @@ func defaultStartReq() *model.ProgressStartRequest {
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 func TestNewProgressSessionUseCase(t *testing.T) {
-	uc := NewProgressSessionUseCase(nil, nil, nil, validator.New())
+	uc := NewProgressSessionUseCase(nil, nil, nil, validator.New(), nil)
 	if uc == nil {
 		t.Fatal("expected usecase instance")
 	}

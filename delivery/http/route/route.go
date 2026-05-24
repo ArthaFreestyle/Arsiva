@@ -27,6 +27,7 @@ type RouteConfig struct {
 	AchievementController          http.AchievementController
 	ProgressController             http.ProgressController
 	LeaderboardController          http.LeaderboardController
+	GamificationController         http.GamificationController
 	AuthMiddleware             fiber.Handler
 	ProfileCompleteMiddleware  fiber.Handler
 	AuthLimiter                fiber.Handler
@@ -286,4 +287,10 @@ func (c *RouteConfig) SetupAuthRoutes() {
 	auth.Post("/progress/solve", memberRole, pc, c.ProgressController.Solve)
 	auth.Post("/progress/submit", memberRole, pc, c.ProgressController.Submit)
 	auth.Get("/progress/session/:content_type/:content_id", memberRole, pc, c.ProgressController.GetSession)
+
+	// ==========================================
+	// GAMIFICATION (member only)
+	// ==========================================
+	auth.Get("/streak", memberRole, pc, c.GamificationController.GetMyStreak)
+	auth.Get("/daily-tasks", memberRole, pc, c.GamificationController.GetTodayTasks)
 }

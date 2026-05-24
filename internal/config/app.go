@@ -46,6 +46,7 @@ func Bootstrap(cfg BootstrapConfig) {
 	achievementRepo := repository.NewAchievementRepository(cfg.DB, cfg.Log)
 	memberProgressRepo := repository.NewMemberProgressRepository(cfg.DB, cfg.Log)
 	leaderboardRepo := repository.NewLeaderboardRepository(cfg.DB, cfg.Log)
+	gamificationRepo := repository.NewGamificationRepository(cfg.DB, cfg.Log)
 
 	AuthUseCase := usecase.NewAuthUseCase(userRepo, cfg.Secret, cfg.Validate, cfg.Log, cfg.DB, guruRepo, memberRepo)
 	UserUseCase := usecase.NewUserUseCase(userRepo, cfg.Log, cfg.DB, cfg.Validate)
@@ -64,7 +65,8 @@ func Bootstrap(cfg BootstrapConfig) {
 	MemberSocialLinkUseCase := usecase.NewMemberSocialLinkUseCase(memberSocialLinkRepo, cfg.Log, cfg.Validate)
 	AchievementUseCase := usecase.NewAchievementUseCase(achievementRepo, cfg.Log, cfg.Validate)
 	MemberAchievementUseCase := usecase.NewMemberAchievementUseCase(memberAchievementRepo, memberRepo, achievementRepo, cfg.Log, cfg.Validate)
-	ProgressSessionUseCase := usecase.NewProgressSessionUseCase(memberProgressRepo, cfg.Redis, cfg.Log, cfg.Validate)
+	GamificationUseCase := usecase.NewGamificationUseCase(gamificationRepo, cfg.Log)
+	ProgressSessionUseCase := usecase.NewProgressSessionUseCase(memberProgressRepo, cfg.Redis, cfg.Log, cfg.Validate, GamificationUseCase)
 	LeaderboardUseCase := usecase.NewLeaderboardUseCase(leaderboardRepo, groupRepo, cfg.Log)
 
 	if !fiber.IsChild() {
@@ -93,6 +95,7 @@ func Bootstrap(cfg BootstrapConfig) {
 	MemberAchievementController := http.NewMemberAchievementController(MemberAchievementUseCase, cfg.Log)
 	ProgressController := http.NewProgressController(ProgressSessionUseCase, cfg.Log)
 	LeaderboardController := http.NewLeaderboardController(LeaderboardUseCase, cfg.Log)
+	GamificationController := http.NewGamificationController(GamificationUseCase, cfg.Log)
 
 	// Create middleware
 	authMiddleware            := middleware.NewAuthMiddleware(cfg.Secret, cfg.Log)
@@ -123,6 +126,7 @@ func Bootstrap(cfg BootstrapConfig) {
 		AchievementController:       AchievementController,
 		ProgressController:          ProgressController,
 		LeaderboardController:       LeaderboardController,
+		GamificationController:      GamificationController,
 		AuthMiddleware:              authMiddleware,
 		ProfileCompleteMiddleware:   profileCompleteMiddleware,
 		AuthLimiter:                 authLimiter,

@@ -37,10 +37,11 @@ type ProgressSessionUseCase interface {
 }
 
 type progressSessionUseCaseImpl struct {
-	Repo      repository.MemberProgressRepository
-	Redis     *redis.Client
-	Log       *logrus.Logger
-	Validator *validator.Validate
+	Repo         repository.MemberProgressRepository
+	Redis        *redis.Client
+	Log          *logrus.Logger
+	Validator    *validator.Validate
+	Gamification GamificationUseCase
 }
 
 func NewProgressSessionUseCase(
@@ -48,12 +49,14 @@ func NewProgressSessionUseCase(
 	redisClient *redis.Client,
 	log *logrus.Logger,
 	validate *validator.Validate,
+	gamification GamificationUseCase,
 ) ProgressSessionUseCase {
 	return &progressSessionUseCaseImpl{
-		Repo:      repo,
-		Redis:     redisClient,
-		Log:       log,
-		Validator: validate,
+		Repo:         repo,
+		Redis:        redisClient,
+		Log:          log,
+		Validator:    validate,
+		Gamification: gamification,
 	}
 }
 
@@ -461,6 +464,16 @@ func (u *progressSessionUseCaseImpl) Finalize(ctx context.Context, key string, c
 
 	if u.Log != nil {
 		u.Log.Infof("Finalize: %s progres_id=%d skor=%d/%d xp=%d (cause=%s)", key, progresId, runningSkor, maxScore, awardedXp, cause)
+	}
+
+	// Step 5b: update streak + daily-task progress. Must not fail the finalize —
+	// progress is already committed, so we log any error and continue.
+	if u.Gamification != nil {
+		if err2 := u.Gamification.HandleContentFinished(ctx, memberId, contentType, awardedXp); err2 != nil {
+			if u.Log != nil {
+				u.Log.Errorf("Finalize HandleContentFinished (key=%s): %v", key, err2)
+			}
+		}
 	}
 
 	// Step 6: write progres_id back to Redis so a racing caller from step 1 can read it.
