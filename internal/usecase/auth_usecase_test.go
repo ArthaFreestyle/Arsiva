@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v3"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/sirupsen/logrus"
 )
@@ -312,5 +313,179 @@ func TestLogin_ExpectedRole_SuperAdmin_Returns400(t *testing.T) {
 	var fiberErr *fiber.Error
 	if !errors.As(err, &fiberErr) || fiberErr.Code != http.StatusBadRequest {
 		t.Errorf("expected 400 fiber error (validation), got %v", err)
+	}
+}
+
+// --- Login profile-details embedding tests ---
+// These cover the fix from #32: auth_usecase must not silently drop profile
+// details when FindByUserId fails with a real error, and must distinguish
+// ErrNoRows (no profile yet) from actual DB failures.
+
+// mockMemberRepo is a minimal MemberRepository that only stubs FindByUserId.
+type mockMemberRepo struct {
+	findByUserIdFn func(ctx context.Context, userId string) (*entity.Member, error)
+}
+
+func (m *mockMemberRepo) FindByUserId(ctx context.Context, userId string) (*entity.Member, error) {
+	if m.findByUserIdFn != nil {
+		return m.findByUserIdFn(ctx, userId)
+	}
+	return nil, pgx.ErrNoRows
+}
+func (m *mockMemberRepo) Create(ctx context.Context, member *entity.Member) (*entity.Member, error) {
+	return nil, nil
+}
+func (m *mockMemberRepo) FindById(ctx context.Context, memberId string) (*entity.Member, error) {
+	return nil, nil
+}
+func (m *mockMemberRepo) FindAll(ctx context.Context, search string, limit int, offset int) ([]*entity.Member, int, error) {
+	return nil, 0, nil
+}
+func (m *mockMemberRepo) Update(ctx context.Context, member *entity.Member) (*entity.Member, error) {
+	return nil, nil
+}
+func (m *mockMemberRepo) Delete(ctx context.Context, memberId string) error { return nil }
+func (m *mockMemberRepo) FindSekolahByMemberId(ctx context.Context, memberId string) (*entity.Sekolah, error) {
+	return nil, nil
+}
+
+// mockGuruRepo is a minimal GuruRepository that only stubs FindByUserId.
+type mockGuruRepo struct {
+	findByUserIdFn func(ctx context.Context, userId string) (*entity.Guru, error)
+}
+
+func (m *mockGuruRepo) FindByUserId(ctx context.Context, userId string) (*entity.Guru, error) {
+	if m.findByUserIdFn != nil {
+		return m.findByUserIdFn(ctx, userId)
+	}
+	return nil, pgx.ErrNoRows
+}
+func (m *mockGuruRepo) Create(ctx context.Context, guru *entity.Guru) (*entity.Guru, error) {
+	return nil, nil
+}
+func (m *mockGuruRepo) FindById(ctx context.Context, guruId string) (*entity.Guru, error) {
+	return nil, nil
+}
+func (m *mockGuruRepo) FindAll(ctx context.Context, search string, limit int, offset int) ([]*entity.Guru, int, error) {
+	return nil, 0, nil
+}
+func (m *mockGuruRepo) Update(ctx context.Context, guru *entity.Guru) (*entity.Guru, error) {
+	return nil, nil
+}
+func (m *mockGuruRepo) Delete(ctx context.Context, guruId string) error { return nil }
+func (m *mockGuruRepo) FindSekolahByGuruId(ctx context.Context, guruId string) (*entity.Sekolah, error) {
+	return nil, nil
+}
+func (m *mockGuruRepo) FindGroupsByGuruId(ctx context.Context, guruId string) ([]*entity.Group, error) {
+	return nil, nil
+}
+
+func newTestAuthUseCaseWithRepos(userRepo *mockUserRepo, memberRepo *mockMemberRepo, guruRepo *mockGuruRepo) AuthUseCase {
+	return NewAuthUseCase(userRepo, []byte("secret"), validator.New(), discardLogger(), nil, guruRepo, memberRepo)
+}
+
+func TestLogin_Member_WithProfile_DetailsPopulated(t *testing.T) {
+	memberRepo := &mockMemberRepo{
+		findByUserIdFn: func(ctx context.Context, userId string) (*entity.Member, error) {
+			return &entity.Member{MemberId: "42", NIS: "12345", SekolahId: "7", Level: 1}, nil
+		},
+	}
+	uc := newTestAuthUseCaseWithRepos(makeLoginRepo("member"), memberRepo, nil)
+
+	resp, err := uc.Login(context.Background(), &model.LoginRequest{
+		Email:    "siswa01@example.com",
+		Password: "Rahasia123!",
+	})
+	if err != nil {
+		t.Fatalf("expected success, got %v", err)
+	}
+	if resp.AccessToken == "" {
+		t.Error("expected access token to be set")
+	}
+}
+
+func TestLogin_Member_NoProfile_TokenIssuedWithoutDetails(t *testing.T) {
+	// ErrNoRows = profile not yet created. Login must succeed with a token,
+	// but Details in the JWT will be nil so ProfileCompleteMiddleware gates them.
+	memberRepo := &mockMemberRepo{
+		findByUserIdFn: func(ctx context.Context, userId string) (*entity.Member, error) {
+			return nil, pgx.ErrNoRows
+		},
+	}
+	uc := newTestAuthUseCaseWithRepos(makeLoginRepo("member"), memberRepo, nil)
+
+	resp, err := uc.Login(context.Background(), &model.LoginRequest{
+		Email:    "siswa01@example.com",
+		Password: "Rahasia123!",
+	})
+	if err != nil {
+		t.Fatalf("expected login to succeed even without a profile, got %v", err)
+	}
+	if resp.AccessToken == "" {
+		t.Error("expected access token to be set")
+	}
+}
+
+func TestLogin_Member_RepoError_Returns500(t *testing.T) {
+	// A real DB error (not ErrNoRows) must abort login with 500 instead of
+	// silently issuing a degraded token that would 403 every action endpoint.
+	memberRepo := &mockMemberRepo{
+		findByUserIdFn: func(ctx context.Context, userId string) (*entity.Member, error) {
+			return nil, errors.New("connection reset by peer")
+		},
+	}
+	uc := newTestAuthUseCaseWithRepos(makeLoginRepo("member"), memberRepo, nil)
+
+	_, err := uc.Login(context.Background(), &model.LoginRequest{
+		Email:    "siswa01@example.com",
+		Password: "Rahasia123!",
+	})
+	if err == nil {
+		t.Fatal("expected 500 error, got nil")
+	}
+	var fiberErr *fiber.Error
+	if !errors.As(err, &fiberErr) || fiberErr.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500 fiber error, got %v", err)
+	}
+}
+
+func TestLogin_Guru_WithProfile_DetailsPopulated(t *testing.T) {
+	guruRepo := &mockGuruRepo{
+		findByUserIdFn: func(ctx context.Context, userId string) (*entity.Guru, error) {
+			return &entity.Guru{GuruId: "10", NIP: "9876", BidangAjar: "Matematika", SekolahId: "3"}, nil
+		},
+	}
+	uc := newTestAuthUseCaseWithRepos(makeLoginRepo("guru"), nil, guruRepo)
+
+	resp, err := uc.Login(context.Background(), &model.LoginRequest{
+		Email:    "guru01@example.com",
+		Password: "Rahasia123!",
+	})
+	if err != nil {
+		t.Fatalf("expected success, got %v", err)
+	}
+	if resp.AccessToken == "" {
+		t.Error("expected access token to be set")
+	}
+}
+
+func TestLogin_Guru_RepoError_Returns500(t *testing.T) {
+	guruRepo := &mockGuruRepo{
+		findByUserIdFn: func(ctx context.Context, userId string) (*entity.Guru, error) {
+			return nil, errors.New("timeout")
+		},
+	}
+	uc := newTestAuthUseCaseWithRepos(makeLoginRepo("guru"), nil, guruRepo)
+
+	_, err := uc.Login(context.Background(), &model.LoginRequest{
+		Email:    "guru01@example.com",
+		Password: "Rahasia123!",
+	})
+	if err == nil {
+		t.Fatal("expected 500 error, got nil")
+	}
+	var fiberErr *fiber.Error
+	if !errors.As(err, &fiberErr) || fiberErr.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500 fiber error, got %v", err)
 	}
 }

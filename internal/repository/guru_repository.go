@@ -3,6 +3,7 @@ package repository
 import (
 	"ArthaFreestyle/Arsiva/internal/entity"
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 
@@ -145,7 +146,10 @@ func (r *guruRepositoryImpl) FindByUserId(ctx context.Context, userId string) (*
 
 	result, err := pgx.CollectExactlyOneRow(rows, pgx.RowToAddrOfStructByNameLax[entity.Guru])
 	if err != nil {
-		r.Log.Errorf("Error collecting row FindByUserId guru: %v", err)
+		// ErrNoRows means the guru profile hasn't been created yet — not a server error.
+		if !errors.Is(err, pgx.ErrNoRows) {
+			r.Log.Errorf("Error collecting row FindByUserId guru: %v", err)
+		}
 		return nil, err
 	}
 	return result, nil

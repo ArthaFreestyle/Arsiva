@@ -3,6 +3,7 @@ package repository
 import (
 	"ArthaFreestyle/Arsiva/internal/entity"
 	"context"
+	"errors"
 	"strconv"
 	"strings"
 
@@ -165,7 +166,10 @@ func (r *memberRepositoryImpl) FindByUserId(ctx context.Context, userId string) 
 
 	result, err := pgx.CollectExactlyOneRow(rows, pgx.RowToAddrOfStructByNameLax[entity.Member])
 	if err != nil {
-		r.Log.Errorf("Error collecting row FindByUserId member: %v", err)
+		// ErrNoRows means the member profile hasn't been created yet — not a server error.
+		if !errors.Is(err, pgx.ErrNoRows) {
+			r.Log.Errorf("Error collecting row FindByUserId member: %v", err)
+		}
 		return nil, err
 	}
 	return result, nil
