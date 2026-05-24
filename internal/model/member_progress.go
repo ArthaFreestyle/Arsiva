@@ -60,5 +60,8 @@ type ProgressSessionResponse struct {
 }
 
 type ProgressFinalizeResponse struct {
-	ProgresId int `json:"progres_id"`
+	ProgresId     int  `json:"progres_id"`
+	LeveledUp     bool `json:"leveled_up"`
+	PreviousLevel int  `json:"previous_level"`
+	NewLevel      int  `json:"new_level"`
 }

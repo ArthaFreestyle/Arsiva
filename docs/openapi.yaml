@@ -6642,6 +6642,18 @@ components:
           type: integer
           description: ID baris `member_progress` yang baru dibuat di Postgres
           example: 99
+        leveled_up:
+          type: boolean
+          description: "`true` jika XP yang diperoleh mendorong member naik ke level berikutnya"
+          example: true
+        previous_level:
+          type: integer
+          description: Level member sebelum sesi ini diselesaikan (0 jika tidak ada XP yang diberikan)
+          example: 0
+        new_level:
+          type: integer
+          description: Level member setelah sesi ini diselesaikan (0 jika tidak ada XP yang diberikan)
+          example: 1
     ProgressFinalizeResponseWrapper:
       type: object
       properties:

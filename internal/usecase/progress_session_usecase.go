@@ -27,10 +27,10 @@ type ProgressSessionUseCase interface {
 	Submit(ctx context.Context, req *model.ProgressSubmitRequest, claims *model.Claims) (*model.ProgressFinalizeResponse, error)
 	GetSession(ctx context.Context, contentType string, contentId int, claims *model.Claims) (*model.ProgressSessionResponse, error)
 
-	// Finalize moves a Redis session into member_progress and optionally credits total_xp.
-	// Safe to call multiple times — second call is a no-op returning the existing progres_id.
+	// Finalize moves a Redis session into member_progress and optionally credits total_xp
+	// and updates the member's level. Safe to call multiple times — second call is a no-op.
 	// cause is "submit" or "expired" — used for logging only.
-	Finalize(ctx context.Context, sessionKey string, cause string) (progresID int, err error)
+	Finalize(ctx context.Context, sessionKey string, cause string) (*model.ProgressFinalizeResponse, error)
 
 	// ListExpiredSessionKeys returns session keys whose expiry <= now (used by the worker).
 	ListExpiredSessionKeys(ctx context.Context) ([]string, error)
@@ -256,11 +256,7 @@ func (u *progressSessionUseCaseImpl) Scene(ctx context.Context, req *model.Progr
 	}
 
 	if isEnding {
-		progresId, err := u.Finalize(ctx, key, "submit")
-		if err != nil {
-			return nil, err
-		}
-		return &model.ProgressFinalizeResponse{ProgresId: progresId}, nil
+		return u.Finalize(ctx, key, "submit")
 	}
 
 	return nil, nil
@@ -294,11 +290,7 @@ func (u *progressSessionUseCaseImpl) Solve(ctx context.Context, req *model.Progr
 		return nil, fiber.ErrInternalServerError
 	}
 
-	progresId, err := u.Finalize(ctx, key, "submit")
-	if err != nil {
-		return nil, err
-	}
-	return &model.ProgressFinalizeResponse{ProgresId: progresId}, nil
+	return u.Finalize(ctx, key, "submit")
 }
 
 // ─── Submit ──────────────────────────────────────────────────────────────────
@@ -316,11 +308,7 @@ func (u *progressSessionUseCaseImpl) Submit(ctx context.Context, req *model.Prog
 
 	key := sessionKey(memberId, req.ContentType, req.ContentId)
 
-	progresId, err := u.Finalize(ctx, key, "submit")
-	if err != nil {
-		return nil, err
-	}
-	return &model.ProgressFinalizeResponse{ProgresId: progresId}, nil
+	return u.Finalize(ctx, key, "submit")
 }
 
 // ─── GetSession ──────────────────────────────────────────────────────────────
@@ -379,28 +367,28 @@ end
 
 // ─── Finalize ────────────────────────────────────────────────────────────────
 
-func (u *progressSessionUseCaseImpl) Finalize(ctx context.Context, key string, cause string) (int, error) {
+func (u *progressSessionUseCaseImpl) Finalize(ctx context.Context, key string, cause string) (*model.ProgressFinalizeResponse, error) {
 	// Step 1: atomically transition state active→flushing via Lua script.
 	result, err := claimSessionScript.Run(ctx, u.Redis, []string{key}).Int()
 	if err != nil {
 		u.Log.Errorf("Finalize claimSession script: %v", err)
-		return 0, fiber.ErrInternalServerError
+		return nil, fiber.ErrInternalServerError
 	}
 
 	switch result {
 	case -1:
 		// Session gone or already fully flushed.
-		return 0, nil
+		return &model.ProgressFinalizeResponse{}, nil
 	case 0:
 		// Another goroutine is mid-finalize. Wait briefly then read its progres_id.
 		time.Sleep(100 * time.Millisecond)
 		existing, err := u.Redis.HGet(ctx, key, "progres_id").Result()
 		if err == nil && existing != "" {
 			id, _ := strconv.Atoi(existing)
-			return id, nil
+			return &model.ProgressFinalizeResponse{ProgresId: id}, nil
 		}
 		// Session already cleaned up by the other goroutine.
-		return 0, nil
+		return &model.ProgressFinalizeResponse{}, nil
 	}
 	// result == 1: we claimed the session.
 
@@ -408,7 +396,7 @@ func (u *progressSessionUseCaseImpl) Finalize(ctx context.Context, key string, c
 	data, err := u.Redis.HGetAll(ctx, key).Result()
 	if err != nil || len(data) == 0 {
 		// Already flushed.
-		return 0, nil
+		return &model.ProgressFinalizeResponse{}, nil
 	}
 
 	memberIdStr := data["member_id"]
@@ -435,9 +423,9 @@ func (u *progressSessionUseCaseImpl) Finalize(ctx context.Context, key string, c
 		_ = u.Redis.HSet(ctx, key, "state", "active").Err()
 		// A missing content row is a client-visible condition, not a server fault.
 		if errors.Is(err, repository.ErrContentNotFound) {
-			return 0, fiber.NewError(fiber.StatusNotFound, "konten tidak ditemukan")
+			return nil, fiber.NewError(fiber.StatusNotFound, "konten tidak ditemukan")
 		}
-		return 0, fiber.ErrInternalServerError
+		return nil, fiber.ErrInternalServerError
 	}
 
 	// Step 4: award XP only on perfect score.
@@ -456,7 +444,7 @@ func (u *progressSessionUseCaseImpl) Finalize(ctx context.Context, key string, c
 	}
 
 	// Step 5: persist to Postgres in a single transaction.
-	progresId, err := u.Repo.SaveProgress(ctx, progress, awardedXp)
+	progresId, prevLevel, newLevel, err := u.Repo.SaveProgress(ctx, progress, awardedXp)
 	if err != nil {
 		if u.Log != nil {
 			u.Log.Errorf("Finalize SaveProgress (cause=%s key=%s): %v", cause, key, err)
@@ -467,13 +455,13 @@ func (u *progressSessionUseCaseImpl) Finalize(ctx context.Context, key string, c
 		// bad data (e.g. an unknown member_id) — that's a 4xx, not a server fault, and
 		// retrying won't help, so report it precisely instead of a blank 500.
 		if errors.Is(err, repository.ErrInvalidReference) {
-			return 0, fiber.NewError(fiber.StatusBadRequest, "sesi progres menunjuk data yang tidak valid")
+			return nil, fiber.NewError(fiber.StatusBadRequest, "sesi progres menunjuk data yang tidak valid")
 		}
-		return 0, fiber.ErrInternalServerError
+		return nil, fiber.ErrInternalServerError
 	}
 
 	if u.Log != nil {
-		u.Log.Infof("Finalize: %s progres_id=%d skor=%d/%d xp=%d (cause=%s)", key, progresId, runningSkor, maxScore, awardedXp, cause)
+		u.Log.Infof("Finalize: %s progres_id=%d skor=%d/%d xp=%d level=%d→%d (cause=%s)", key, progresId, runningSkor, maxScore, awardedXp, prevLevel, newLevel, cause)
 	}
 
 	// Step 5b: update streak + daily-task progress. Must not fail the finalize —
@@ -495,7 +483,12 @@ func (u *progressSessionUseCaseImpl) Finalize(ctx context.Context, key string, c
 	pipe.ZRem(ctx, progressActiveZSet, key)
 	_, _ = pipe.Exec(ctx)
 
-	return progresId, nil
+	return &model.ProgressFinalizeResponse{
+		ProgresId:     progresId,
+		LeveledUp:     newLevel > prevLevel,
+		PreviousLevel: prevLevel,
+		NewLevel:      newLevel,
+	}, nil
 }
 
 // ─── ListExpiredSessionKeys ───────────────────────────────────────────────────

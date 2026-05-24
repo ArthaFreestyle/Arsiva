@@ -22,24 +22,26 @@ import (
 // ─── Mock repository ──────────────────────────────────────────────────────────
 
 type mockProgressRepo struct {
-	contentExists     bool
-	contentExistsErr  error
-	kuisMaxScore      int
-	kuisMaxScoreErr   error
-	ceritaMaxScore    int
-	jawabanScore      int
-	jawabanScoreErr   error
-	sceneIsEnding     bool
-	sceneEndingPoint  int
-	sceneEndingErr    error
-	xpReward          int
-	xpRewardErr       error
-	saveProgressId    int
-	saveProgressErr   error
-	pertanyaanOk      bool
-	pertanyaanOkErr   error
-	sceneOk           bool
-	sceneOkErr        error
+	contentExists          bool
+	contentExistsErr       error
+	kuisMaxScore           int
+	kuisMaxScoreErr        error
+	ceritaMaxScore         int
+	jawabanScore           int
+	jawabanScoreErr        error
+	sceneIsEnding          bool
+	sceneEndingPoint       int
+	sceneEndingErr         error
+	xpReward               int
+	xpRewardErr            error
+	saveProgressId         int
+	saveProgressPrevLevel  int
+	saveProgressNewLevel   int
+	saveProgressErr        error
+	pertanyaanOk           bool
+	pertanyaanOkErr        error
+	sceneOk                bool
+	sceneOkErr             error
 
 	saveProgressCalls int
 	mu                sync.Mutex
@@ -69,11 +71,11 @@ func (m *mockProgressRepo) GetSceneEndingInfo(_ context.Context, _ int) (bool, i
 func (m *mockProgressRepo) GetContentXpReward(_ context.Context, _ string, _ int) (int, error) {
 	return m.xpReward, m.xpRewardErr
 }
-func (m *mockProgressRepo) SaveProgress(_ context.Context, _ *entity.MemberProgress, _ int) (int, error) {
+func (m *mockProgressRepo) SaveProgress(_ context.Context, _ *entity.MemberProgress, _ int) (int, int, int, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.saveProgressCalls++
-	return m.saveProgressId, m.saveProgressErr
+	return m.saveProgressId, m.saveProgressPrevLevel, m.saveProgressNewLevel, m.saveProgressErr
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -238,12 +240,12 @@ func TestFinalize_PerfectScore_AwardsXP(t *testing.T) {
 	// Simulate perfect score in Redis.
 	mr.HSet(key, "running_skor", fmt.Sprintf("%d", maxScore))
 
-	progresId, err := uc.Finalize(context.Background(), key, "submit")
+	resp, err := uc.Finalize(context.Background(), key, "submit")
 	if err != nil {
 		t.Fatalf("Finalize: %v", err)
 	}
-	if progresId != 99 {
-		t.Errorf("expected progresId=99, got %d", progresId)
+	if resp.ProgresId != 99 {
+		t.Errorf("expected progresId=99, got %d", resp.ProgresId)
 	}
 
 	// SaveProgress called exactly once.
@@ -477,6 +479,90 @@ func TestFinalize_ContentNotFound_Returns404(t *testing.T) {
 	var fe *fiber.Error
 	if !errors.As(err, &fe) || fe.Code != fiber.StatusNotFound {
 		t.Fatalf("expected 404 fiber error for missing content, got %v", err)
+	}
+}
+
+// ─── Level-up tests ───────────────────────────────────────────────────────────
+
+// No XP awarded → LeveledUp must be false.
+func TestFinalize_NoXP_LeveledUpFalse(t *testing.T) {
+	repo := &mockProgressRepo{
+		contentExists: true, kuisMaxScore: 100,
+		xpReward: 150, saveProgressId: 1,
+		saveProgressPrevLevel: 0, saveProgressNewLevel: 0,
+	}
+	uc, mr := newTestUseCase(t, repo)
+	claims := progressMemberClaims("42")
+	if _, err := uc.Start(context.Background(), defaultStartReq(), claims); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	key := sessionKey("42", "kuis", 1)
+	// Partial score → no XP awarded.
+	mr.HSet(key, "running_skor", "50")
+
+	resp, err := uc.Finalize(context.Background(), key, "submit")
+	if err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+	if resp.LeveledUp {
+		t.Errorf("expected LeveledUp=false when no XP awarded")
+	}
+}
+
+// Single level-up: mock returns prevLevel=0, newLevel=1 → LeveledUp must be true.
+func TestFinalize_SingleLevelUp_SignaledInResponse(t *testing.T) {
+	repo := &mockProgressRepo{
+		contentExists: true, kuisMaxScore: 100,
+		xpReward: 100, saveProgressId: 2,
+		saveProgressPrevLevel: 0, saveProgressNewLevel: 1,
+	}
+	uc, mr := newTestUseCase(t, repo)
+	claims := progressMemberClaims("42")
+	if _, err := uc.Start(context.Background(), defaultStartReq(), claims); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	key := sessionKey("42", "kuis", 1)
+	mr.HSet(key, "running_skor", "100")
+
+	resp, err := uc.Finalize(context.Background(), key, "submit")
+	if err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+	if !resp.LeveledUp {
+		t.Errorf("expected LeveledUp=true on single level-up")
+	}
+	if resp.PreviousLevel != 0 || resp.NewLevel != 1 {
+		t.Errorf("expected PreviousLevel=0 NewLevel=1, got %d/%d", resp.PreviousLevel, resp.NewLevel)
+	}
+}
+
+// Multi-level jump: mock returns prevLevel=0, newLevel=2 → correct final level reported.
+func TestFinalize_MultiLevelJump_SignaledInResponse(t *testing.T) {
+	repo := &mockProgressRepo{
+		contentExists: true, kuisMaxScore: 100,
+		xpReward: 500, saveProgressId: 3,
+		saveProgressPrevLevel: 0, saveProgressNewLevel: 2,
+	}
+	uc, mr := newTestUseCase(t, repo)
+	claims := progressMemberClaims("42")
+	if _, err := uc.Start(context.Background(), defaultStartReq(), claims); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	key := sessionKey("42", "kuis", 1)
+	mr.HSet(key, "running_skor", "100")
+
+	resp, err := uc.Finalize(context.Background(), key, "submit")
+	if err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+	if !resp.LeveledUp {
+		t.Errorf("expected LeveledUp=true on multi-level jump")
+	}
+	if resp.NewLevel != 2 {
+		t.Errorf("expected NewLevel=2 on multi-level jump, got %d", resp.NewLevel)
 	}
 }
 

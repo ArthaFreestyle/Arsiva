@@ -11,6 +11,7 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"ArthaFreestyle/Arsiva/internal/entity"
+	"ArthaFreestyle/Arsiva/internal/utils"
 )
 
 var ErrContentNotFound = errors.New("content not found or not published")
@@ -44,9 +45,9 @@ type MemberProgressRepository interface {
 	// Returns the xp_reward from the content table (read fresh at finalize time).
 	GetContentXpReward(ctx context.Context, contentType string, contentId int) (int, error)
 
-	// Atomically inserts member_progress and optionally credits total_xp.
-	// Returns the new progres_id.
-	SaveProgress(ctx context.Context, progress *entity.MemberProgress, awardedXp int) (int, error)
+	// Atomically inserts member_progress and optionally credits total_xp and recomputes level.
+	// Returns the new progres_id, previous level, and new level.
+	SaveProgress(ctx context.Context, progress *entity.MemberProgress, awardedXp int) (progresId int, prevLevel int, newLevel int, err error)
 }
 
 type memberProgressRepositoryImpl struct {
@@ -205,15 +206,15 @@ func (r *memberProgressRepositoryImpl) GetContentXpReward(ctx context.Context, c
 	return xpReward, nil
 }
 
-func (r *memberProgressRepositoryImpl) SaveProgress(ctx context.Context, progress *entity.MemberProgress, awardedXp int) (int, error) {
+func (r *memberProgressRepositoryImpl) SaveProgress(ctx context.Context, progress *entity.MemberProgress, awardedXp int) (int, int, int, error) {
 	var groupId *string
 	if progress.GroupId != "" {
 		groupId = &progress.GroupId
 	}
 
-	progresId, err := r.insertProgress(ctx, progress, awardedXp, groupId)
+	progresId, prevLevel, newLevel, err := r.insertProgress(ctx, progress, awardedXp, groupId)
 	if err == nil {
-		return progresId, nil
+		return progresId, prevLevel, newLevel, nil
 	}
 
 	// Classify the failure. A foreign-key violation means the row references something
@@ -228,24 +229,24 @@ func (r *memberProgressRepositoryImpl) SaveProgress(ctx context.Context, progres
 	if errors.As(err, &pgErr) && pgErr.Code == "23503" { // foreign_key_violation
 		if pgErr.ConstraintName == "member_progress_group_id_fkey" && groupId != nil {
 			r.Log.Warnf("SaveProgress: group_id=%q does not reference a valid group; persisting progress without it", *groupId)
-			if progresId, err = r.insertProgress(ctx, progress, awardedXp, nil); err == nil {
-				return progresId, nil
+			if progresId, prevLevel, newLevel, err = r.insertProgress(ctx, progress, awardedXp, nil); err == nil {
+				return progresId, prevLevel, newLevel, nil
 			}
 		}
 		r.Log.Errorf("SaveProgress foreign-key violation (constraint=%s detail=%s): %v", pgErr.ConstraintName, pgErr.Detail, err)
-		return 0, fmt.Errorf("%w: %s", ErrInvalidReference, pgErr.ConstraintName)
+		return 0, 0, 0, fmt.Errorf("%w: %s", ErrInvalidReference, pgErr.ConstraintName)
 	}
 
-	return 0, err
+	return 0, 0, 0, err
 }
 
-// insertProgress runs the member_progress INSERT (and optional XP credit) in a single
-// transaction and returns the new progres_id.
-func (r *memberProgressRepositoryImpl) insertProgress(ctx context.Context, progress *entity.MemberProgress, awardedXp int, groupId *string) (int, error) {
+// insertProgress runs the member_progress INSERT (and optional XP + level update) in a
+// single transaction. Returns progres_id, previous level, and new level.
+func (r *memberProgressRepositoryImpl) insertProgress(ctx context.Context, progress *entity.MemberProgress, awardedXp int, groupId *string) (progresId int, prevLevel int, newLevel int, err error) {
 	tx, err := r.DB.Begin(ctx)
 	if err != nil {
 		r.Log.Errorf("SaveProgress begin tx: %v", err)
-		return 0, err
+		return 0, 0, 0, err
 	}
 	defer func() {
 		if err != nil {
@@ -253,7 +254,6 @@ func (r *memberProgressRepositoryImpl) insertProgress(ctx context.Context, progr
 		}
 	}()
 
-	var progresId int
 	err = tx.QueryRow(ctx, `
 		INSERT INTO member_progress
 			(member_id, group_id, content_type, content_id, skor, xp_reward, completed_at, duration)
@@ -263,22 +263,36 @@ func (r *memberProgressRepositoryImpl) insertProgress(ctx context.Context, progr
 		progress.Skor, awardedXp, progress.Duration).Scan(&progresId)
 	if err != nil {
 		r.Log.Errorf("SaveProgress insert: %v", err)
-		return 0, err
+		return 0, 0, 0, err
 	}
 
 	if awardedXp > 0 {
-		_, err = tx.Exec(ctx,
-			`UPDATE members SET total_xp = total_xp + $1 WHERE member_id = $2`,
-			awardedXp, progress.MemberId)
+		var newTotalXp int
+		err = tx.QueryRow(ctx,
+			`UPDATE members SET total_xp = total_xp + $1 WHERE member_id = $2 RETURNING total_xp`,
+			awardedXp, progress.MemberId).Scan(&newTotalXp)
 		if err != nil {
 			r.Log.Errorf("SaveProgress update xp: %v", err)
-			return 0, err
+			return 0, 0, 0, err
+		}
+
+		prevLevel = utils.LevelForXP(newTotalXp - awardedXp)
+		newLevel = utils.LevelForXP(newTotalXp)
+
+		if newLevel != prevLevel {
+			_, err = tx.Exec(ctx,
+				`UPDATE members SET level = $1 WHERE member_id = $2`,
+				newLevel, progress.MemberId)
+			if err != nil {
+				r.Log.Errorf("SaveProgress update level: %v", err)
+				return 0, 0, 0, err
+			}
 		}
 	}
 
 	if err = tx.Commit(ctx); err != nil {
 		r.Log.Errorf("SaveProgress commit: %v", err)
-		return 0, err
+		return 0, 0, 0, err
 	}
-	return progresId, nil
+	return progresId, prevLevel, newLevel, nil
 }
