@@ -26,5 +26,13 @@
             "password" : "PASSWORD_REDIS",
             "db" : 0
         }
+    },
+    "log" : {
+        "level" : 5,
+        "file" : "./logs/arsiva.log",
+        "max_size_mb" : 50,
+        "max_backups" : 7,
+        "max_age_days" : 30,
+        "compress" : true
     }
 }

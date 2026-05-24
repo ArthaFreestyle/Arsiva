@@ -371,7 +371,9 @@ Follow the existing layer layout (entity → repository → usecase → model/co
 ## Debugging
 
 - Enable detailed logging via `internal/config/logrus.go` (LogLevel configuration)
-- Check logs in running Docker container: `docker compose logs api-server`
+- Logs are written to **both stderr and a rotating file on disk**. The file path comes from `log.file` in `config.json` (default `./logs/arsiva.log`); rotation (`max_size_mb`, `max_backups`, `max_age_days`, `compress`) is configured under the same `log` block — see `config.example.json`. Rotation is handled by `gopkg.in/natefinch/lumberjack.v2`.
+- Check logs in running Docker container: `docker compose logs api-server` (stderr), or read the file under `/app/logs` (bind-mounted to a persistent host dir in `docker-compose.yml` so it survives container recreation).
+- The `logs/` directory is gitignored.
 - All repositories log their SQL queries
 
 ## Git Workflow
