@@ -9,7 +9,7 @@ info:
     Semua endpoint (kecuali Login dan GET uploaded files) memerlukan JWT Bearer
     token. \ 
 
-    Dapatkan token melalui endpoint `POST /api/v1/login`.
+    Dapatkan token melalui endpoint `POST /v1/login`.
 
 
     ## Role-Based Access Control
@@ -98,10 +98,11 @@ tags:
     description: "CRUD cerita interaktif (🔒 GET = semua role, POST/PUT/DELETE =
       guru + super_admin)"
   - name: Upload
-    description: "Upload file gambar (🔒 POST = guru + super_admin, GET = public)"
+    description: "Upload file gambar (🔒 POST = semua role ter-autentikasi, tanpa ProfileComplete; GET = public)"
   - name: Groups
-    description: "CRUD manajemen grup, anggota, dan konten grup (🔒 POST/PUT/DELETE/GET\
-      \ = guru, POST join = member, GET contents = guru + member + super_admin)"
+    description: "CRUD manajemen grup, anggota, dan konten grup (🔒 POST/PUT/DELETE +\
+      \ kelola anggota/konten = guru; GET list = semua role (role-aware); POST join =\
+      \ member; GET contents = guru + member + super_admin)"
   - name: Sekolah
     description: "CRUD manajemen data sekolah (🔒 super_admin only)"
   - name: Guru
@@ -123,7 +124,7 @@ tags:
   - name: Gamification
     description: "Daily streak & daily tasks milik member yang sedang login — diperbarui otomatis saat menyelesaikan konten, tidak ada endpoint tulis (🔒 member only)"
 paths:
-  /api/v1/login:
+  /v1/login:
     post:
       tags:
         - Auth
@@ -216,7 +217,7 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
               example:
                 errors: Too Many Requests
-  /api/v1/register/member:
+  /v1/register/member:
     post:
       tags:
         - Auth
@@ -275,7 +276,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /api/v1/register/guru:
+  /v1/register/guru:
     post:
       tags:
         - Auth
@@ -334,7 +335,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /api/v1/users:
+  /v1/users:
     get:
       tags:
         - Users
@@ -427,7 +428,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /api/v1/users/deleted:
+  /v1/users/deleted:
     get:
       tags:
         - Users
@@ -461,7 +462,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /api/v1/users/search:
+  /v1/users/search:
     get:
       tags:
         - Users
@@ -508,7 +509,7 @@ paths:
           $ref: "#/components/responses/ForbiddenResponse"
         "409":
           $ref: "#/components/responses/ProfileIncompleteResponse"
-  /api/v1/users/{id}:
+  /v1/users/{id}:
     parameters:
       - name: id
         in: path
@@ -638,7 +639,7 @@ paths:
           $ref: "#/components/responses/UnauthorizedResponse"
         "403":
           $ref: "#/components/responses/ForbiddenResponse"
-  /api/v1/users/{id}/restore:
+  /v1/users/{id}/restore:
     parameters:
       - name: id
         in: path
@@ -699,7 +700,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /api/v1/categories/article:
+  /v1/categories/article:
     get:
       tags:
         - Article Categories
@@ -750,7 +751,7 @@ paths:
           $ref: "#/components/responses/ForbiddenResponse"
         "409":
           $ref: "#/components/responses/ProfileIncompleteResponse"
-  /api/v1/categories/article/{id}:
+  /v1/categories/article/{id}:
     parameters:
       - name: id
         in: path
@@ -825,7 +826,7 @@ paths:
           $ref: "#/components/responses/ForbiddenResponse"
         "409":
           $ref: "#/components/responses/ProfileIncompleteResponse"
-  /api/v1/categories/story:
+  /v1/categories/story:
     get:
       tags:
         - Story Categories
@@ -894,7 +895,7 @@ paths:
           $ref: "#/components/responses/ForbiddenResponse"
         "409":
           $ref: "#/components/responses/ProfileIncompleteResponse"
-  /api/v1/categories/story/{id}:
+  /v1/categories/story/{id}:
     parameters:
       - name: id
         in: path
@@ -969,7 +970,7 @@ paths:
           $ref: "#/components/responses/ForbiddenResponse"
         "409":
           $ref: "#/components/responses/ProfileIncompleteResponse"
-  /api/v1/categories/quiz:
+  /v1/categories/quiz:
     get:
       tags:
         - Quiz Categories
@@ -1039,7 +1040,7 @@ paths:
           $ref: "#/components/responses/ForbiddenResponse"
         "409":
           $ref: "#/components/responses/ProfileIncompleteResponse"
-  /api/v1/categories/quiz/{id}:
+  /v1/categories/quiz/{id}:
     parameters:
       - name: id
         in: path
@@ -1114,7 +1115,7 @@ paths:
           $ref: "#/components/responses/ForbiddenResponse"
         "409":
           $ref: "#/components/responses/ProfileIncompleteResponse"
-  /api/v1/articles:
+  /v1/articles:
     get:
       tags:
         - Articles
@@ -1199,7 +1200,7 @@ paths:
           $ref: "#/components/responses/ForbiddenResponse"
         "409":
           $ref: "#/components/responses/ProfileIncompleteResponse"
-  /api/v1/articles/{slug}:
+  /v1/articles/{slug}:
     parameters:
       - name: slug
         in: path
@@ -1231,7 +1232,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /api/v1/articles/detail/{id}:
+  /v1/articles/detail/{id}:
     parameters:
       - name: id
         in: path
@@ -1263,7 +1264,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /api/v1/articles/{id}:
+  /v1/articles/{id}:
     parameters:
       - name: id
         in: path
@@ -1349,23 +1350,317 @@ paths:
           $ref: "#/components/responses/ForbiddenResponse"
         "409":
           $ref: "#/components/responses/ProfileIncompleteResponse"
-  /api/v1/upload/image:
+  /v1/manage/articles:
+    get:
+      tags:
+        - Articles
+      summary: Get all articles (management view)
+      description: "Listing untuk halaman manajemen — **termasuk artikel draft**.
+        Role-aware: `guru` hanya melihat artikel miliknya sendiri, `super_admin`
+        melihat semua. \
+
+        🔒 **Role**: `guru`, `super_admin` — memerlukan ProfileComplete.\n"
+      operationId: getAllArticlesManage
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Nomor halaman
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 10
+          description: Jumlah item per halaman
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Pencarian berdasarkan judul artikel
+      responses:
+        "200":
+          description: Daftar artikel (termasuk draft)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArticleListWrapper"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
+  /v1/manage/articles/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: ID artikel
+    get:
+      tags:
+        - Articles
+      summary: Get article by ID (management view)
+      description: "Detail artikel untuk halaman edit — termasuk draft. Role-aware:
+        `guru` hanya bisa mengakses artikel miliknya, `super_admin` semua. \
+
+        🔒 **Role**: `guru`, `super_admin` — memerlukan ProfileComplete.\n"
+      operationId: getArticleByIdManage
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Detail artikel
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArticleWrapper"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
+  /v1/manage/puzzles:
+    get:
+      tags:
+        - Puzzles
+      summary: Get all puzzles (management view)
+      description: "Listing untuk halaman manajemen — **termasuk puzzle draft**.
+        Role-aware: `guru` hanya melihat puzzle miliknya, `super_admin` semua. \
+
+        🔒 **Role**: `guru`, `super_admin` — memerlukan ProfileComplete.\n"
+      operationId: getAllPuzzlesManage
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 10
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Daftar puzzle (termasuk draft)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PuzzleListWrapper"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
+  /v1/manage/puzzles/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: ID puzzle
+    get:
+      tags:
+        - Puzzles
+      summary: Get puzzle by ID (management view)
+      description: "Detail puzzle untuk halaman edit — termasuk draft. Role-aware:
+        `guru` hanya puzzle miliknya, `super_admin` semua. \
+
+        🔒 **Role**: `guru`, `super_admin` — memerlukan ProfileComplete.\n"
+      operationId: getPuzzleByIdManage
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Detail puzzle
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PuzzleWrapper"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
+  /v1/manage/quizzes:
+    get:
+      tags:
+        - Quizzes
+      summary: Get all quizzes (management view)
+      description: "Listing untuk halaman manajemen — **termasuk kuis draft**.
+        Role-aware: `guru` hanya melihat kuis miliknya, `super_admin` semua. \
+
+        🔒 **Role**: `guru`, `super_admin` — memerlukan ProfileComplete.\n"
+      operationId: getAllQuizzesManage
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 10
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Daftar kuis (termasuk draft)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuizListWrapper"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
+  /v1/manage/quizzes/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: integer
+        description: ID kuis
+    get:
+      tags:
+        - Quizzes
+      summary: Get quiz by ID (management view)
+      description: "Detail kuis lengkap (pertanyaan + pilihan) untuk halaman edit —
+        termasuk draft. Role-aware: `guru` hanya kuis miliknya, `super_admin` semua. \
+
+        🔒 **Role**: `guru`, `super_admin` — memerlukan ProfileComplete.\n"
+      operationId: getQuizByIdManage
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Detail kuis
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuizWrapper"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
+  /v1/manage/stories:
+    get:
+      tags:
+        - Stories
+      summary: Get all stories (management view)
+      description: "Listing untuk halaman manajemen — **termasuk cerita draft**.
+        Role-aware: `guru` hanya melihat cerita miliknya, `super_admin` semua. \
+
+        🔒 **Role**: `guru`, `super_admin` — memerlukan ProfileComplete.\n"
+      operationId: getAllStoriesManage
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: size
+          in: query
+          schema:
+            type: integer
+            default: 10
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Daftar cerita (termasuk draft)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StoryListWrapper"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
+  /v1/manage/stories/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+        description: ID cerita interaktif
+    get:
+      tags:
+        - Stories
+      summary: Get story by ID (management view)
+      description: "Detail cerita beserta scene untuk halaman edit — termasuk draft.
+        Role-aware: `guru` hanya cerita miliknya, `super_admin` semua. \
+
+        🔒 **Role**: `guru`, `super_admin` — memerlukan ProfileComplete.\n"
+      operationId: getStoryByIdManage
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Detail cerita
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StoryWrapper"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ProfileIncompleteResponse"
+  /v1/upload/image:
     post:
       tags:
         - Upload
       summary: Upload gambar
-      description: "Upload file gambar untuk digunakan di artikel (thumbnail atau
-        konten Block-Based Editor). \ 
+      description: "Upload file gambar — dipakai untuk thumbnail/konten artikel
+        (Block-Based Editor) maupun foto profil member. \
 
-        - Format yang didukung: **jpg, jpeg, png, webp, gif** \ 
+        - Format yang didukung: **jpg, jpeg, png, webp, gif** \
 
-        - Ukuran maksimal: **5MB** \ 
+        - Ukuran maksimal: **5MB** \
 
-        - File disimpan di `uploads/YYYY/MM/<uuid>.ext` \ 
+        - File disimpan di `uploads/YYYY/MM/<uuid>.ext` \
 
-        - URL yang dikembalikan bisa langsung diakses via `GET /uploads/...` \ 
+        - URL yang dikembalikan bisa langsung diakses via `GET /uploads/...` \
 
-        🔒 **Role**: `guru`, `super_admin`\n"
+        🔒 **Role**: `member`, `guru`, `super_admin` — **tidak** memerlukan ProfileComplete
+        (member bisa upload foto profil sebelum baris profilnya dibuat). File yatim
+        yang tidak pernah direferensikan dibersihkan oleh cron aset 24 jam.\n"
       operationId: uploadImage
       security:
         - BearerAuth: []
@@ -1402,6 +1697,8 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
               example:
                 error: "Format file tidak didukung. Gunakan: jpg, jpeg, png, webp, gif"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
   /uploads/{filepath}:
     parameters:
       - name: filepath
@@ -1427,7 +1724,7 @@ paths:
                 format: binary
         "404":
           description: File tidak ditemukan
-  /api/v1/puzzles:
+  /v1/puzzles:
     get:
       tags:
         - Puzzles
@@ -1506,7 +1803,7 @@ paths:
           $ref: "#/components/responses/ForbiddenResponse"
         "409":
           $ref: "#/components/responses/ProfileIncompleteResponse"
-  /api/v1/puzzles/{id}:
+  /v1/puzzles/{id}:
     parameters:
       - name: id
         in: path
@@ -1605,7 +1902,7 @@ paths:
           $ref: "#/components/responses/ForbiddenResponse"
         "409":
           $ref: "#/components/responses/ProfileIncompleteResponse"
-  /api/v1/quizzes:
+  /v1/quizzes:
     get:
       tags:
         - Quizzes
@@ -1686,7 +1983,7 @@ paths:
           $ref: "#/components/responses/ForbiddenResponse"
         "409":
           $ref: "#/components/responses/ProfileIncompleteResponse"
-  /api/v1/quizzes/{id}:
+  /v1/quizzes/{id}:
     parameters:
       - name: id
         in: path
@@ -1790,7 +2087,7 @@ paths:
           $ref: "#/components/responses/ForbiddenResponse"
         "409":
           $ref: "#/components/responses/ProfileIncompleteResponse"
-  /api/v1/stories:
+  /v1/stories:
     get:
       tags:
         - Stories
@@ -1860,7 +2157,7 @@ paths:
           $ref: "#/components/responses/ForbiddenResponse"
         "409":
           $ref: "#/components/responses/ProfileIncompleteResponse"
-  /api/v1/stories/{id}:
+  /v1/stories/{id}:
     parameters:
       - name: id
         in: path
@@ -1967,7 +2264,7 @@ paths:
           $ref: "#/components/responses/ForbiddenResponse"
         "409":
           $ref: "#/components/responses/ProfileIncompleteResponse"
-  /api/v1/stories/{id}/scenes:
+  /v1/stories/{id}/scenes:
     parameters:
       - name: id
         in: path
@@ -2016,7 +2313,7 @@ paths:
           $ref: "#/components/responses/ForbiddenResponse"
         "409":
           $ref: "#/components/responses/ProfileIncompleteResponse"
-  /api/v1/stories/{id}/scenes/{scene_id}:
+  /v1/stories/{id}/scenes/{scene_id}:
     parameters:
       - name: id
         in: path
@@ -2104,11 +2401,15 @@ paths:
           $ref: "#/components/responses/ForbiddenResponse"
         "409":
           $ref: "#/components/responses/ProfileIncompleteResponse"
-  /api/v1/groups:
+  /v1/groups:
     get:
       tags:
         - Groups
       summary: Get all groups
+      description: "Daftar grup, role-aware: `guru` melihat grup yang ia buat,
+        `member` melihat grup yang ia ikuti, `super_admin` melihat semua. \
+
+        🔒 **Role**: `member`, `guru`, `super_admin` — memerlukan ProfileComplete.\n"
       security:
         - BearerAuth: []
       responses:
@@ -2168,7 +2469,7 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/GroupCreateRequest"
-  /api/v1/groups/{id}:
+  /v1/groups/{id}:
     get:
       tags:
         - Groups
@@ -2250,7 +2551,7 @@ paths:
           $ref: "#/components/responses/ForbiddenResponse"
         "409":
           $ref: "#/components/responses/ProfileIncompleteResponse"
-  /api/v1/groups/{id}/invite:
+  /v1/groups/{id}/invite:
     post:
       tags:
         - Groups
@@ -2282,7 +2583,7 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/GroupInviteEmailRequest"
-  /api/v1/groups/{id}/invite-link:
+  /v1/groups/{id}/invite-link:
     get:
       tags:
         - Groups
@@ -2308,7 +2609,7 @@ paths:
           $ref: "#/components/responses/ForbiddenResponse"
         "409":
           $ref: "#/components/responses/ProfileIncompleteResponse"
-  /api/v1/groups/join:
+  /v1/groups/join:
     post:
       tags:
         - Groups
@@ -2334,7 +2635,7 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/GroupJoinRequest"
-  /api/v1/groups/{id}/members:
+  /v1/groups/{id}/members:
     get:
       tags:
         - Groups
@@ -2360,7 +2661,7 @@ paths:
           $ref: "#/components/responses/ForbiddenResponse"
         "409":
           $ref: "#/components/responses/ProfileIncompleteResponse"
-  /api/v1/groups/{id}/members/{member_id}:
+  /v1/groups/{id}/members/{member_id}:
     delete:
       tags:
         - Groups
@@ -2391,7 +2692,7 @@ paths:
           $ref: "#/components/responses/ForbiddenResponse"
         "409":
           $ref: "#/components/responses/ProfileIncompleteResponse"
-  /api/v1/groups/{id}/contents:
+  /v1/groups/{id}/contents:
     parameters:
       - name: id
         in: path
@@ -2515,7 +2816,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /api/v1/groups/{id}/contents/{content_id}:
+  /v1/groups/{id}/contents/{content_id}:
     parameters:
       - name: id
         in: path
@@ -2568,7 +2869,7 @@ paths:
           $ref: "#/components/responses/ForbiddenResponse"
         "409":
           $ref: "#/components/responses/ProfileIncompleteResponse"
-  /api/v1/sekolah:
+  /v1/sekolah:
     get:
       tags:
         - Sekolah
@@ -2666,7 +2967,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /api/v1/sekolah/{id}:
+  /v1/sekolah/{id}:
     parameters:
       - name: id
         in: path
@@ -2802,7 +3103,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /api/v1/guru:
+  /v1/guru:
     get:
       tags:
         - Guru
@@ -2915,7 +3216,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /api/v1/guru/me:
+  /v1/guru/me:
     get:
       tags:
         - Guru
@@ -2955,7 +3256,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /api/v1/guru/{id}:
+  /v1/guru/{id}:
     parameters:
       - name: id
         in: path
@@ -3095,7 +3396,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /api/v1/member:
+  /v1/member:
     get:
       tags:
         - Member
@@ -3220,7 +3521,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /api/v1/member/me:
+  /v1/member/me:
     get:
       tags:
         - Member
@@ -3310,7 +3611,7 @@ paths:
           $ref: "#/components/responses/ForbiddenResponse"
         "409":
           $ref: "#/components/responses/ProfileIncompleteResponse"
-  /api/v1/member/{id}:
+  /v1/member/{id}:
     parameters:
       - name: id
         in: path
@@ -3448,7 +3749,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /api/v1/member/profile:
+  /v1/member/profile:
     get:
       tags:
         - Member
@@ -3476,7 +3777,7 @@ paths:
           $ref: "#/components/responses/ForbiddenResponse"
         "409":
           $ref: "#/components/responses/ProfileIncompleteResponse"
-  /api/v1/member/social-links:
+  /v1/member/social-links:
     post:
       tags:
         - Member Social Links
@@ -3540,7 +3841,7 @@ paths:
           $ref: "#/components/responses/ForbiddenResponse"
         "409":
           $ref: "#/components/responses/ProfileIncompleteResponse"
-  /api/v1/member/social-links/{id}:
+  /v1/member/social-links/{id}:
     parameters:
       - name: id
         in: path
@@ -3649,7 +3950,7 @@ paths:
           $ref: "#/components/responses/ForbiddenResponse"
         "409":
           $ref: "#/components/responses/ProfileIncompleteResponse"
-  /api/v1/member/achievements:
+  /v1/member/achievements:
     post:
       tags:
         - Member Achievements
@@ -3722,7 +4023,7 @@ paths:
           $ref: "#/components/responses/ForbiddenResponse"
         "409":
           $ref: "#/components/responses/ProfileIncompleteResponse"
-  /api/v1/member/achievements/{achievement_id}:
+  /v1/member/achievements/{achievement_id}:
     get:
       tags:
         - Member Achievements
@@ -3756,7 +4057,7 @@ paths:
           $ref: "#/components/responses/ForbiddenResponse"
         "409":
           $ref: "#/components/responses/ProfileIncompleteResponse"
-  /api/v1/member/achievements/{member_id}/{achievement_id}:
+  /v1/member/achievements/{member_id}/{achievement_id}:
     delete:
       tags:
         - Member Achievements
@@ -3797,7 +4098,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /api/v1/achievements:
+  /v1/achievements:
     get:
       tags:
         - Achievements
@@ -3918,7 +4219,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /api/v1/achievements/{id}:
+  /v1/achievements/{id}:
     parameters:
       - name: id
         in: path
@@ -4035,7 +4336,7 @@ paths:
                 errors: "achievement sudah pernah di-unlock oleh member; tidak bisa dihapus"
 
   # =====================================================================
-  /api/v1/progress/start:
+  /v1/progress/start:
     post:
       tags:
         - Game Progress
@@ -4079,7 +4380,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /api/v1/progress/answer:
+  /v1/progress/answer:
     post:
       tags:
         - Game Progress
@@ -4123,7 +4424,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /api/v1/progress/scene:
+  /v1/progress/scene:
     post:
       tags:
         - Game Progress
@@ -4161,7 +4462,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /api/v1/progress/solve:
+  /v1/progress/solve:
     post:
       tags:
         - Game Progress
@@ -4199,7 +4500,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /api/v1/progress/submit:
+  /v1/progress/submit:
     post:
       tags:
         - Game Progress
@@ -4231,7 +4532,7 @@ paths:
           $ref: "#/components/responses/UnauthorizedResponse"
         "403":
           $ref: "#/components/responses/ForbiddenResponse"
-  /api/v1/progress/session/{content_type}/{content_id}:
+  /v1/progress/session/{content_type}/{content_id}:
     get:
       tags:
         - Game Progress
@@ -4275,7 +4576,7 @@ paths:
   # =====================================================================
   # LEADERBOARD
   # =====================================================================
-  /api/v1/leaderboard:
+  /v1/leaderboard:
     get:
       tags:
         - Leaderboard
@@ -4327,7 +4628,7 @@ paths:
           $ref: "#/components/responses/UnauthorizedResponse"
         "403":
           $ref: "#/components/responses/ForbiddenResponse"
-  /api/v1/groups/{id}/leaderboard:
+  /v1/groups/{id}/leaderboard:
     get:
       tags:
         - Leaderboard
@@ -4384,7 +4685,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-  /api/v1/streak:
+  /v1/streak:
     get:
       tags:
         - Gamification
@@ -4413,7 +4714,7 @@ paths:
           $ref: "#/components/responses/ForbiddenResponse"
         "409":
           $ref: "#/components/responses/ProfileIncompleteResponse"
-  /api/v1/daily-tasks:
+  /v1/daily-tasks:
     get:
       tags:
         - Gamification
