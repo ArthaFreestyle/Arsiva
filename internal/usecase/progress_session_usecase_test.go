@@ -22,26 +22,27 @@ import (
 // ─── Mock repository ──────────────────────────────────────────────────────────
 
 type mockProgressRepo struct {
-	contentExists          bool
-	contentExistsErr       error
-	kuisMaxScore           int
-	kuisMaxScoreErr        error
-	ceritaMaxScore         int
-	jawabanScore           int
-	jawabanScoreErr        error
-	sceneIsEnding          bool
-	sceneEndingPoint       int
-	sceneEndingErr         error
-	xpReward               int
-	xpRewardErr            error
-	saveProgressId         int
-	saveProgressPrevLevel  int
-	saveProgressNewLevel   int
-	saveProgressErr        error
-	pertanyaanOk           bool
-	pertanyaanOkErr        error
-	sceneOk                bool
-	sceneOkErr             error
+	contentExists           bool
+	contentExistsErr        error
+	kuisMaxScore            int
+	kuisMaxScoreErr         error
+	ceritaMaxScore          int
+	jawabanScore            int
+	jawabanScoreErr         error
+	sceneIsEnding           bool
+	sceneEndingPoint        int
+	sceneEndingErr          error
+	xpReward                int
+	xpRewardErr             error
+	saveProgressId          int
+	saveProgressPrevLevel   int
+	saveProgressNewLevel    int
+	saveProgressEffectiveXp int // the effectiveXp the mock returns; defaults to the passed-in awardedXp
+	saveProgressErr         error
+	pertanyaanOk            bool
+	pertanyaanOkErr         error
+	sceneOk                 bool
+	sceneOkErr              error
 
 	saveProgressCalls int
 	mu                sync.Mutex
@@ -71,11 +72,15 @@ func (m *mockProgressRepo) GetSceneEndingInfo(_ context.Context, _ int) (bool, i
 func (m *mockProgressRepo) GetContentXpReward(_ context.Context, _ string, _ int) (int, error) {
 	return m.xpReward, m.xpRewardErr
 }
-func (m *mockProgressRepo) SaveProgress(_ context.Context, _ *entity.MemberProgress, _ int) (int, int, int, error) {
+func (m *mockProgressRepo) SaveProgress(_ context.Context, _ *entity.MemberProgress, awardedXp int) (int, int, int, int, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.saveProgressCalls++
-	return m.saveProgressId, m.saveProgressPrevLevel, m.saveProgressNewLevel, m.saveProgressErr
+	effectiveXp := m.saveProgressEffectiveXp
+	if effectiveXp == 0 {
+		effectiveXp = awardedXp
+	}
+	return m.saveProgressId, m.saveProgressPrevLevel, m.saveProgressNewLevel, effectiveXp, m.saveProgressErr
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -563,6 +568,75 @@ func TestFinalize_MultiLevelJump_SignaledInResponse(t *testing.T) {
 	}
 	if resp.NewLevel != 2 {
 		t.Errorf("expected NewLevel=2 on multi-level jump, got %d", resp.NewLevel)
+	}
+}
+
+// ─── One-time XP rule (issue #40) ────────────────────────────────────────────
+
+// When the mock reports effectiveXp=0 (simulating "already earned"), the response
+// must show no level-up and no XP, even though the candidate awardedXp was non-zero.
+func TestFinalize_RepeatCompletion_ZeroXpInResponse(t *testing.T) {
+	repo := &mockProgressRepo{
+		contentExists: true, kuisMaxScore: 100,
+		xpReward: 150, saveProgressId: 10,
+		// Simulate repo zeroing XP because this member already earned it.
+		saveProgressEffectiveXp: 0,
+		saveProgressPrevLevel:   0, saveProgressNewLevel: 0,
+	}
+	uc, mr := newTestUseCase(t, repo)
+	claims := progressMemberClaims("42")
+	if _, err := uc.Start(context.Background(), defaultStartReq(), claims); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	key := sessionKey("42", "kuis", 1)
+	mr.HSet(key, "running_skor", "100") // perfect score
+
+	resp, err := uc.Finalize(context.Background(), key, "submit")
+	if err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+	if resp.LeveledUp {
+		t.Errorf("expected LeveledUp=false when repo zeroes XP on repeat")
+	}
+	if resp.PreviousLevel != 0 || resp.NewLevel != 0 {
+		t.Errorf("expected PreviousLevel=0 NewLevel=0 on repeat, got %d/%d", resp.PreviousLevel, resp.NewLevel)
+	}
+	// SaveProgress still called — the row must always be inserted.
+	repo.mu.Lock()
+	calls := repo.saveProgressCalls
+	repo.mu.Unlock()
+	if calls != 1 {
+		t.Errorf("expected 1 SaveProgress call even on repeat, got %d", calls)
+	}
+}
+
+// First perfect attempt earns XP (mock passes through awardedXp); level-up is signalled.
+func TestFinalize_FirstPerfect_EarnsXP_LevelUp(t *testing.T) {
+	repo := &mockProgressRepo{
+		contentExists: true, kuisMaxScore: 100,
+		xpReward: 100, saveProgressId: 11,
+		// saveProgressEffectiveXp == 0 means "pass through awardedXp" per mock logic.
+		saveProgressPrevLevel: 0, saveProgressNewLevel: 1,
+	}
+	uc, mr := newTestUseCase(t, repo)
+	claims := progressMemberClaims("42")
+	if _, err := uc.Start(context.Background(), defaultStartReq(), claims); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	key := sessionKey("42", "kuis", 1)
+	mr.HSet(key, "running_skor", "100")
+
+	resp, err := uc.Finalize(context.Background(), key, "submit")
+	if err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+	if !resp.LeveledUp {
+		t.Errorf("expected LeveledUp=true on first perfect completion")
+	}
+	if resp.NewLevel != 1 {
+		t.Errorf("expected NewLevel=1, got %d", resp.NewLevel)
 	}
 }
 

@@ -444,7 +444,9 @@ func (u *progressSessionUseCaseImpl) Finalize(ctx context.Context, key string, c
 	}
 
 	// Step 5: persist to Postgres in a single transaction.
-	progresId, prevLevel, newLevel, err := u.Repo.SaveProgress(ctx, progress, awardedXp)
+	// effectiveXp may be less than awardedXp when the repo zeroes it out because the
+	// member already earned XP for this content (one-time-per-content rule).
+	progresId, prevLevel, newLevel, effectiveXp, err := u.Repo.SaveProgress(ctx, progress, awardedXp)
 	if err != nil {
 		if u.Log != nil {
 			u.Log.Errorf("Finalize SaveProgress (cause=%s key=%s): %v", cause, key, err)
@@ -461,13 +463,15 @@ func (u *progressSessionUseCaseImpl) Finalize(ctx context.Context, key string, c
 	}
 
 	if u.Log != nil {
-		u.Log.Infof("Finalize: %s progres_id=%d skor=%d/%d xp=%d level=%d→%d (cause=%s)", key, progresId, runningSkor, maxScore, awardedXp, prevLevel, newLevel, cause)
+		u.Log.Infof("Finalize: %s progres_id=%d skor=%d/%d xp=%d level=%d→%d (cause=%s)", key, progresId, runningSkor, maxScore, effectiveXp, prevLevel, newLevel, cause)
 	}
 
 	// Step 5b: update streak + daily-task progress. Must not fail the finalize —
 	// progress is already committed, so we log any error and continue.
+	// We pass effectiveXp (0 on repeat completions) so earn_xp daily tasks only tick
+	// when XP is actually granted; the streak and content-type task still tick regardless.
 	if u.Gamification != nil {
-		if err2 := u.Gamification.HandleContentFinished(ctx, memberId, contentType, awardedXp); err2 != nil {
+		if err2 := u.Gamification.HandleContentFinished(ctx, memberId, contentType, effectiveXp); err2 != nil {
 			if u.Log != nil {
 				u.Log.Errorf("Finalize HandleContentFinished (key=%s): %v", key, err2)
 			}
