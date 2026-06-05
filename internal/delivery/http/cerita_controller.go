@@ -71,7 +71,7 @@ func (c *ceritaControllerImpl) GetCeritaById(ctx fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, "internal server error")
 	}
 
-	res := model.WebResponse[*model.CeritaResponse]{
+	res := model.WebResponse[*model.PublicCeritaResponse]{
 		Data: cerita,
 	}
 

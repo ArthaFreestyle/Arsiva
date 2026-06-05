@@ -50,6 +50,53 @@ func ToCeritaResponse(cerita *entity.CeritaInteraktif) *model.CeritaResponse {
 	}
 }
 
+// ToPublicSceneResponse builds the member-facing scene view. It mirrors
+// ToSceneResponse but omits the scoring/ordering metadata (EndingPoint,
+// EndingType, Urutan) so members cannot read the answer key.
+func ToPublicSceneResponse(scene *entity.Scene) *model.PublicSceneResponse {
+	choices := make([]model.SceneChoice, 0, len(scene.SceneChoices))
+	for _, c := range scene.SceneChoices {
+		text, _ := c["text"].(string)
+		next, _ := c["next"].(string)
+		choices = append(choices, model.SceneChoice{
+			Text: text,
+			Next: next,
+		})
+	}
+
+	return &model.PublicSceneResponse{
+		SceneId:      scene.SceneId,
+		CeritaId:     scene.CeritaId,
+		SceneKey:     scene.SceneKey,
+		SceneImage:   toAsset(scene.SceneImageAssetId, scene.SceneImage),
+		SceneText:    scene.SceneText,
+		SceneChoices: choices,
+		IsEnding:     scene.IsEnding,
+	}
+}
+
+// ToPublicCeritaResponse builds the member-facing story view, routing scenes
+// through ToPublicSceneResponse so scoring/ordering metadata is omitted.
+func ToPublicCeritaResponse(cerita *entity.CeritaInteraktif) *model.PublicCeritaResponse {
+	var scenes []*model.PublicSceneResponse
+	for _, s := range cerita.Scenes {
+		scenes = append(scenes, ToPublicSceneResponse(s))
+	}
+
+	return &model.PublicCeritaResponse{
+		CeritaId:    cerita.CeritaId,
+		Judul:       cerita.Judul,
+		Thumbnail:   toAsset(cerita.ThumbnailAssetId, cerita.Thumbnail),
+		Deskripsi:   cerita.Deskripsi,
+		KategoriId:  cerita.KategoriId,
+		XpReward:    cerita.XpReward,
+		Scenes:      scenes,
+		CreatedAt:   cerita.CreatedAt,
+		CreatedBy:   *ToUserResponse(&cerita.CreatedBy),
+		IsPublished: cerita.IsPublished,
+	}
+}
+
 func ToCeritaResponses(ceritas []*entity.CeritaInteraktif) []*model.CeritaResponse {
 	responses := make([]*model.CeritaResponse, len(ceritas))
 	for i, cerita := range ceritas {

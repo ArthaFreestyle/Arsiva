@@ -15,7 +15,7 @@ import (
 
 type CeritaUseCase interface {
 	GetAllCerita(ctx context.Context, page int, size int, search string) ([]*model.CeritaResponse, int, error)
-	GetCeritaById(ctx context.Context, ceritaId int) (*model.CeritaResponse, error)
+	GetCeritaById(ctx context.Context, ceritaId int) (*model.PublicCeritaResponse, error)
 	CreateCerita(ctx context.Context, cerita *model.CeritaRequest, userId string) (*model.CeritaResponse, error)
 	UpdateCerita(ctx context.Context, cerita *model.CeritaRequest, ceritaId int) (*model.CeritaResponse, error)
 	CreateScene(ctx context.Context, ceritaId int, scene *model.SceneRequest) (*model.SceneResponse, error)
@@ -66,14 +66,14 @@ func (u *ceritaUseCaseImpl) GetAllCerita(ctx context.Context, page int, size int
 	return res, total, nil
 }
 
-func (u *ceritaUseCaseImpl) GetCeritaById(ctx context.Context, ceritaId int) (*model.CeritaResponse, error) {
+func (u *ceritaUseCaseImpl) GetCeritaById(ctx context.Context, ceritaId int) (*model.PublicCeritaResponse, error) {
 	cerita, err := u.CeritaRepository.FindById(ctx, ceritaId)
 	if err != nil {
 		u.Log.Warnf("error when get cerita by id: %v", err)
 		return nil, fiber.ErrInternalServerError
 	}
 
-	res := converter.ToCeritaResponse(cerita)
+	res := converter.ToPublicCeritaResponse(cerita)
 	return res, nil
 }
 
