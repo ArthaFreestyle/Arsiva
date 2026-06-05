@@ -24,3 +24,20 @@ type QuizResponse struct {
 	CreatedBy   UserResponse        `json:"created_by"`
 	IsPublished bool                `json:"is_published"`
 }
+
+// PublicQuizResponse is the member-facing quiz shape returned by
+// GET /v1/quizzes/:id. It carries the same quiz-level fields as QuizResponse
+// but embeds PublicQuestionResponse so per-question/per-option scoring
+// metadata (the answer key) is never serialized to members.
+type PublicQuizResponse struct {
+	QuizId      int                       `json:"quiz_id"`
+	Judul       string                    `json:"judul"`
+	Gambar      *AssetResponse            `json:"gambar"`
+	Thumbnail   *AssetResponse            `json:"thumbnail"`
+	Kategori    string                    `json:"kategori"`
+	XpReward    int                       `json:"xp_reward"`
+	Soal        []*PublicQuestionResponse `json:"soal,omitempty"`
+	CreatedAt   *time.Time                `json:"created_at"`
+	CreatedBy   UserResponse              `json:"created_by"`
+	IsPublished bool                      `json:"is_published"`
+}

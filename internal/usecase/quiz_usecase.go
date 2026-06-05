@@ -14,7 +14,7 @@ import (
 
 type QuizUseCase interface {
 	GetAll(ctx context.Context, page int, size int, search string) ([]*model.QuizResponse, int, error)
-	GetByID(ctx context.Context, id int) (*model.QuizResponse, error)
+	GetByID(ctx context.Context, id int) (*model.PublicQuizResponse, error)
 	Create(ctx context.Context, quiz *model.QuizRequest, userId string) (*model.QuizResponse, error)
 	Update(ctx context.Context, quiz *model.QuizRequest, id int) (*model.QuizResponse, error)
 	Delete(ctx context.Context, id int) error
@@ -58,14 +58,14 @@ func (u *quizUseCaseImpl) GetAll(ctx context.Context, page int, size int, search
 	return converter.ToQuizResponses(quizzes), total, nil
 }
 
-func (u *quizUseCaseImpl) GetByID(ctx context.Context, id int) (*model.QuizResponse, error) {
+func (u *quizUseCaseImpl) GetByID(ctx context.Context, id int) (*model.PublicQuizResponse, error) {
 	quiz, err := u.QuizRepository.GetByID(ctx, id)
 	if err != nil {
 		u.Log.Warnf("error when get quiz by id: %v", err)
 		return nil, fiber.ErrInternalServerError
 	}
 
-	return converter.ToQuizResponse(quiz), nil
+	return converter.ToPublicQuizResponse(quiz), nil
 }
 
 func (u *quizUseCaseImpl) Create(ctx context.Context, quiz *model.QuizRequest, userId string) (*model.QuizResponse, error) {

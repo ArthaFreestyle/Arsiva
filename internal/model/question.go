@@ -19,3 +19,16 @@ type QuestionResponse struct {
 	Urutan         int               `json:"urutan"`
 	Pilihan        []*OptionResponse `json:"pilihan"`
 }
+
+// PublicQuestionResponse is the member-facing question shape. It omits Poin
+// (per-question point value, scoring metadata) and uses PublicOptionResponse
+// so the answer key is never exposed.
+type PublicQuestionResponse struct {
+	PertanyaanId   int                     `json:"pertanyaan_id"`
+	KuisId         int                     `json:"kuis_id"`
+	TeksPertanyaan string                  `json:"teks_pertanyaan"`
+	Image          *AssetResponse          `json:"image"`
+	Tipe           string                  `json:"tipe"`
+	Urutan         int                     `json:"urutan"`
+	Pilihan        []*PublicOptionResponse `json:"pilihan"`
+}

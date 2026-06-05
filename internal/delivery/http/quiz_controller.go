@@ -67,7 +67,7 @@ func (c *quizControllerImpl) GetQuizById(ctx fiber.Ctx) error {
 		return err
 	}
 
-	res := model.WebResponse[*model.QuizResponse]{
+	res := model.WebResponse[*model.PublicQuizResponse]{
 		Data: quiz,
 	}
 	return ctx.Status(fiber.StatusOK).JSON(res)
