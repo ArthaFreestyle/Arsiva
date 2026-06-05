@@ -246,6 +246,34 @@ Also: route methods (`Get`/`Post`/etc.) take individual `fiber.Handler` args, no
 - `content_type_enum`: kuis, cerita, puzzle
 - `activity_type_enum`: login, update_profile, complete_quiz, read_story, solve_puzzle
 
+## Gameplay & Progression Flow
+
+This is the most cross-cutting subsystem and spans Redis, Postgres, and the gamification domain. Reading a single file does not reveal it.
+
+### Server-authoritative scoring (member play = ephemeral Redis sessions)
+Members *play* quizzes/stories/puzzles through `/v1/progress/*` (`ProgressController` → `ProgressSessionUseCase`, `internal/usecase/progress_session_usecase.go`). The browser is **never** the source of truth for score:
+- `POST /v1/progress/start` creates a Redis session (`progress:session:{memberId}:{contentType}:{contentId}`) and registers it in a sorted set `progress:active` scored by expiry time.
+- `POST /v1/progress/answer` (quiz), `/scene` (story), `/solve` (puzzle) advance the session. The server looks up the authoritative score from the DB (e.g. `GetSceneEndingInfo`, option `score`) and accumulates it **into Redis**, not from the client.
+- `POST /v1/progress/submit` (or session expiry) calls `Finalize`, which moves the Redis session into `member_progres`, credits `total_xp`, and updates level/gamification. `Finalize` is **idempotent** — a second call (e.g. submit racing the expiry sweeper) is a no-op.
+- `GET /v1/progress/session/:content_type/:content_id` reads the in-flight session.
+
+### Answer-key protection: member views use separate `Public*` DTOs (IMPORTANT)
+Because scoring is server-side, member-facing **get-by-id** endpoints must not serialize scoring/answer metadata. The pattern (see issues #41 quiz, #42 story):
+- `GET /v1/quizzes/:id` returns `PublicQuizResponse` (omits option `score` — the answer key — and question `poin`).
+- `GET /v1/stories/:id` returns `PublicCeritaResponse` (omits scene `ending_point`, `ending_type`, `urutan`).
+- The shared `QuizResponse`/`SceneResponse` and their converters are **left untouched** — the guru/admin `manage`/create/update endpoints legitimately need those fields to author content.
+- **Never strip fields from the shared response struct.** Add a parallel `Public*Response` + `ToPublic*` converter, and switch only the member get-by-id usecase/controller to it. The repo query may keep selecting the sensitive columns (the entity carries them for server-side scoring); just ensure no member serializer emits them.
+- List endpoints (`GET /v1/quizzes`, `/v1/stories`) don't embed `Soal`/`Scenes` (`omitempty` + the list query skips them), so the leak only ever affects get-by-id.
+
+### Gamification (`GamificationUseCase`)
+`Finalize` → `HandleContentFinished` drives streaks, daily tasks, XP totals, and level-ups (`internal/utils/level.go`). XP is awarded **once per content per member** (dedup on `member_progres`); crossing a level threshold auto-levels-up.
+
+## Background Workers (run in-process, NOT cmd/worker)
+
+`cmd/worker/main.go` is still an empty placeholder. The real background jobs run as goroutines started in `Bootstrap` (`internal/config/app.go`) and are **guarded by `if !fiber.IsChild()`** so prefork mode runs them only on the master process (otherwise every prefork child would double-run them):
+- `startAssetCleanupCron` — deletes orphaned uploads every 24h (`AssetUseCase.CleanupOrphanedAssets`).
+- `startProgressFlushWorker` (`internal/config/progress_worker.go`) — every 15min, finalizes expired play sessions via `ListExpiredSessionKeys` → `Finalize(key, "expired")`; one bad session is logged and skipped, never aborting the batch.
+
 ## Deployment
 
 ### Docker Deployment
@@ -340,7 +368,7 @@ Configured in `config.json` under `app.jwt-secret`. Used by auth middleware to v
 
 ### Asset Management
 - Uploaded files stored in `./uploads` directory
-- Automatic cleanup of orphaned assets runs every 24 hours via cron in Bootstrap
+- Automatic cleanup of orphaned assets runs every 24 hours via an in-process goroutine started in Bootstrap (guarded by `!fiber.IsChild()` — see "Background Workers" above)
 - `AssetUseCase` handles file operations and cleanup
 
 ### CORS Configuration
