@@ -235,7 +235,7 @@ func (u *progressSessionUseCaseImpl) Scene(ctx context.Context, req *model.Progr
 		return nil, fiber.NewError(fiber.StatusBadRequest, "scene tidak ditemukan dalam cerita ini")
 	}
 
-	isEnding, endingPoint, err := u.Repo.GetSceneEndingInfo(ctx, req.SceneId)
+	isEnding, endingPoint, endingType, err := u.Repo.GetSceneEndingInfo(ctx, req.SceneId)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fiber.NewError(fiber.StatusBadRequest, "scene tidak ditemukan")
@@ -249,6 +249,16 @@ func (u *progressSessionUseCaseImpl) Scene(ctx context.Context, req *model.Progr
 	pipe.HSet(ctx, key, fmt.Sprintf("answers.%s", sceneKey), endingPoint)
 	if isEnding {
 		pipe.HSet(ctx, key, "running_skor", endingPoint)
+		// Mark that an ending was reached so Finalize can award the story's XP for
+		// completing it. A branching story has several endings with different
+		// ending_point values; max_score is only the best one, so we must not gate
+		// story XP on running_skor == max_score (that denies XP for every non-optimal
+		// ending). ending_point can legitimately be 0, so we can't infer completion
+		// from running_skor alone — hence an explicit flag.
+		pipe.HSet(ctx, key, "reached_ending", 1)
+		// Stash which ending was reached so Finalize can echo it back — the client
+		// needs it to show "you got ending X" and has no other source for it.
+		pipe.HSet(ctx, key, "ending_type", endingType)
 	}
 	if _, err = pipe.Exec(ctx); err != nil {
 		u.Log.Errorf("Scene: redis pipeline: %v", err)
@@ -428,10 +438,21 @@ func (u *progressSessionUseCaseImpl) Finalize(ctx context.Context, key string, c
 		return nil, fiber.ErrInternalServerError
 	}
 
-	// Step 4: award XP only on perfect score.
+	// Step 4: decide whether this finish earns XP.
+	//   - cerita: reaching ANY ending completes the story and earns its XP. max_score
+	//     is the best ending's point, so gating on runningSkor == maxScore would deny
+	//     XP for every non-optimal ending (and credit only the daily-task XP).
+	//   - kuis/puzzle: full marks required.
 	awardedXp := 0
-	if runningSkor == maxScore {
-		awardedXp = xpReward
+	switch contentType {
+	case "cerita":
+		if data["reached_ending"] == "1" {
+			awardedXp = xpReward
+		}
+	default:
+		if runningSkor == maxScore {
+			awardedXp = xpReward
+		}
 	}
 
 	progress := &entity.MemberProgress{
@@ -492,6 +513,7 @@ func (u *progressSessionUseCaseImpl) Finalize(ctx context.Context, key string, c
 		LeveledUp:     newLevel > prevLevel,
 		PreviousLevel: prevLevel,
 		NewLevel:      newLevel,
+		EndingType:    data["ending_type"],
 	}, nil
 }
 

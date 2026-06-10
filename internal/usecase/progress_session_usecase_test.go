@@ -31,6 +31,7 @@ type mockProgressRepo struct {
 	jawabanScoreErr         error
 	sceneIsEnding           bool
 	sceneEndingPoint        int
+	sceneEndingType         string
 	sceneEndingErr          error
 	xpReward                int
 	xpRewardErr             error
@@ -45,6 +46,8 @@ type mockProgressRepo struct {
 	sceneOkErr              error
 
 	saveProgressCalls int
+	lastAwardedXp     int
+	lastAwardedXpSet  bool
 	mu                sync.Mutex
 }
 
@@ -66,8 +69,8 @@ func (m *mockProgressRepo) CheckSceneBelongsToCerita(_ context.Context, _, _ int
 func (m *mockProgressRepo) GetJawabanScore(_ context.Context, _, _ int) (int, error) {
 	return m.jawabanScore, m.jawabanScoreErr
 }
-func (m *mockProgressRepo) GetSceneEndingInfo(_ context.Context, _ int) (bool, int, error) {
-	return m.sceneIsEnding, m.sceneEndingPoint, m.sceneEndingErr
+func (m *mockProgressRepo) GetSceneEndingInfo(_ context.Context, _ int) (bool, int, string, error) {
+	return m.sceneIsEnding, m.sceneEndingPoint, m.sceneEndingType, m.sceneEndingErr
 }
 func (m *mockProgressRepo) GetContentXpReward(_ context.Context, _ string, _ int) (int, error) {
 	return m.xpReward, m.xpRewardErr
@@ -76,6 +79,8 @@ func (m *mockProgressRepo) SaveProgress(_ context.Context, _ *entity.MemberProgr
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.saveProgressCalls++
+	m.lastAwardedXp = awardedXp
+	m.lastAwardedXpSet = true
 	effectiveXp := m.saveProgressEffectiveXp
 	if effectiveXp == 0 {
 		effectiveXp = awardedXp
@@ -446,6 +451,76 @@ func TestScene_EndingScene_FinalizesAndReturnsProgresId(t *testing.T) {
 	if calls != 1 {
 		t.Errorf("expected 1 SaveProgress call on ending, got %d", calls)
 	}
+}
+
+// Regression: reaching a NON-optimal cerita ending must still award the story's XP.
+// A branching story's max_score is its best ending's point; gating XP on
+// running_skor == max_score denied XP for every other ending, so only the daily-task
+// XP ever reached the profile. Reaching any ending completes the story and earns its XP.
+func TestScene_NonOptimalEnding_StillAwardsXP(t *testing.T) {
+	repo := &mockProgressRepo{
+		contentExists: true, ceritaMaxScore: 100,
+		xpReward: 150, saveProgressId: 88,
+		// Player reaches an ending worth 40 points — below the best ending (100).
+		sceneOk: true, sceneIsEnding: true, sceneEndingPoint: 40, sceneEndingType: "bad_ending",
+	}
+	uc, _ := newTestUseCase(t, repo)
+	claims := progressMemberClaims("42")
+
+	startReq := &model.ProgressStartRequest{ContentType: "cerita", ContentId: 1, DurationSeconds: 60}
+	if _, err := uc.Start(context.Background(), startReq, claims); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	sceneReq := &model.ProgressSceneRequest{ContentType: "cerita", ContentId: 1, SceneId: 9}
+	resp, err := uc.Scene(context.Background(), sceneReq, claims)
+	if err != nil {
+		t.Fatalf("Scene (ending): %v", err)
+	}
+
+	repo.mu.Lock()
+	awarded, set := repo.lastAwardedXp, repo.lastAwardedXpSet
+	repo.mu.Unlock()
+	if !set {
+		t.Fatal("expected SaveProgress to be called on ending")
+	}
+	if awarded != 150 {
+		t.Errorf("expected awardedXp=150 for completing the story (any ending), got %d", awarded)
+	}
+	// The finalize response must echo which ending the member reached so the client
+	// can display it.
+	if resp.EndingType != "bad_ending" {
+		t.Errorf("expected EndingType=bad_ending in finalize response, got %q", resp.EndingType)
+	}
+}
+
+// An expired cerita session that never reached an ending must NOT award XP — the story
+// was abandoned mid-play, so there is nothing to credit.
+func TestFinalize_CeritaNoEnding_NoXP(t *testing.T) {
+	repo := &mockProgressRepo{
+		contentExists: true, ceritaMaxScore: 100,
+		xpReward: 150, saveProgressId: 89,
+	}
+	uc, mr := newTestUseCase(t, repo)
+	claims := progressMemberClaims("42")
+
+	startReq := &model.ProgressStartRequest{ContentType: "cerita", ContentId: 1, DurationSeconds: 60}
+	if _, err := uc.Start(context.Background(), startReq, claims); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+
+	key := sessionKey("42", "cerita", 1)
+	if _, err := uc.Finalize(context.Background(), key, "expired"); err != nil {
+		t.Fatalf("Finalize: %v", err)
+	}
+
+	repo.mu.Lock()
+	awarded := repo.lastAwardedXp
+	repo.mu.Unlock()
+	if awarded != 0 {
+		t.Errorf("expected awardedXp=0 for an abandoned story, got %d", awarded)
+	}
+	_ = mr
 }
 
 // A foreign-key violation that the repository couldn't recover from is bad input —

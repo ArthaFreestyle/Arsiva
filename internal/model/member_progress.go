@@ -64,4 +64,7 @@ type ProgressFinalizeResponse struct {
 	LeveledUp     bool `json:"leveled_up"`
 	PreviousLevel int  `json:"previous_level"`
 	NewLevel      int  `json:"new_level"`
+	// EndingType is the ending the member reached (cerita only); empty/omitted for
+	// kuis and puzzle finalizes, which have no ending.
+	EndingType string `json:"ending_type,omitempty"`
 }

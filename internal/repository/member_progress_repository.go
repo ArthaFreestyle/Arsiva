@@ -39,8 +39,8 @@ type MemberProgressRepository interface {
 	// Returns the score of a selected jawaban choice.
 	GetJawabanScore(ctx context.Context, jawabanId, pertanyaanId int) (int, error)
 
-	// Returns the scene's is_ending and ending_point fields.
-	GetSceneEndingInfo(ctx context.Context, sceneId int) (isEnding bool, endingPoint int, err error)
+	// Returns the scene's is_ending, ending_point, and ending_type fields.
+	GetSceneEndingInfo(ctx context.Context, sceneId int) (isEnding bool, endingPoint int, endingType string, err error)
 
 	// Returns the xp_reward from the content table (read fresh at finalize time).
 	GetContentXpReward(ctx context.Context, contentType string, contentId int) (int, error)
@@ -166,20 +166,21 @@ func (r *memberProgressRepositoryImpl) GetJawabanScore(ctx context.Context, jawa
 	return score, nil
 }
 
-func (r *memberProgressRepositoryImpl) GetSceneEndingInfo(ctx context.Context, sceneId int) (bool, int, error) {
+func (r *memberProgressRepositoryImpl) GetSceneEndingInfo(ctx context.Context, sceneId int) (bool, int, string, error) {
 	var isEnding bool
 	var endingPoint int
+	var endingType string
 	err := r.DB.QueryRow(ctx,
-		`SELECT is_ending, COALESCE(ending_point, 0) FROM scene WHERE scene_id = $1`,
-		sceneId).Scan(&isEnding, &endingPoint)
+		`SELECT is_ending, COALESCE(ending_point, 0), COALESCE(ending_type, '') FROM scene WHERE scene_id = $1`,
+		sceneId).Scan(&isEnding, &endingPoint, &endingType)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return false, 0, pgx.ErrNoRows
+		return false, 0, "", pgx.ErrNoRows
 	}
 	if err != nil {
 		r.Log.Errorf("GetSceneEndingInfo scene_id=%d: %v", sceneId, err)
-		return false, 0, err
+		return false, 0, "", err
 	}
-	return isEnding, endingPoint, nil
+	return isEnding, endingPoint, endingType, nil
 }
 
 func (r *memberProgressRepositoryImpl) GetContentXpReward(ctx context.Context, contentType string, contentId int) (int, error) {
