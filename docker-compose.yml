@@ -22,6 +22,12 @@ services:
       context: .
       dockerfile: Dockerfile
     image: arsiva-backend:latest
+    # Lets the container reach services on the VPS host (e.g. the Postfix SMTP
+    # relay on host :25). Inside a container `localhost` is the container itself,
+    # so the mailer must target `host.docker.internal` instead. `host-gateway`
+    # resolves that name to the host's Docker bridge gateway IP.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ~/actions-runner/_work/Arsiva/Arsiva/arsiva_configs/config.json:/config.json:ro
       - ~/actions-runner/_work/Arsiva/Arsiva/uploads:/app/uploads
