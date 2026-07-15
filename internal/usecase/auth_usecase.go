@@ -253,8 +253,8 @@ func (c *AuthUseCaseImpl) issueOTP(ctx context.Context, purpose, email string) e
 		return fmt.Errorf("store otp: %w", err)
 	}
 
-	subject, body := c.otpEmailContent(purpose, code)
-	if err := c.Mailer.Send(email, subject, body); err != nil {
+	subject, htmlBody, textBody := c.otpEmailContent(purpose, code)
+	if err := c.Mailer.SendHTML(email, subject, htmlBody, textBody); err != nil {
 		return fmt.Errorf("send otp mail: %w", err)
 	}
 	return nil
@@ -293,17 +293,43 @@ func (c *AuthUseCaseImpl) consumeOTP(ctx context.Context, purpose, email, code s
 	return nil
 }
 
-func (c *AuthUseCaseImpl) otpEmailContent(purpose, code string) (subject, body string) {
+// otpEmailContent builds the subject plus HTML and plain-text bodies for an OTP
+// email. The HTML is rendered from the shared Arsiva OTP template; the text body
+// is the fallback for non-HTML clients. If HTML rendering ever fails it degrades
+// gracefully to a text-only body reused for both parts.
+func (c *AuthUseCaseImpl) otpEmailContent(purpose, code string) (subject, htmlBody, textBody string) {
 	mins := int(c.OTPTTL.Minutes())
-	switch purpose {
-	case otpPurposeVerify:
-		return "Kode Verifikasi Email Arsiva",
-			fmt.Sprintf("Halo,\n\nKode verifikasi email kamu adalah: %s\n\nKode berlaku %d menit. Abaikan email ini jika kamu tidak mendaftar di Arsiva.\n\nSalam,\nTim Arsiva", code, mins)
-	case otpPurposeReset:
-		return "Kode Reset Password Arsiva",
-			fmt.Sprintf("Halo,\n\nKode untuk mengatur ulang password kamu adalah: %s\n\nKode berlaku %d menit. Abaikan email ini jika kamu tidak meminta reset password.\n\nSalam,\nTim Arsiva", code, mins)
+
+	var subj string
+	data := mailer.OTPEmail{
+		Eyebrow:    "Keamanan Akun",
+		Code:       code,
+		ExpiryMins: mins,
 	}
-	return "Arsiva", code
+	switch purpose {
+	case otpPurposeReset:
+		subj = "Kode Reset Password Arsiva"
+		data.Heading = "Atur ulang password kamu"
+		data.Intro = "Masukkan kode di bawah ini untuk mengatur ulang password akun Arsiva kamu."
+		data.CodeLabel = "Kode reset password"
+		data.SecurityNote = "Tidak meminta reset password? Kamu bisa mengabaikan email ini dengan aman dan password kamu tetap tidak berubah."
+		data.Preheader = fmt.Sprintf("Kode reset password Arsiva kamu adalah %s. Berlaku %d menit.", code, mins)
+	default: // otpPurposeVerify
+		subj = "Kode Verifikasi Email Arsiva"
+		data.Heading = "Verifikasi email kamu"
+		data.Intro = "Masukkan kode di bawah ini untuk menyelesaikan verifikasi email akun Arsiva kamu."
+		data.CodeLabel = "Kode verifikasi kamu"
+		data.SecurityNote = "Tidak merasa mendaftar di Arsiva? Kamu bisa mengabaikan email ini dengan aman."
+		data.Preheader = fmt.Sprintf("Kode verifikasi Arsiva kamu adalah %s. Berlaku %d menit.", code, mins)
+	}
+
+	text := mailer.RenderOTPText(data)
+	html, err := mailer.RenderOTPHTML(data)
+	if err != nil {
+		c.Log.Warnf("otpEmailContent: failed to render HTML email, falling back to text: %+v", err)
+		html = text
+	}
+	return subj, html, text
 }
 
 // VerifyEmail confirms an account via its verification OTP.
