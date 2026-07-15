@@ -42,6 +42,14 @@ func (c *RouteConfig) SetupGuestRoutes() {
 	c.App.Post("/v1/login", c.AuthLimiter, c.AuthController.Login)
 	c.App.Post("/v1/register/member", c.AuthLimiter, c.AuthController.RegisterMember)
 	c.App.Post("/v1/register/guru", c.AuthLimiter, c.AuthController.RegisterGuru)
+
+	// Email verification (register flow) + password reset (forgot flow).
+	// All rate-limited — OTP endpoints are the prime target for brute force/abuse.
+	c.App.Post("/v1/verify-email", c.AuthLimiter, c.AuthController.VerifyEmail)
+	c.App.Post("/v1/resend-otp", c.AuthLimiter, c.AuthController.ResendOTP)
+	c.App.Post("/v1/forgot-password", c.AuthLimiter, c.AuthController.ForgotPassword)
+	c.App.Post("/v1/reset-password", c.AuthLimiter, c.AuthController.ResetPassword)
+
 	c.App.Get("uploads/*", c.UploadController.GetFile)
 
 	// Article reads are public (no login required) for SEO/crawlers.

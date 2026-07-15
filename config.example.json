@@ -34,5 +34,16 @@
         "max_backups" : 7,
         "max_age_days" : 30,
         "compress" : true
+    },
+    "email" : {
+        "host" : "localhost",
+        "port" : 25,
+        "username" : "admin@arsiva.id",
+        "password" : "PASSWORD_SMTP",
+        "from" : "admin@arsiva.id",
+        "from_name" : "Arsiva",
+        "otp_ttl_minutes" : 15,
+        "otp_max_attempts" : 5,
+        "otp_resend_cooldown_seconds" : 60
     }
 }

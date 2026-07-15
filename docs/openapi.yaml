@@ -202,7 +202,7 @@ paths:
               example:
                 errors: Unauthorized
         "403":
-          description: "`expected_role` diisi tetapi tidak cocok dengan role akun (pesan tidak mengungkap role sebenarnya)"
+          description: "`expected_role` tidak cocok dengan role akun (pesan tidak mengungkap role sebenarnya), **atau** email belum diverifikasi (`email belum diverifikasi, cek email untuk kode verifikasi`)"
           content:
             application/json:
               schema:
@@ -222,7 +222,7 @@ paths:
       tags:
         - Auth
       summary: Register as member
-      description: "Registrasi akun baru dengan role **member** (siswa). Endpoint ini terbuka untuk umum — tidak memerlukan token. Role dikunci server-side; field `role` di body diabaikan."
+      description: "Registrasi akun baru dengan role **member** (siswa). Endpoint ini terbuka untuk umum — tidak memerlukan token. Role dikunci server-side; field `role` di body diabaikan.\n\nAkun dibuat dengan status **belum terverifikasi** dan sebuah kode OTP dikirim ke email. User harus memverifikasi via `POST /v1/verify-email` sebelum bisa login (login akun belum terverifikasi → 403)."
       operationId: registerMember
       requestBody:
         required: true
@@ -281,7 +281,7 @@ paths:
       tags:
         - Auth
       summary: Register as guru
-      description: "Registrasi akun baru dengan role **guru** (pengajar). Endpoint ini terbuka untuk umum — tidak memerlukan token. Role dikunci server-side; field `role` di body diabaikan."
+      description: "Registrasi akun baru dengan role **guru** (pengajar). Endpoint ini terbuka untuk umum — tidak memerlukan token. Role dikunci server-side; field `role` di body diabaikan.\n\nAkun dibuat dengan status **belum terverifikasi** dan sebuah kode OTP dikirim ke email. User harus memverifikasi via `POST /v1/verify-email` sebelum bisa login (login akun belum terverifikasi → 403)."
       operationId: registerGuru
       requestBody:
         required: true
@@ -331,6 +331,151 @@ paths:
                 errors: Too Many Requests
         "500":
           description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /v1/verify-email:
+    post:
+      tags:
+        - Auth
+      summary: Verify email (OTP)
+      description: "Verifikasi email menggunakan kode OTP 6 digit yang dikirim saat registrasi. Setelah sukses, akun bisa login. Terbuka untuk umum, rate-limited.\n\nKode salah menambah counter percobaan; setelah `otp_max_attempts` percobaan kode dihanguskan dan user harus meminta kode baru (`POST /v1/resend-otp`)."
+      operationId: verifyEmail
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyEmailRequest"
+            example:
+              email: siswa01@example.com
+              code: "123456"
+      responses:
+        "200":
+          description: Email berhasil diverifikasi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponseWrapper"
+              example:
+                data:
+                  message: "email berhasil diverifikasi, silakan login"
+        "400":
+          description: "Kode salah, kedaluwarsa, terlalu banyak percobaan, atau validasi gagal"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                errors: kode salah
+        "429":
+          description: Terlalu banyak permintaan — coba lagi nanti
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /v1/resend-otp:
+    post:
+      tags:
+        - Auth
+      summary: Resend verification OTP
+      description: "Mengirim ulang kode OTP verifikasi untuk akun yang belum terverifikasi. Respons selalu generik (tidak mengungkap apakah email terdaftar / sudah terverifikasi). Ada cooldown antar-permintaan (`otp_resend_cooldown_seconds`)."
+      operationId: resendOtp
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResendOTPRequest"
+            example:
+              email: siswa01@example.com
+      responses:
+        "200":
+          description: "Diproses (respons generik — kode dikirim hanya jika email terdaftar & belum terverifikasi)"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponseWrapper"
+              example:
+                data:
+                  message: "jika email terdaftar dan belum terverifikasi, kode baru telah dikirim"
+        "429":
+          description: Masih dalam cooldown / terlalu banyak permintaan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                errors: tunggu sebentar sebelum meminta kode baru
+  /v1/forgot-password:
+    post:
+      tags:
+        - Auth
+      summary: Forgot password (request reset OTP)
+      description: "Meminta kode OTP untuk reset password. **Selalu** mengembalikan respons sukses generik terlepas dari apakah email terdaftar (anti-enumeration). Rate-limited."
+      operationId: forgotPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ForgotPasswordRequest"
+            example:
+              email: siswa01@example.com
+      responses:
+        "200":
+          description: "Diproses (respons generik — kode dikirim hanya jika email terdaftar)"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponseWrapper"
+              example:
+                data:
+                  message: "jika email terdaftar, kode reset password telah dikirim"
+        "429":
+          description: Terlalu banyak permintaan — coba lagi nanti
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /v1/reset-password:
+    post:
+      tags:
+        - Auth
+      summary: Reset password (with OTP)
+      description: "Mengatur ulang password menggunakan kode OTP dari `POST /v1/forgot-password`. Kode bersifat sekali pakai dan hangus setelah `otp_max_attempts` percobaan salah. Rate-limited."
+      operationId: resetPassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResetPasswordRequest"
+            example:
+              email: siswa01@example.com
+              code: "123456"
+              new_password: PasswordBaru123!
+      responses:
+        "200":
+          description: Password berhasil diperbarui
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponseWrapper"
+              example:
+                data:
+                  message: "password berhasil diperbarui, silakan login"
+        "400":
+          description: "Kode salah, kedaluwarsa, terlalu banyak percobaan, atau validasi gagal (password < 8 karakter)"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                errors: kode tidak valid atau sudah kedaluwarsa
+        "429":
+          description: Terlalu banyak permintaan — coba lagi nanti
           content:
             application/json:
               schema:
@@ -4851,6 +4996,69 @@ components:
             diperbolehkan di sini — kirim request tanpa field ini untuk login
             sebagai super_admin.
           example: member
+    VerifyEmailRequest:
+      type: object
+      required:
+        - email
+        - code
+      properties:
+        email:
+          type: string
+          format: email
+          example: siswa01@example.com
+        code:
+          type: string
+          description: Kode OTP 6 digit numerik yang dikirim ke email
+          example: "123456"
+    ResendOTPRequest:
+      type: object
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          format: email
+          example: siswa01@example.com
+    ForgotPasswordRequest:
+      type: object
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          format: email
+          example: siswa01@example.com
+    ResetPasswordRequest:
+      type: object
+      required:
+        - email
+        - code
+        - new_password
+      properties:
+        email:
+          type: string
+          format: email
+          example: siswa01@example.com
+        code:
+          type: string
+          description: Kode OTP 6 digit numerik dari forgot-password
+          example: "123456"
+        new_password:
+          type: string
+          format: password
+          minLength: 8
+          example: PasswordBaru123!
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: operasi berhasil
+    MessageResponseWrapper:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/MessageResponse"
     ProfileIncompleteResponse:
       type: object
       description: >

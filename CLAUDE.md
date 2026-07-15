@@ -179,6 +179,14 @@ The application manages these core domains:
 - Tokens are validated using `AuthMiddleware` on protected routes
 - JWT secret configured in `config.json` under `app.jwt-secret`
 
+### Email Verification (OTP) & Password Reset
+Both flows are OTP-based (6-digit numeric codes emailed to the user) and share one Redis-backed helper in `internal/usecase/auth_usecase.go`:
+- **Register → verify (Approach B):** `register` creates the user with `is_verified=false` (Postgres column, added in migration `20260715000001`) and mails a verification OTP. A mail failure does **not** fail registration — the account exists and the user can re-request a code. `Login` rejects unverified accounts with **403**, and that check runs **after** the password check so it cannot be used to enumerate accounts.
+- **Forgot → reset:** `POST /v1/forgot-password` mails a reset OTP; it **always returns a generic success** regardless of whether the email exists (anti-enumeration — all internal errors are logged and swallowed). `POST /v1/reset-password` consumes the OTP and calls `UserRepository.UpdatePassword` (a dedicated single-column update — never `UpdateUser`, which would clobber username/email/role).
+- **OTP storage:** Redis keys `otp:verify:{email}` / `otp:reset:{email}` store the **SHA-256 hash** of the code (never plaintext) plus an `attempts` counter, with a TTL. A resend cooldown key `otp:cooldown:{purpose}:{email}` throttles re-issues. Codes are single-use (deleted on success) and invalidated after `otp_max_attempts` wrong tries. All tunables live under the `email` block in `config.json` (`otp_ttl_minutes`, `otp_max_attempts`, `otp_resend_cooldown_seconds`).
+- **Endpoints** (all guest routes, rate-limited via `AuthLimiter`): `POST /v1/verify-email`, `POST /v1/resend-otp`, `POST /v1/forgot-password`, `POST /v1/reset-password`.
+- **Mailer:** `internal/mailer/mailer.go` uses stdlib `net/smtp` (zero new deps). It is tolerant of the local relay setup (`host=localhost`, `port=25`): STARTTLS only if advertised, AUTH only if advertised and a username is set. Because `host=localhost`, email only sends when the app runs **on the VPS** — it cannot be exercised from a local dev machine.
+
 ### Profile Completion Gate
 After auth, most action endpoints additionally pass through `ProfileCompleteMiddleware` so half-onboarded users (account exists but `guru`/`member` profile row not yet filled in) cannot reach action endpoints. Routes that intentionally skip this check:
 - `POST /v1/guru`, `POST /v1/member` — profile creation itself

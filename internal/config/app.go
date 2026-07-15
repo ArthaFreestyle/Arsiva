@@ -4,6 +4,7 @@ import (
 	"ArthaFreestyle/Arsiva/delivery/http/middleware"
 	"ArthaFreestyle/Arsiva/delivery/http/route"
 	"ArthaFreestyle/Arsiva/internal/delivery/http"
+	"ArthaFreestyle/Arsiva/internal/mailer"
 	"ArthaFreestyle/Arsiva/internal/repository"
 	"ArthaFreestyle/Arsiva/internal/usecase"
 	"context"
@@ -48,7 +49,22 @@ func Bootstrap(cfg BootstrapConfig) {
 	leaderboardRepo := repository.NewLeaderboardRepository(cfg.DB, cfg.Log)
 	gamificationRepo := repository.NewGamificationRepository(cfg.DB, cfg.Log)
 
-	AuthUseCase := usecase.NewAuthUseCase(userRepo, cfg.Secret, cfg.Validate, cfg.Log, cfg.DB, guruRepo, memberRepo)
+	// Mailer + OTP settings for email verification / password reset.
+	mail := mailer.NewMailer(cfg.Config, cfg.Log)
+	otpTTLMinutes := cfg.Config.GetInt("email.otp_ttl_minutes")
+	if otpTTLMinutes <= 0 {
+		otpTTLMinutes = 15
+	}
+	otpMaxAttempts := cfg.Config.GetInt("email.otp_max_attempts")
+	if otpMaxAttempts <= 0 {
+		otpMaxAttempts = 5
+	}
+	otpResendCooldown := cfg.Config.GetInt("email.otp_resend_cooldown_seconds")
+	if otpResendCooldown <= 0 {
+		otpResendCooldown = 60
+	}
+
+	AuthUseCase := usecase.NewAuthUseCase(userRepo, cfg.Secret, cfg.Validate, cfg.Log, cfg.DB, guruRepo, memberRepo, cfg.Redis, mail, time.Duration(otpTTLMinutes)*time.Minute, otpMaxAttempts, time.Duration(otpResendCooldown)*time.Second)
 	UserUseCase := usecase.NewUserUseCase(userRepo, cfg.Log, cfg.DB, cfg.Validate)
 	ArticleCategoryUseCase := usecase.NewArticleCategoryUseCase(articleCategoryRepo, cfg.Redis, cfg.Log, cfg.Validate)
 	ArticleUseCase := usecase.NewArticleUseCase(articleRepo, assetRepo, cfg.Log, cfg.Validate)

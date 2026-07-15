@@ -13,6 +13,7 @@ type User struct {
 	CreatedAt		*time.Time 	`db:"created_at"`
 	LastLogin		*time.Time	`db:"last_login"`
 	IsActive		bool 		`db:"is_active"`
+	IsVerified		bool 		`db:"is_verified"`
 	Guru			Guru		`db:"guru"`
 	
 }

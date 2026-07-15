@@ -64,6 +64,12 @@ func (m *mockUserRepo) GetDeletedUsers(ctx context.Context) ([]*entity.User, err
 func (m *mockUserRepo) RestoreUser(ctx context.Context, user *entity.User) error {
 	return nil
 }
+func (m *mockUserRepo) UpdatePassword(ctx context.Context, userId string, passwordHash string) error {
+	return nil
+}
+func (m *mockUserRepo) MarkVerified(ctx context.Context, userId string) error {
+	return nil
+}
 
 func discardLogger() *logrus.Logger {
 	log := logrus.New()
@@ -72,11 +78,11 @@ func discardLogger() *logrus.Logger {
 }
 
 func newTestAuthUseCase(repo *mockUserRepo) AuthUseCase {
-	return NewAuthUseCase(repo, []byte("secret"), validator.New(), discardLogger(), nil, nil, nil)
+	return NewAuthUseCase(repo, []byte("secret"), validator.New(), discardLogger(), nil, nil, nil, nil, nil, 15*time.Minute, 5, time.Minute)
 }
 
 func TestNewAuthUseCase(t *testing.T) {
-	uc := NewAuthUseCase(nil, []byte("secret"), validator.New(), nil, nil, nil, nil)
+	uc := NewAuthUseCase(nil, []byte("secret"), validator.New(), nil, nil, nil, nil, nil, nil, 15*time.Minute, 5, time.Minute)
 	if uc == nil {
 		t.Fatal("expected usecase instance")
 	}
@@ -230,6 +236,7 @@ func makeLoginRepo(role string) *mockUserRepo {
 				Role:         role,
 				PasswordHash: hash,
 				CreatedAt:    &now,
+				IsVerified:   true,
 			}, nil
 		},
 	}
@@ -381,7 +388,7 @@ func (m *mockGuruRepo) FindGroupsByGuruId(ctx context.Context, guruId string) ([
 }
 
 func newTestAuthUseCaseWithRepos(userRepo *mockUserRepo, memberRepo *mockMemberRepo, guruRepo *mockGuruRepo) AuthUseCase {
-	return NewAuthUseCase(userRepo, []byte("secret"), validator.New(), discardLogger(), nil, guruRepo, memberRepo)
+	return NewAuthUseCase(userRepo, []byte("secret"), validator.New(), discardLogger(), nil, guruRepo, memberRepo, nil, nil, 15*time.Minute, 5, time.Minute)
 }
 
 func TestLogin_Member_WithProfile_DetailsPopulated(t *testing.T) {
@@ -487,5 +494,60 @@ func TestLogin_Guru_RepoError_Returns500(t *testing.T) {
 	var fiberErr *fiber.Error
 	if !errors.As(err, &fiberErr) || fiberErr.Code != http.StatusInternalServerError {
 		t.Errorf("expected 500 fiber error, got %v", err)
+	}
+}
+
+func TestLogin_Unverified_Returns403(t *testing.T) {
+	// Correct password but is_verified=false must be blocked with 403, and only
+	// AFTER the password check (so it can't be used to enumerate accounts).
+	hash, _ := utils.HashPassword("Rahasia123!")
+	repo := &mockUserRepo{
+		findByEmailFn: func(ctx context.Context, email string) (*entity.User, error) {
+			now := time.Now()
+			return &entity.User{
+				UserId:       "1",
+				Email:        email,
+				Username:     "belumverif",
+				Role:         "member",
+				PasswordHash: hash,
+				CreatedAt:    &now,
+				IsVerified:   false,
+			}, nil
+		},
+	}
+	uc := newTestAuthUseCase(repo)
+
+	_, err := uc.Login(context.Background(), &model.LoginRequest{
+		Email:    "belumverif@example.com",
+		Password: "Rahasia123!",
+	})
+	if err == nil {
+		t.Fatal("expected 403 error for unverified account, got nil")
+	}
+	var fiberErr *fiber.Error
+	if !errors.As(err, &fiberErr) || fiberErr.Code != http.StatusForbidden {
+		t.Errorf("expected 403 fiber error, got %v", err)
+	}
+}
+
+func TestLogin_Unverified_WrongPassword_Returns401(t *testing.T) {
+	// Wrong password on an unverified account must still be 401 (password check
+	// runs before the verification check), never 403 — otherwise a wrong-password
+	// attacker could learn the account exists but is unverified.
+	hash, _ := utils.HashPassword("Rahasia123!")
+	repo := &mockUserRepo{
+		findByEmailFn: func(ctx context.Context, email string) (*entity.User, error) {
+			return &entity.User{UserId: "1", Email: email, Role: "member", PasswordHash: hash, IsVerified: false}, nil
+		},
+	}
+	uc := newTestAuthUseCase(repo)
+
+	_, err := uc.Login(context.Background(), &model.LoginRequest{
+		Email:    "belumverif@example.com",
+		Password: "SalahPassword!",
+	})
+	var fiberErr *fiber.Error
+	if !errors.As(err, &fiberErr) || fiberErr.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 fiber error, got %v", err)
 	}
 }

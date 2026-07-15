@@ -18,6 +18,8 @@ type UserRepository interface {
 	UpdateUser(ctx context.Context,user *entity.User) (*entity.User, error)
 	DeleteUser(ctx context.Context,user *entity.User) (error)
 	RestoreUser(ctx context.Context,user *entity.User) error
+	UpdatePassword(ctx context.Context,userId string,passwordHash string) error
+	MarkVerified(ctx context.Context,userId string) error
 }
 
 type UserRepositoryImpl struct {
@@ -34,7 +36,7 @@ func NewUserRepository(db *pgxpool.Pool, log *logrus.Logger) UserRepository {
 
 
 func (r *UserRepositoryImpl) FindByEmail(ctx context.Context,email string) (*entity.User, error) {
-	SQL := `SELECT u.user_id, u.username, u.email, u.password_hash, u.role,u.created_at,u.last_login,u.is_active FROM users u
+	SQL := `SELECT u.user_id, u.username, u.email, u.password_hash, u.role,u.created_at,u.last_login,u.is_active,u.is_verified FROM users u
 	WHERE u.email = $1`
 	
 	rows,err := r.DB.Query(context.Background(),SQL,email)
@@ -173,6 +175,36 @@ func (r *UserRepositoryImpl) RestoreUser(ctx context.Context,user *entity.User) 
 	SQL := `UPDATE users SET is_active = true WHERE user_id = $1`
 
 	_,err := r.DB.Exec(context.Background(),SQL,user.UserId)
+	if err != nil {
+		return err
+	}
+
+	r.Log.Info("query : ",SQL)
+
+	return nil
+}
+
+// UpdatePassword sets only the password_hash column. Kept separate from UpdateUser
+// (which overwrites username/email/role) so the password-reset flow cannot
+// accidentally clobber other user fields.
+func (r *UserRepositoryImpl) UpdatePassword(ctx context.Context,userId string,passwordHash string) error {
+	SQL := `UPDATE users SET password_hash = $1 WHERE user_id = $2`
+
+	_,err := r.DB.Exec(ctx,SQL,passwordHash,userId)
+	if err != nil {
+		return err
+	}
+
+	r.Log.Info("query : ",SQL)
+
+	return nil
+}
+
+// MarkVerified flips is_verified to true after a successful email OTP check.
+func (r *UserRepositoryImpl) MarkVerified(ctx context.Context,userId string) error {
+	SQL := `UPDATE users SET is_verified = true WHERE user_id = $1`
+
+	_,err := r.DB.Exec(ctx,SQL,userId)
 	if err != nil {
 		return err
 	}

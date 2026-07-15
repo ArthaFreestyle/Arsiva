@@ -1,29 +1,32 @@
-INSERT INTO users (username, email, password_hash, role, created_at, last_login, is_active) 
-VALUES 
+INSERT INTO users (username, email, password_hash, role, created_at, last_login, is_active, is_verified)
+VALUES
   (
-    'Aditya', 
-    'aditya@gmail.com', 
-    '$2a$10$cKpVeVrdMtUL/gwSv3ErQumTbXG/9Vf3gaJbTk3Cw5scSzkHO2J/O', 
-    'member', 
-    NOW(), 
-    NOW(), 
+    'Aditya',
+    'aditya@gmail.com',
+    '$2a$10$cKpVeVrdMtUL/gwSv3ErQumTbXG/9Vf3gaJbTk3Cw5scSzkHO2J/O',
+    'member',
+    NOW(),
+    NOW(),
+    true,
     true
   ),
   (
-    'Helmi', 
-    'helmi@gmail.com', 
-    '$2a$10$cKpVeVrdMtUL/gwSv3ErQumTbXG/9Vf3gaJbTk3Cw5scSzkHO2J/O', 
-    'super_admin', 
-    NOW(), 
-    NOW(), 
+    'Helmi',
+    'helmi@gmail.com',
+    '$2a$10$cKpVeVrdMtUL/gwSv3ErQumTbXG/9Vf3gaJbTk3Cw5scSzkHO2J/O',
+    'super_admin',
+    NOW(),
+    NOW(),
+    true,
     true
   ),
   (
-    'Mufi', 
-    'mufi@gmail.com', 
-    '$2a$10$cKpVeVrdMtUL/gwSv3ErQumTbXG/9Vf3gaJbTk3Cw5scSzkHO2J/O', 
-    'guru', 
-    NOW(), 
-    NOW(), 
+    'Mufi',
+    'mufi@gmail.com',
+    '$2a$10$cKpVeVrdMtUL/gwSv3ErQumTbXG/9Vf3gaJbTk3Cw5scSzkHO2J/O',
+    'guru',
+    NOW(),
+    NOW(),
+    true,
     true
   );

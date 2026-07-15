@@ -2,18 +2,23 @@ package usecase
 
 import (
 	"ArthaFreestyle/Arsiva/internal/entity"
+	"ArthaFreestyle/Arsiva/internal/mailer"
 	"ArthaFreestyle/Arsiva/internal/model"
 	"ArthaFreestyle/Arsiva/internal/model/converter"
 	"ArthaFreestyle/Arsiva/internal/repository"
 	"ArthaFreestyle/Arsiva/internal/utils"
 	"context"
 	"errors"
+	"fmt"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
 )
 
@@ -21,6 +26,16 @@ type AuthUseCase interface {
 	Login(ctx context.Context, request *model.LoginRequest) (*model.LoginResponse, error)
 	RegisterMember(ctx context.Context, request *model.RegisterRequest) (*model.UserResponse, error)
 	RegisterGuru(ctx context.Context, request *model.RegisterRequest) (*model.UserResponse, error)
+
+	// VerifyEmail confirms a freshly-registered account via the OTP mailed to it.
+	VerifyEmail(ctx context.Context, request *model.VerifyEmailRequest) error
+	// ResendVerificationOTP re-issues a verification OTP for an unverified account.
+	ResendVerificationOTP(ctx context.Context, request *model.ResendOTPRequest) error
+	// ForgotPassword emails a reset OTP. Always succeeds from the caller's view
+	// (anti-enumeration) regardless of whether the email is registered.
+	ForgotPassword(ctx context.Context, request *model.ForgotPasswordRequest) error
+	// ResetPassword sets a new password after a valid reset OTP.
+	ResetPassword(ctx context.Context, request *model.ResetPasswordRequest) error
 }
 
 type AuthUseCaseImpl struct {
@@ -31,9 +46,14 @@ type AuthUseCaseImpl struct {
 	GuruRepository   repository.GuruRepository
 	MemberRepository repository.MemberRepository
 	Secret           []byte
+	Redis            *redis.Client
+	Mailer           mailer.Mailer
+	OTPTTL           time.Duration
+	OTPMaxAttempts   int
+	ResendCooldown   time.Duration
 }
 
-func NewAuthUseCase(repo repository.UserRepository, secret []byte, validate *validator.Validate, log *logrus.Logger, DB *pgxpool.Pool, guruRepo repository.GuruRepository, memberRepo repository.MemberRepository) AuthUseCase {
+func NewAuthUseCase(repo repository.UserRepository, secret []byte, validate *validator.Validate, log *logrus.Logger, DB *pgxpool.Pool, guruRepo repository.GuruRepository, memberRepo repository.MemberRepository, redisClient *redis.Client, mail mailer.Mailer, otpTTL time.Duration, otpMaxAttempts int, resendCooldown time.Duration) AuthUseCase {
 	return &AuthUseCaseImpl{
 		Repo:             repo,
 		Secret:           secret,
@@ -42,6 +62,11 @@ func NewAuthUseCase(repo repository.UserRepository, secret []byte, validate *val
 		Log:              log,
 		GuruRepository:   guruRepo,
 		MemberRepository: memberRepo,
+		Redis:            redisClient,
+		Mailer:           mail,
+		OTPTTL:           otpTTL,
+		OTPMaxAttempts:   otpMaxAttempts,
+		ResendCooldown:   resendCooldown,
 	}
 }
 
@@ -62,6 +87,13 @@ func (c *AuthUseCaseImpl) Login(ctx context.Context, request *model.LoginRequest
 	if !utils.CheckPasswordHash(request.Password, user.PasswordHash) {
 		c.Log.Warnf("Invalid password : %+v", err)
 		return nil, fiber.ErrUnauthorized
+	}
+
+	// Verification check AFTER password verification so an attacker without the
+	// correct password cannot learn whether an email is registered/verified.
+	if !user.IsVerified {
+		c.Log.Warnf("Login blocked: email not verified for user %s", user.UserId)
+		return nil, fiber.NewError(fiber.StatusForbidden, "email belum diverifikasi, cek email untuk kode verifikasi")
 	}
 
 	// Role check AFTER password verification so a wrong expected_role
@@ -171,5 +203,214 @@ func (c *AuthUseCaseImpl) register(ctx context.Context, request *model.RegisterR
 		return nil, fiber.ErrInternalServerError
 	}
 
+	// Mail the verification OTP. A mail failure must NOT fail registration — the
+	// account exists and the user can request a fresh code via ResendVerificationOTP.
+	// (This also keeps registration working in local dev where no relay is reachable.)
+	if err := c.issueOTP(ctx, otpPurposeVerify, created.Email); err != nil {
+		c.Log.Warnf("Failed to send verification OTP to %s (registration still succeeded): %+v", created.Email, err)
+	}
+
 	return converter.ToUserResponse(created), nil
+}
+
+// ─── OTP flows (email verification + password reset) ─────────────────────────
+
+const (
+	otpPurposeVerify = "verify"
+	otpPurposeReset  = "reset"
+)
+
+func otpKey(purpose, email string) string      { return fmt.Sprintf("otp:%s:%s", purpose, email) }
+func otpCooldownKey(purpose, email string) string {
+	return fmt.Sprintf("otp:cooldown:%s:%s", purpose, email)
+}
+
+// issueOTP generates a fresh OTP, stores its hash in Redis (with TTL + a resend
+// cooldown), and emails the plaintext code. Returns an error on cooldown, Redis
+// failure, or mail failure — callers decide whether to surface or swallow it.
+func (c *AuthUseCaseImpl) issueOTP(ctx context.Context, purpose, email string) error {
+	if c.Redis == nil || c.Mailer == nil {
+		return fmt.Errorf("otp infrastructure not configured")
+	}
+
+	cooldownKey := otpCooldownKey(purpose, email)
+	if n, _ := c.Redis.Exists(ctx, cooldownKey).Result(); n > 0 {
+		return fiber.NewError(fiber.StatusTooManyRequests, "tunggu sebentar sebelum meminta kode baru")
+	}
+
+	code, err := utils.GenerateOTP()
+	if err != nil {
+		return fmt.Errorf("generate otp: %w", err)
+	}
+
+	key := otpKey(purpose, email)
+	pipe := c.Redis.Pipeline()
+	pipe.Del(ctx, key) // drop any previous code so attempt counters reset
+	pipe.HSet(ctx, key, map[string]any{"code_hash": utils.HashOTP(code), "attempts": 0})
+	pipe.Expire(ctx, key, c.OTPTTL)
+	pipe.Set(ctx, cooldownKey, "1", c.ResendCooldown)
+	if _, err := pipe.Exec(ctx); err != nil {
+		return fmt.Errorf("store otp: %w", err)
+	}
+
+	subject, body := c.otpEmailContent(purpose, code)
+	if err := c.Mailer.Send(email, subject, body); err != nil {
+		return fmt.Errorf("send otp mail: %w", err)
+	}
+	return nil
+}
+
+// consumeOTP validates a code against the stored hash. On success it deletes the
+// key (single-use). On a wrong code it increments the attempt counter and, once
+// OTPMaxAttempts is reached, invalidates the code entirely.
+func (c *AuthUseCaseImpl) consumeOTP(ctx context.Context, purpose, email, code string) error {
+	if c.Redis == nil {
+		return fiber.ErrInternalServerError
+	}
+
+	key := otpKey(purpose, email)
+	data, err := c.Redis.HGetAll(ctx, key).Result()
+	if err != nil {
+		c.Log.Errorf("consumeOTP: redis error for %s: %+v", key, err)
+		return fiber.ErrInternalServerError
+	}
+	if len(data) == 0 {
+		return fiber.NewError(fiber.StatusBadRequest, "kode tidak valid atau sudah kedaluwarsa")
+	}
+
+	attempts, _ := strconv.Atoi(data["attempts"])
+	if attempts >= c.OTPMaxAttempts {
+		c.Redis.Del(ctx, key)
+		return fiber.NewError(fiber.StatusBadRequest, "terlalu banyak percobaan, minta kode baru")
+	}
+
+	if !utils.CheckOTP(code, data["code_hash"]) {
+		c.Redis.HIncrBy(ctx, key, "attempts", 1)
+		return fiber.NewError(fiber.StatusBadRequest, "kode salah")
+	}
+
+	c.Redis.Del(ctx, key)
+	return nil
+}
+
+func (c *AuthUseCaseImpl) otpEmailContent(purpose, code string) (subject, body string) {
+	mins := int(c.OTPTTL.Minutes())
+	switch purpose {
+	case otpPurposeVerify:
+		return "Kode Verifikasi Email Arsiva",
+			fmt.Sprintf("Halo,\n\nKode verifikasi email kamu adalah: %s\n\nKode berlaku %d menit. Abaikan email ini jika kamu tidak mendaftar di Arsiva.\n\nSalam,\nTim Arsiva", code, mins)
+	case otpPurposeReset:
+		return "Kode Reset Password Arsiva",
+			fmt.Sprintf("Halo,\n\nKode untuk mengatur ulang password kamu adalah: %s\n\nKode berlaku %d menit. Abaikan email ini jika kamu tidak meminta reset password.\n\nSalam,\nTim Arsiva", code, mins)
+	}
+	return "Arsiva", code
+}
+
+// VerifyEmail confirms an account via its verification OTP.
+func (c *AuthUseCaseImpl) VerifyEmail(ctx context.Context, request *model.VerifyEmailRequest) error {
+	if err := c.Validate.Struct(request); err != nil {
+		c.Log.Warnf("VerifyEmail: invalid request: %+v", err)
+		return fiber.ErrBadRequest
+	}
+	email := strings.ToLower(request.Email)
+
+	if err := c.consumeOTP(ctx, otpPurposeVerify, email, request.Code); err != nil {
+		return err
+	}
+
+	user, err := c.Repo.FindByEmail(ctx, email)
+	if err != nil {
+		// OTP matched but the account vanished — treat as invalid rather than 500.
+		c.Log.Warnf("VerifyEmail: user not found after OTP match for %s: %+v", email, err)
+		return fiber.NewError(fiber.StatusBadRequest, "kode tidak valid atau sudah kedaluwarsa")
+	}
+	if user.IsVerified {
+		return nil
+	}
+
+	if err := c.Repo.MarkVerified(ctx, user.UserId); err != nil {
+		c.Log.Errorf("VerifyEmail: failed to mark verified for %s: %+v", user.UserId, err)
+		return fiber.ErrInternalServerError
+	}
+	return nil
+}
+
+// ResendVerificationOTP re-issues a verification OTP. Responses are kept generic
+// (the controller returns a fixed message): a non-existent or already-verified
+// account is silently a no-op so this endpoint cannot enumerate accounts.
+func (c *AuthUseCaseImpl) ResendVerificationOTP(ctx context.Context, request *model.ResendOTPRequest) error {
+	if err := c.Validate.Struct(request); err != nil {
+		c.Log.Warnf("ResendVerificationOTP: invalid request: %+v", err)
+		return fiber.ErrBadRequest
+	}
+	email := strings.ToLower(request.Email)
+
+	user, err := c.Repo.FindByEmail(ctx, email)
+	if err != nil || user.IsVerified {
+		return nil // no-op; do not reveal existence/verification state
+	}
+
+	if err := c.issueOTP(ctx, otpPurposeVerify, email); err != nil {
+		// Surface only the rate-limit signal; swallow mail/redis errors as generic success.
+		var fe *fiber.Error
+		if errors.As(err, &fe) && fe.Code == fiber.StatusTooManyRequests {
+			return fe
+		}
+		c.Log.Warnf("ResendVerificationOTP: issueOTP failed for %s: %+v", email, err)
+	}
+	return nil
+}
+
+// ForgotPassword emails a reset OTP. From the caller's perspective it always
+// succeeds regardless of whether the email exists (anti-enumeration); all
+// internal failures are logged and swallowed.
+func (c *AuthUseCaseImpl) ForgotPassword(ctx context.Context, request *model.ForgotPasswordRequest) error {
+	if err := c.Validate.Struct(request); err != nil {
+		c.Log.Warnf("ForgotPassword: invalid request: %+v", err)
+		return fiber.ErrBadRequest
+	}
+	email := strings.ToLower(request.Email)
+
+	user, err := c.Repo.FindByEmail(ctx, email)
+	if err != nil {
+		c.Log.Infof("ForgotPassword: no account for %s (returning generic success)", email)
+		return nil
+	}
+
+	if err := c.issueOTP(ctx, otpPurposeReset, user.Email); err != nil {
+		// Swallow everything (including cooldown) so this endpoint stays uniform.
+		c.Log.Warnf("ForgotPassword: issueOTP failed for %s: %+v", email, err)
+	}
+	return nil
+}
+
+// ResetPassword sets a new password after a valid reset OTP.
+func (c *AuthUseCaseImpl) ResetPassword(ctx context.Context, request *model.ResetPasswordRequest) error {
+	if err := c.Validate.Struct(request); err != nil {
+		c.Log.Warnf("ResetPassword: invalid request: %+v", err)
+		return fiber.ErrBadRequest
+	}
+	email := strings.ToLower(request.Email)
+
+	if err := c.consumeOTP(ctx, otpPurposeReset, email, request.Code); err != nil {
+		return err
+	}
+
+	user, err := c.Repo.FindByEmail(ctx, email)
+	if err != nil {
+		c.Log.Warnf("ResetPassword: user not found after OTP match for %s: %+v", email, err)
+		return fiber.NewError(fiber.StatusBadRequest, "kode tidak valid atau sudah kedaluwarsa")
+	}
+
+	hashed, err := utils.HashPassword(request.NewPassword)
+	if err != nil {
+		c.Log.Errorf("ResetPassword: hash failed: %+v", err)
+		return fiber.ErrInternalServerError
+	}
+
+	if err := c.Repo.UpdatePassword(ctx, user.UserId, hashed); err != nil {
+		c.Log.Errorf("ResetPassword: update failed for %s: %+v", user.UserId, err)
+		return fiber.ErrInternalServerError
+	}
+	return nil
 }
