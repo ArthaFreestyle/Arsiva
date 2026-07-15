@@ -51,10 +51,43 @@ jobs:
         with:
           clean: false
 
+      - name: Pastikan Database Siap
+        run: docker compose up -d postgres-db
+
+      - name: Jalankan Migrasi Database
+        env:
+          # NOTE: kredensial ini sudah ada (plaintext) di docker-compose.yml.
+          # Untuk hardening, pindahkan keduanya ke GitHub Secrets / .env dan
+          # ganti nilai di bawah dengan ${{ secrets.POSTGRES_PASSWORD }} dst.
+          POSTGRES_USER: admin_pn
+          POSTGRES_PASSWORD: 2o26jOdmt9eK8CacdPwc
+          POSTGRES_DB: production_db
+        run: |
+          # Tunggu Postgres benar-benar siap menerima koneksi sebelum migrasi.
+          for i in $(seq 1 30); do
+            if docker compose exec -T postgres-db pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" >/dev/null 2>&1; then
+              echo "Postgres siap."
+              break
+            fi
+            echo "Menunggu Postgres siap... ($i/30)"
+            sleep 2
+          done
+
+          # Jalankan migrasi via image migrate/migrate, disambungkan ke network
+          # arsiva-network sehingga bisa menghubungi service 'postgres-db' langsung.
+          # Migrasi ditulis idempotent, jadi aman meski ada objek yang sudah dibuat manual.
+          docker run --rm \
+            --network arsiva-network \
+            -v "$(pwd)/db/migrations_postgre:/migrations" \
+            migrate/migrate \
+            -path=/migrations \
+            -database "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres-db:5432/${POSTGRES_DB}?sslmode=disable" \
+            up
+
       - name: Deploy to Production
         run: |
           # Langsung up tanpa down biar zero downtime
           docker compose up -d
-          
+
           echo "Bersihin sampah image..."
           docker image prune -f
