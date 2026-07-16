@@ -78,11 +78,11 @@ func discardLogger() *logrus.Logger {
 }
 
 func newTestAuthUseCase(repo *mockUserRepo) AuthUseCase {
-	return NewAuthUseCase(repo, []byte("secret"), validator.New(), discardLogger(), nil, nil, nil, nil, nil, 15*time.Minute, 5, time.Minute)
+	return NewAuthUseCase(repo, []byte("secret"), validator.New(), discardLogger(), nil, nil, nil, nil, nil, 15*time.Minute, 5, time.Minute, "https://arsiva.id/reset-password")
 }
 
 func TestNewAuthUseCase(t *testing.T) {
-	uc := NewAuthUseCase(nil, []byte("secret"), validator.New(), nil, nil, nil, nil, nil, nil, 15*time.Minute, 5, time.Minute)
+	uc := NewAuthUseCase(nil, []byte("secret"), validator.New(), nil, nil, nil, nil, nil, nil, 15*time.Minute, 5, time.Minute, "https://arsiva.id/reset-password")
 	if uc == nil {
 		t.Fatal("expected usecase instance")
 	}
@@ -388,7 +388,7 @@ func (m *mockGuruRepo) FindGroupsByGuruId(ctx context.Context, guruId string) ([
 }
 
 func newTestAuthUseCaseWithRepos(userRepo *mockUserRepo, memberRepo *mockMemberRepo, guruRepo *mockGuruRepo) AuthUseCase {
-	return NewAuthUseCase(userRepo, []byte("secret"), validator.New(), discardLogger(), nil, guruRepo, memberRepo, nil, nil, 15*time.Minute, 5, time.Minute)
+	return NewAuthUseCase(userRepo, []byte("secret"), validator.New(), discardLogger(), nil, guruRepo, memberRepo, nil, nil, 15*time.Minute, 5, time.Minute, "https://arsiva.id/reset-password")
 }
 
 func TestLogin_Member_WithProfile_DetailsPopulated(t *testing.T) {

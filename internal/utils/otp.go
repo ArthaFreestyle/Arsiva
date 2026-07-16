@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/base64"
 	"encoding/hex"
 	"math/big"
 )
@@ -25,8 +26,22 @@ func GenerateOTP() (string, error) {
 	return string(buf), nil
 }
 
+// GenerateResetToken returns a cryptographically-random, URL-safe token used in
+// password-reset links (e.g. .../reset-password?token=<this>). It carries 32 bytes
+// of entropy — far more than a 6-digit OTP — because a reset link is not attempt-
+// limited by a human typing it and may sit in an inbox. base64 URL encoding
+// (no padding) keeps it safe to drop straight into a query string.
+func GenerateResetToken() (string, error) {
+	var buf [32]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(buf[:]), nil
+}
+
 // HashOTP returns the hex-encoded SHA-256 of the code. We never store the raw OTP
-// in Redis — only its hash — so a Redis dump does not leak live codes.
+// (or reset token) in Redis — only its hash — so a Redis dump does not leak live
+// codes/tokens.
 func HashOTP(code string) string {
 	sum := sha256.Sum256([]byte(code))
 	return hex.EncodeToString(sum[:])

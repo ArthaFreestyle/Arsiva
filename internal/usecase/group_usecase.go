@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/go-playground/validator/v10"
@@ -13,10 +15,14 @@ import (
 	"github.com/sirupsen/logrus"
 
 	"ArthaFreestyle/Arsiva/internal/entity"
+	"ArthaFreestyle/Arsiva/internal/mailer"
 	"ArthaFreestyle/Arsiva/internal/model"
 	"ArthaFreestyle/Arsiva/internal/model/converter"
 	"ArthaFreestyle/Arsiva/internal/repository"
 )
+
+// groupInviteExpiry is how long an emailed group-invite token stays valid.
+const groupInviteExpiry = 7 * 24 * time.Hour
 
 type GroupUseCase interface {
 	// CRUD
@@ -27,7 +33,7 @@ type GroupUseCase interface {
 	DeleteGroup(ctx context.Context, groupId string, userId string) error
 
 	// Member Management
-	InviteMembersByEmail(ctx context.Context, groupId string, req *model.GroupInviteEmailRequest, userId string) error
+	InviteMembersByEmail(ctx context.Context, groupId string, req *model.GroupInviteEmailRequest, userId string) (*model.GroupInviteEmailResponse, error)
 	GenerateInviteLink(ctx context.Context, groupId string, userId string) (*model.GroupInviteResponse, error)
 	JoinGroup(ctx context.Context, req *model.GroupJoinRequest, userId string) error
 	RemoveMember(ctx context.Context, groupId string, memberId int, userId string) error
@@ -45,16 +51,47 @@ type groupUseCaseImpl struct {
 	Log             *logrus.Logger
 	Validator       *validator.Validate
 	JWTSecret       []byte
+	Mailer          mailer.Mailer
+	// InviteBaseURL is the frontend page a group invite link points at, e.g.
+	// "https://arsiva.id/join-group". The token is appended as a query param.
+	InviteBaseURL string
 }
 
-func NewGroupUseCase(groupRepo repository.GroupRepository, assetRepo repository.AssetRepository, log *logrus.Logger, validate *validator.Validate, secret []byte) GroupUseCase {
+func NewGroupUseCase(groupRepo repository.GroupRepository, assetRepo repository.AssetRepository, log *logrus.Logger, validate *validator.Validate, secret []byte, mail mailer.Mailer, inviteBaseURL string) GroupUseCase {
 	return &groupUseCaseImpl{
 		GroupRepository: groupRepo,
 		AssetRepository: assetRepo,
 		Log:             log,
 		Validator:       validate,
 		JWTSecret:       secret,
+		Mailer:          mail,
+		InviteBaseURL:   inviteBaseURL,
 	}
+}
+
+// buildGroupInviteToken signs a group-scoped invite JWT (type "group_invite",
+// consumed by JoinGroup) and returns it with its expiry. Shared by the emailed
+// invite flow and the shareable/QR invite link.
+func (u *groupUseCaseImpl) buildGroupInviteToken(groupId string, guruId int) (string, time.Time, error) {
+	expiresAt := time.Now().Add(groupInviteExpiry)
+	claims := jwt.MapClaims{
+		"group_id": groupId,
+		"guru_id":  guruId,
+		"type":     "group_invite",
+		"exp":      expiresAt.Unix(),
+	}
+	signed, err := jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(u.JWTSecret)
+	return signed, expiresAt, err
+}
+
+// buildGroupInviteURL appends the invite token to the configured frontend join page,
+// e.g. https://arsiva.id/join-group?token=<t>.
+func (u *groupUseCaseImpl) buildGroupInviteURL(token string) string {
+	sep := "?"
+	if strings.Contains(u.InviteBaseURL, "?") {
+		sep = "&"
+	}
+	return fmt.Sprintf("%s%stoken=%s", u.InviteBaseURL, sep, url.QueryEscape(token))
 }
 
 func (u *groupUseCaseImpl) CreateGroup(ctx context.Context, req *model.GroupCreateRequest, userId string) (*model.GroupResponse, error) {
@@ -193,33 +230,91 @@ func (u *groupUseCaseImpl) DeleteGroup(ctx context.Context, groupId string, user
 	return nil
 }
 
-func (u *groupUseCaseImpl) InviteMembersByEmail(ctx context.Context, groupId string, req *model.GroupInviteEmailRequest, userId string) error {
+// InviteMembersByEmail emails a group-invitation link to each address. It does NOT
+// auto-add anyone: recipients join by clicking the link (→ login/register → JoinGroup),
+// which works for existing members and brand-new students alike. Returns a per-email
+// confirmation so the FE can report which invites failed. The email body is rendered
+// once and reused for every recipient — the invite token is group-scoped, not
+// per-recipient.
+func (u *groupUseCaseImpl) InviteMembersByEmail(ctx context.Context, groupId string, req *model.GroupInviteEmailRequest, userId string) (*model.GroupInviteEmailResponse, error) {
 	if err := u.Validator.Struct(req); err != nil {
-		return fiber.ErrBadRequest
+		u.Log.Warnf("InviteMembersByEmail: invalid request: %+v", err)
+		return nil, fiber.ErrBadRequest
 	}
 
 	guruId, err := u.GroupRepository.GetGuruIdByUserId(ctx, userId)
 	if err != nil {
-		return fiber.ErrForbidden
+		return nil, fiber.ErrForbidden
 	}
 
 	group, err := u.GroupRepository.GetGroupById(ctx, groupId)
 	if err != nil {
-		return fiber.ErrNotFound
+		return nil, fiber.ErrNotFound
 	}
 	if group.CreatedBy != guruId {
-		return fiber.ErrForbidden
+		return nil, fiber.ErrForbidden
 	}
 
-	for _, email := range req.Emails {
-		memberId, err := u.GroupRepository.GetMemberIdByEmail(ctx, email)
-		if err == nil && memberId > 0 {
-			_ = u.GroupRepository.AddMember(ctx, groupId, memberId)
-		} else {
-			u.Log.Warnf("Failed to find or add member with email %s: %v", email, err)
-		}
+	token, _, err := u.buildGroupInviteToken(groupId, guruId)
+	if err != nil {
+		u.Log.Errorf("InviteMembersByEmail: error signing invite token: %v", err)
+		return nil, fiber.ErrInternalServerError
 	}
-	return nil
+
+	inviterName := group.Guru.Username
+	if inviterName == "" {
+		inviterName = "Guru Arsiva"
+	}
+
+	data := mailer.GroupInviteEmail{
+		GroupName:    group.GroupName,
+		InviterName:  inviterName,
+		PersonalNote: strings.TrimSpace(req.Message),
+		ButtonLabel:  "Gabung Grup",
+		InviteURL:    u.buildGroupInviteURL(token),
+		ExpiryDays:   int(groupInviteExpiry.Hours() / 24),
+		SecurityNote: "Kalau kamu tidak mengenal pengundang atau tidak ingin bergabung, kamu bisa mengabaikan email ini dengan aman.",
+		Preheader:    fmt.Sprintf("%s mengundangmu ke grup %s di Arsiva.", inviterName, group.GroupName),
+	}
+	subject := fmt.Sprintf("Undangan Bergabung ke Grup %s di Arsiva", group.GroupName)
+
+	textBody := mailer.RenderGroupInviteText(data)
+	htmlBody, err := mailer.RenderGroupInviteHTML(data)
+	if err != nil {
+		u.Log.Warnf("InviteMembersByEmail: failed to render HTML email, falling back to text: %v", err)
+		htmlBody = textBody
+	}
+
+	resp := &model.GroupInviteEmailResponse{}
+	seen := make(map[string]struct{}, len(req.Emails))
+	for _, raw := range req.Emails {
+		email := strings.ToLower(strings.TrimSpace(raw))
+		if email == "" {
+			continue
+		}
+		if _, dup := seen[email]; dup {
+			continue // skip duplicate addresses so nobody is emailed twice
+		}
+		seen[email] = struct{}{}
+		resp.Total++
+
+		if u.Mailer == nil {
+			u.Log.Warnf("InviteMembersByEmail: mailer not configured; cannot invite %s", email)
+			resp.Failed++
+			resp.Results = append(resp.Results, model.GroupInviteEmailResult{Email: email, Status: "failed"})
+			continue
+		}
+		if err := u.Mailer.SendHTML(email, subject, htmlBody, textBody); err != nil {
+			u.Log.Warnf("InviteMembersByEmail: failed to send invite to %s: %v", email, err)
+			resp.Failed++
+			resp.Results = append(resp.Results, model.GroupInviteEmailResult{Email: email, Status: "failed"})
+			continue
+		}
+		resp.Sent++
+		resp.Results = append(resp.Results, model.GroupInviteEmailResult{Email: email, Status: "sent"})
+	}
+
+	return resp, nil
 }
 
 func (u *groupUseCaseImpl) GenerateInviteLink(ctx context.Context, groupId string, userId string) (*model.GroupInviteResponse, error) {
@@ -236,15 +331,7 @@ func (u *groupUseCaseImpl) GenerateInviteLink(ctx context.Context, groupId strin
 		return nil, fiber.ErrForbidden
 	}
 
-	expiresAt := time.Now().Add(7 * 24 * time.Hour)
-	claims := jwt.MapClaims{
-		"group_id": groupId,
-		"guru_id":  guruId,
-		"type":     "group_invite",
-		"exp":      expiresAt.Unix(),
-	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString(u.JWTSecret)
+	tokenString, expiresAt, err := u.buildGroupInviteToken(groupId, guruId)
 	if err != nil {
 		u.Log.Errorf("Error signing group invite token: %v", err)
 		return nil, fiber.ErrInternalServerError

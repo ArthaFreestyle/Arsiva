@@ -63,8 +63,16 @@ func Bootstrap(cfg BootstrapConfig) {
 	if otpResendCooldown <= 0 {
 		otpResendCooldown = 60
 	}
+	resetPasswordURL := cfg.Config.GetString("email.reset_password_url")
+	if resetPasswordURL == "" {
+		resetPasswordURL = "https://arsiva.id/reset-password"
+	}
+	groupInviteURL := cfg.Config.GetString("email.group_invite_url")
+	if groupInviteURL == "" {
+		groupInviteURL = "https://arsiva.id/join-group"
+	}
 
-	AuthUseCase := usecase.NewAuthUseCase(userRepo, cfg.Secret, cfg.Validate, cfg.Log, cfg.DB, guruRepo, memberRepo, cfg.Redis, mail, time.Duration(otpTTLMinutes)*time.Minute, otpMaxAttempts, time.Duration(otpResendCooldown)*time.Second)
+	AuthUseCase := usecase.NewAuthUseCase(userRepo, cfg.Secret, cfg.Validate, cfg.Log, cfg.DB, guruRepo, memberRepo, cfg.Redis, mail, time.Duration(otpTTLMinutes)*time.Minute, otpMaxAttempts, time.Duration(otpResendCooldown)*time.Second, resetPasswordURL)
 	UserUseCase := usecase.NewUserUseCase(userRepo, cfg.Log, cfg.DB, cfg.Validate)
 	ArticleCategoryUseCase := usecase.NewArticleCategoryUseCase(articleCategoryRepo, cfg.Redis, cfg.Log, cfg.Validate)
 	ArticleUseCase := usecase.NewArticleUseCase(articleRepo, assetRepo, cfg.Log, cfg.Validate)
@@ -74,7 +82,7 @@ func Bootstrap(cfg BootstrapConfig) {
 	StoryCategoryUseCase := usecase.NewStoryCategoryUseCase(storyCategoryRepo, cfg.Log, cfg.Validate)
 	QuizCategoryUseCase := usecase.NewQuizCategoryUseCase(quizCategoryRepo, cfg.Log, cfg.Validate)
 	AssetUseCase := usecase.NewAssetUsecase(assetRepo, cfg.Log, "./uploads")
-	GroupUseCase := usecase.NewGroupUseCase(groupRepo, assetRepo, cfg.Log, cfg.Validate, cfg.Secret)
+	GroupUseCase := usecase.NewGroupUseCase(groupRepo, assetRepo, cfg.Log, cfg.Validate, cfg.Secret, mail, groupInviteURL)
 	SekolahUseCase := usecase.NewSekolahUseCase(sekolahRepo, cfg.Log, cfg.Validate)
 	GuruUseCase := usecase.NewGuruUseCase(guruRepo, cfg.Log, cfg.Validate)
 	MemberUseCase := usecase.NewMemberUseCase(memberRepo, memberAchievementRepo, memberSocialLinkRepo, cfg.Log, cfg.Validate)

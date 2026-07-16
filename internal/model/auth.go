@@ -29,15 +29,17 @@ type ResendOTPRequest struct {
 	Email	string `json:"email" validate:"required,email"`
 }
 
-// ForgotPasswordRequest starts the password-reset flow by emailing an OTP.
+// ForgotPasswordRequest starts the password-reset flow by emailing a reset link.
 type ForgotPasswordRequest struct {
 	Email	string `json:"email" validate:"required,email"`
 }
 
-// ResetPasswordRequest completes the password-reset flow.
+// ResetPasswordRequest completes the password-reset flow. The email + token come
+// from the reset link the user clicked (…/reset-password?token=…&email=…); the FE
+// posts them back alongside the new password.
 type ResetPasswordRequest struct {
 	Email		string `json:"email"        validate:"required,email"`
-	Code		string `json:"code"         validate:"required,len=6,numeric"`
+	Token		string `json:"token"        validate:"required"`
 	NewPassword	string `json:"new_password" validate:"required,min=8"`
 }
 

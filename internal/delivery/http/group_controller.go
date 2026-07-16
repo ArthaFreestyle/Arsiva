@@ -136,13 +136,13 @@ func (c *groupControllerImpl) InviteMembersByEmail(ctx fiber.Ctx) error {
 	groupId := ctx.Params("id")
 	userId := ctx.Locals("userId").(string)
 
-	err := c.GroupUseCase.InviteMembersByEmail(ctx.Context(), groupId, req, userId)
+	result, err := c.GroupUseCase.InviteMembersByEmail(ctx.Context(), groupId, req, userId)
 	if err != nil {
 		c.Log.Warnf("Failed invite members by email: %v", err)
 		return err
 	}
 
-	return ctx.Status(fiber.StatusOK).JSON(model.WebResponse[string]{Data: "Members invited successfully"})
+	return ctx.Status(fiber.StatusOK).JSON(model.WebResponse[*model.GroupInviteEmailResponse]{Data: result})
 }
 
 func (c *groupControllerImpl) GenerateInviteLink(ctx fiber.Ctx) error {

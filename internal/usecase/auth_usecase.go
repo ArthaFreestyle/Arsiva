@@ -10,6 +10,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -31,10 +32,10 @@ type AuthUseCase interface {
 	VerifyEmail(ctx context.Context, request *model.VerifyEmailRequest) error
 	// ResendVerificationOTP re-issues a verification OTP for an unverified account.
 	ResendVerificationOTP(ctx context.Context, request *model.ResendOTPRequest) error
-	// ForgotPassword emails a reset OTP. Always succeeds from the caller's view
-	// (anti-enumeration) regardless of whether the email is registered.
+	// ForgotPassword emails a password-reset link. Always succeeds from the
+	// caller's view (anti-enumeration) regardless of whether the email is registered.
 	ForgotPassword(ctx context.Context, request *model.ForgotPasswordRequest) error
-	// ResetPassword sets a new password after a valid reset OTP.
+	// ResetPassword sets a new password after a valid reset token (from the link).
 	ResetPassword(ctx context.Context, request *model.ResetPasswordRequest) error
 }
 
@@ -51,9 +52,13 @@ type AuthUseCaseImpl struct {
 	OTPTTL           time.Duration
 	OTPMaxAttempts   int
 	ResendCooldown   time.Duration
+	// ResetBaseURL is the frontend page the reset link points at, e.g.
+	// "https://arsiva.id/reset-password". The token + email are appended as query
+	// params when building the link.
+	ResetBaseURL string
 }
 
-func NewAuthUseCase(repo repository.UserRepository, secret []byte, validate *validator.Validate, log *logrus.Logger, DB *pgxpool.Pool, guruRepo repository.GuruRepository, memberRepo repository.MemberRepository, redisClient *redis.Client, mail mailer.Mailer, otpTTL time.Duration, otpMaxAttempts int, resendCooldown time.Duration) AuthUseCase {
+func NewAuthUseCase(repo repository.UserRepository, secret []byte, validate *validator.Validate, log *logrus.Logger, DB *pgxpool.Pool, guruRepo repository.GuruRepository, memberRepo repository.MemberRepository, redisClient *redis.Client, mail mailer.Mailer, otpTTL time.Duration, otpMaxAttempts int, resendCooldown time.Duration, resetBaseURL string) AuthUseCase {
 	return &AuthUseCaseImpl{
 		Repo:             repo,
 		Secret:           secret,
@@ -67,6 +72,7 @@ func NewAuthUseCase(repo repository.UserRepository, secret []byte, validate *val
 		OTPTTL:           otpTTL,
 		OTPMaxAttempts:   otpMaxAttempts,
 		ResendCooldown:   resendCooldown,
+		ResetBaseURL:     resetBaseURL,
 	}
 }
 
@@ -225,17 +231,35 @@ func otpCooldownKey(purpose, email string) string {
 	return fmt.Sprintf("otp:cooldown:%s:%s", purpose, email)
 }
 
-// issueOTP generates a fresh OTP, stores its hash in Redis (with TTL + a resend
-// cooldown), and emails the plaintext code. Returns an error on cooldown, Redis
-// failure, or mail failure — callers decide whether to surface or swallow it.
-func (c *AuthUseCaseImpl) issueOTP(ctx context.Context, purpose, email string) error {
-	if c.Redis == nil || c.Mailer == nil {
-		return fmt.Errorf("otp infrastructure not configured")
-	}
-
+// storeSecret persists the hash of a single-use secret (OTP code or reset token)
+// in Redis with a TTL, resets its attempt counter, and arms a resend cooldown.
+// Returns a 429 fiber error if a cooldown is still active. Shared by issueOTP and
+// issueResetToken so both flows have identical throttling/storage semantics.
+func (c *AuthUseCaseImpl) storeSecret(ctx context.Context, purpose, email, secretHash string) error {
 	cooldownKey := otpCooldownKey(purpose, email)
 	if n, _ := c.Redis.Exists(ctx, cooldownKey).Result(); n > 0 {
 		return fiber.NewError(fiber.StatusTooManyRequests, "tunggu sebentar sebelum meminta kode baru")
+	}
+
+	key := otpKey(purpose, email)
+	pipe := c.Redis.Pipeline()
+	pipe.Del(ctx, key) // drop any previous secret so attempt counters reset
+	pipe.HSet(ctx, key, map[string]any{"code_hash": secretHash, "attempts": 0})
+	pipe.Expire(ctx, key, c.OTPTTL)
+	pipe.Set(ctx, cooldownKey, "1", c.ResendCooldown)
+	if _, err := pipe.Exec(ctx); err != nil {
+		return fmt.Errorf("store secret: %w", err)
+	}
+	return nil
+}
+
+// issueOTP generates a fresh OTP, stores its hash in Redis (with TTL + a resend
+// cooldown), and emails the plaintext code. Returns an error on cooldown, Redis
+// failure, or mail failure — callers decide whether to surface or swallow it.
+// Used by the email-verification flow (password reset uses issueResetToken).
+func (c *AuthUseCaseImpl) issueOTP(ctx context.Context, purpose, email string) error {
+	if c.Redis == nil || c.Mailer == nil {
+		return fmt.Errorf("otp infrastructure not configured")
 	}
 
 	code, err := utils.GenerateOTP()
@@ -243,21 +267,50 @@ func (c *AuthUseCaseImpl) issueOTP(ctx context.Context, purpose, email string) e
 		return fmt.Errorf("generate otp: %w", err)
 	}
 
-	key := otpKey(purpose, email)
-	pipe := c.Redis.Pipeline()
-	pipe.Del(ctx, key) // drop any previous code so attempt counters reset
-	pipe.HSet(ctx, key, map[string]any{"code_hash": utils.HashOTP(code), "attempts": 0})
-	pipe.Expire(ctx, key, c.OTPTTL)
-	pipe.Set(ctx, cooldownKey, "1", c.ResendCooldown)
-	if _, err := pipe.Exec(ctx); err != nil {
-		return fmt.Errorf("store otp: %w", err)
+	if err := c.storeSecret(ctx, purpose, email, utils.HashOTP(code)); err != nil {
+		return err
 	}
 
-	subject, htmlBody, textBody := c.otpEmailContent(purpose, code)
+	subject, htmlBody, textBody := c.otpEmailContent(code)
 	if err := c.Mailer.SendHTML(email, subject, htmlBody, textBody); err != nil {
 		return fmt.Errorf("send otp mail: %w", err)
 	}
 	return nil
+}
+
+// issueResetToken generates a fresh password-reset token, stores its hash in Redis
+// (reusing the OTP storage/cooldown semantics under the "reset" purpose), and emails
+// a clickable reset link pointing at ResetBaseURL. Like issueOTP, callers decide
+// whether to surface or swallow the returned error.
+func (c *AuthUseCaseImpl) issueResetToken(ctx context.Context, email string) error {
+	if c.Redis == nil || c.Mailer == nil {
+		return fmt.Errorf("otp infrastructure not configured")
+	}
+
+	token, err := utils.GenerateResetToken()
+	if err != nil {
+		return fmt.Errorf("generate reset token: %w", err)
+	}
+
+	if err := c.storeSecret(ctx, otpPurposeReset, email, utils.HashOTP(token)); err != nil {
+		return err
+	}
+
+	subject, htmlBody, textBody := c.resetEmailContent(token, email)
+	if err := c.Mailer.SendHTML(email, subject, htmlBody, textBody); err != nil {
+		return fmt.Errorf("send reset mail: %w", err)
+	}
+	return nil
+}
+
+// buildResetURL appends the token + email as query params to the configured reset
+// page URL, e.g. https://arsiva.id/reset-password?token=<t>&email=<e>.
+func (c *AuthUseCaseImpl) buildResetURL(token, email string) string {
+	sep := "?"
+	if strings.Contains(c.ResetBaseURL, "?") {
+		sep = "&"
+	}
+	return fmt.Sprintf("%s%stoken=%s&email=%s", c.ResetBaseURL, sep, url.QueryEscape(token), url.QueryEscape(email))
 }
 
 // consumeOTP validates a code against the stored hash. On success it deletes the
@@ -293,35 +346,25 @@ func (c *AuthUseCaseImpl) consumeOTP(ctx context.Context, purpose, email, code s
 	return nil
 }
 
-// otpEmailContent builds the subject plus HTML and plain-text bodies for an OTP
-// email. The HTML is rendered from the shared Arsiva OTP template; the text body
-// is the fallback for non-HTML clients. If HTML rendering ever fails it degrades
-// gracefully to a text-only body reused for both parts.
-func (c *AuthUseCaseImpl) otpEmailContent(purpose, code string) (subject, htmlBody, textBody string) {
+// otpEmailContent builds the subject plus HTML and plain-text bodies for a
+// verification OTP email (the only remaining OTP purpose — password reset uses a
+// link, see resetEmailContent). The HTML is rendered from the shared Arsiva OTP
+// template; the text body is the fallback for non-HTML clients. If HTML rendering
+// ever fails it degrades gracefully to a text-only body reused for both parts.
+func (c *AuthUseCaseImpl) otpEmailContent(code string) (subject, htmlBody, textBody string) {
 	mins := int(c.OTPTTL.Minutes())
 
-	var subj string
 	data := mailer.OTPEmail{
-		Eyebrow:    "Keamanan Akun",
-		Code:       code,
-		ExpiryMins: mins,
+		Eyebrow:      "Keamanan Akun",
+		Code:         code,
+		ExpiryMins:   mins,
+		Heading:      "Verifikasi email kamu",
+		Intro:        "Masukkan kode di bawah ini untuk menyelesaikan verifikasi email akun Arsiva kamu.",
+		CodeLabel:    "Kode verifikasi kamu",
+		SecurityNote: "Tidak merasa mendaftar di Arsiva? Kamu bisa mengabaikan email ini dengan aman.",
+		Preheader:    fmt.Sprintf("Kode verifikasi Arsiva kamu adalah %s. Berlaku %d menit.", code, mins),
 	}
-	switch purpose {
-	case otpPurposeReset:
-		subj = "Kode Reset Password Arsiva"
-		data.Heading = "Atur ulang password kamu"
-		data.Intro = "Masukkan kode di bawah ini untuk mengatur ulang password akun Arsiva kamu."
-		data.CodeLabel = "Kode reset password"
-		data.SecurityNote = "Tidak meminta reset password? Kamu bisa mengabaikan email ini dengan aman dan password kamu tetap tidak berubah."
-		data.Preheader = fmt.Sprintf("Kode reset password Arsiva kamu adalah %s. Berlaku %d menit.", code, mins)
-	default: // otpPurposeVerify
-		subj = "Kode Verifikasi Email Arsiva"
-		data.Heading = "Verifikasi email kamu"
-		data.Intro = "Masukkan kode di bawah ini untuk menyelesaikan verifikasi email akun Arsiva kamu."
-		data.CodeLabel = "Kode verifikasi kamu"
-		data.SecurityNote = "Tidak merasa mendaftar di Arsiva? Kamu bisa mengabaikan email ini dengan aman."
-		data.Preheader = fmt.Sprintf("Kode verifikasi Arsiva kamu adalah %s. Berlaku %d menit.", code, mins)
-	}
+	subj := "Kode Verifikasi Email Arsiva"
 
 	text := mailer.RenderOTPText(data)
 	html, err := mailer.RenderOTPHTML(data)
@@ -330,6 +373,30 @@ func (c *AuthUseCaseImpl) otpEmailContent(purpose, code string) (subject, htmlBo
 		html = text
 	}
 	return subj, html, text
+}
+
+// resetEmailContent builds the subject plus HTML/text bodies for the password-reset
+// link email. Mirrors otpEmailContent's graceful-degradation behaviour.
+func (c *AuthUseCaseImpl) resetEmailContent(token, email string) (subject, htmlBody, textBody string) {
+	mins := int(c.OTPTTL.Minutes())
+
+	data := mailer.ResetLinkEmail{
+		Heading:      "Atur ulang password kamu",
+		Intro:        "Kami menerima permintaan untuk mengatur ulang password akun Arsiva kamu. Klik tombol di bawah ini untuk membuat password baru.",
+		ButtonLabel:  "Reset Password",
+		ResetURL:     c.buildResetURL(token, email),
+		ExpiryMins:   mins,
+		SecurityNote: "Tidak meminta reset password? Kamu bisa mengabaikan email ini dengan aman dan password kamu tetap tidak berubah.",
+		Preheader:    fmt.Sprintf("Atur ulang password Arsiva kamu. Tautan berlaku %d menit.", mins),
+	}
+
+	text := mailer.RenderResetLinkText(data)
+	html, err := mailer.RenderResetLinkHTML(data)
+	if err != nil {
+		c.Log.Warnf("resetEmailContent: failed to render HTML email, falling back to text: %+v", err)
+		html = text
+	}
+	return "Reset Password Arsiva", html, text
 }
 
 // VerifyEmail confirms an account via its verification OTP.
@@ -387,8 +454,8 @@ func (c *AuthUseCaseImpl) ResendVerificationOTP(ctx context.Context, request *mo
 	return nil
 }
 
-// ForgotPassword emails a reset OTP. From the caller's perspective it always
-// succeeds regardless of whether the email exists (anti-enumeration); all
+// ForgotPassword emails a password-reset link. From the caller's perspective it
+// always succeeds regardless of whether the email exists (anti-enumeration); all
 // internal failures are logged and swallowed.
 func (c *AuthUseCaseImpl) ForgotPassword(ctx context.Context, request *model.ForgotPasswordRequest) error {
 	if err := c.Validate.Struct(request); err != nil {
@@ -403,14 +470,14 @@ func (c *AuthUseCaseImpl) ForgotPassword(ctx context.Context, request *model.For
 		return nil
 	}
 
-	if err := c.issueOTP(ctx, otpPurposeReset, user.Email); err != nil {
+	if err := c.issueResetToken(ctx, user.Email); err != nil {
 		// Swallow everything (including cooldown) so this endpoint stays uniform.
-		c.Log.Warnf("ForgotPassword: issueOTP failed for %s: %+v", email, err)
+		c.Log.Warnf("ForgotPassword: issueResetToken failed for %s: %+v", email, err)
 	}
 	return nil
 }
 
-// ResetPassword sets a new password after a valid reset OTP.
+// ResetPassword sets a new password after a valid reset token from the emailed link.
 func (c *AuthUseCaseImpl) ResetPassword(ctx context.Context, request *model.ResetPasswordRequest) error {
 	if err := c.Validate.Struct(request); err != nil {
 		c.Log.Warnf("ResetPassword: invalid request: %+v", err)
@@ -418,7 +485,9 @@ func (c *AuthUseCaseImpl) ResetPassword(ctx context.Context, request *model.Rese
 	}
 	email := strings.ToLower(request.Email)
 
-	if err := c.consumeOTP(ctx, otpPurposeReset, email, request.Code); err != nil {
+	// consumeOTP validates the token the same way it validates an OTP code: it
+	// compares SHA-256 hashes, so it works for the reset token too.
+	if err := c.consumeOTP(ctx, otpPurposeReset, email, request.Token); err != nil {
 		return err
 	}
 

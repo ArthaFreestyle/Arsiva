@@ -12,7 +12,12 @@ type GroupUpdateRequest struct {
 }
 
 type GroupInviteEmailRequest struct {
-	Emails []string `json:"emails" validate:"required,min=1,dive,email"`
+	// Emails is the list of student addresses to invite. The FE sends this both when
+	// a guru types addresses and when they pick students from a list (resolved to
+	// their emails client-side).
+	Emails []string `json:"emails" validate:"required,min=1,max=50,dive,email"`
+	// Message is an optional personal note from the guru, shown in the invite email.
+	Message string `json:"message" validate:"omitempty,max=500"`
 }
 
 type GroupJoinRequest struct {
@@ -63,6 +68,22 @@ type GroupInviteResponse struct {
 	InviteLink  string `json:"invite_link"`
 	QRCodeData  string `json:"qr_code_data"`
 	ExpiresAt   string `json:"expires_at"`
+}
+
+// GroupInviteEmailResult is the per-address outcome of an email invitation.
+type GroupInviteEmailResult struct {
+	Email  string `json:"email"`
+	Status string `json:"status"` // "sent" | "failed"
+}
+
+// GroupInviteEmailResponse is the confirmation returned to the guru after sending
+// invitations: aggregate counts plus a per-email breakdown so the FE can show
+// which addresses failed.
+type GroupInviteEmailResponse struct {
+	Total   int                      `json:"total"`
+	Sent    int                      `json:"sent"`
+	Failed  int                      `json:"failed"`
+	Results []GroupInviteEmailResult `json:"results"`
 }
 
 // ==================== Group Contents ====================

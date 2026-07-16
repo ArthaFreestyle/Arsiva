@@ -131,7 +131,7 @@ func (c *AuthControllerImpl) ForgotPassword(ctx fiber.Ctx) error {
 	}
 
 	return ctx.Status(fiber.StatusOK).JSON(model.WebResponse[model.MessageResponse]{
-		Data: model.MessageResponse{Message: "jika email terdaftar, kode reset password telah dikirim"},
+		Data: model.MessageResponse{Message: "jika email terdaftar, tautan reset password telah dikirim"},
 	})
 }
 

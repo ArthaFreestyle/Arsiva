@@ -412,8 +412,8 @@ paths:
     post:
       tags:
         - Auth
-      summary: Forgot password (request reset OTP)
-      description: "Meminta kode OTP untuk reset password. **Selalu** mengembalikan respons sukses generik terlepas dari apakah email terdaftar (anti-enumeration). Rate-limited."
+      summary: Forgot password (request reset link)
+      description: "Meminta tautan reset password yang dikirim ke email. Tautan berisi token sekali pakai dan mengarah ke halaman FE (mis. `https://arsiva.id/reset-password?token=...&email=...`). **Selalu** mengembalikan respons sukses generik terlepas dari apakah email terdaftar (anti-enumeration). Rate-limited."
       operationId: forgotPassword
       requestBody:
         required: true
@@ -432,7 +432,7 @@ paths:
                 $ref: "#/components/schemas/MessageResponseWrapper"
               example:
                 data:
-                  message: "jika email terdaftar, kode reset password telah dikirim"
+                  message: "jika email terdaftar, tautan reset password telah dikirim"
         "429":
           description: Terlalu banyak permintaan — coba lagi nanti
           content:
@@ -443,8 +443,8 @@ paths:
     post:
       tags:
         - Auth
-      summary: Reset password (with OTP)
-      description: "Mengatur ulang password menggunakan kode OTP dari `POST /v1/forgot-password`. Kode bersifat sekali pakai dan hangus setelah `otp_max_attempts` percobaan salah. Rate-limited."
+      summary: Reset password (with token)
+      description: "Mengatur ulang password menggunakan `token` + `email` dari tautan reset yang dikirim `POST /v1/forgot-password`. Token bersifat sekali pakai dan kedaluwarsa sesuai `otp_ttl_minutes`. Rate-limited."
       operationId: resetPassword
       requestBody:
         required: true
@@ -454,7 +454,7 @@ paths:
               $ref: "#/components/schemas/ResetPasswordRequest"
             example:
               email: siswa01@example.com
-              code: "123456"
+              token: "vX3kPq7nZ2wL8mR4tY6uB1cD5eF9gH0jK2lM3nO4pQ"
               new_password: PasswordBaru123!
       responses:
         "200":
@@ -2691,6 +2691,7 @@ paths:
       tags:
         - Groups
       summary: Invite members by email
+      description: "Mengirim email undangan berisi link join (token grup berlaku 7 hari) ke tiap alamat, dengan pesan opsional dari guru. **Tidak** menambahkan siapa pun secara langsung — siswa bergabung dengan mengklik link (login/daftar → `POST /v1/groups/join`). Alamat duplikat diabaikan. Mengembalikan konfirmasi per-email. Hanya guru pemilik grup."
       security:
         - BearerAuth: []
       parameters:
@@ -2701,11 +2702,21 @@ paths:
             type: string
       responses:
         "200":
-          description: Success
+          description: "Undangan diproses (lihat rincian per-email)"
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/MessageWrapper"
+                $ref: "#/components/schemas/GroupInviteEmailResponseWrapper"
+              example:
+                data:
+                  total: 2
+                  sent: 1
+                  failed: 1
+                  results:
+                    - email: siswa01@example.com
+                      status: sent
+                    - email: siswa02@example.com
+                      status: failed
         "401":
           $ref: "#/components/responses/UnauthorizedResponse"
         "403":
@@ -2718,6 +2729,11 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/GroupInviteEmailRequest"
+            example:
+              emails:
+                - siswa01@example.com
+                - siswa02@example.com
+              message: "Yuk gabung grup kelas kita untuk kuis minggu ini!"
   /v1/groups/{id}/invite-link:
     get:
       tags:
@@ -5032,17 +5048,17 @@ components:
       type: object
       required:
         - email
-        - code
+        - token
         - new_password
       properties:
         email:
           type: string
           format: email
           example: siswa01@example.com
-        code:
+        token:
           type: string
-          description: Kode OTP 6 digit numerik dari forgot-password
-          example: "123456"
+          description: Token reset (URL-safe) dari tautan yang dikirim forgot-password
+          example: "vX3kPq7nZ2wL8mR4tY6uB1cD5eF9gH0jK2lM3nO4pQ"
         new_password:
           type: string
           format: password
@@ -5814,9 +5830,48 @@ components:
       properties:
         emails:
           type: array
+          minItems: 1
+          maxItems: 50
           items:
             type: string
             format: email
+        message:
+          type: string
+          maxLength: 500
+          description: Pesan opsional dari guru yang ditampilkan di email undangan
+          example: "Yuk gabung grup kelas kita untuk kuis minggu ini!"
+    GroupInviteEmailResult:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+          example: siswa01@example.com
+        status:
+          type: string
+          enum: [sent, failed]
+          example: sent
+    GroupInviteEmailResponse:
+      type: object
+      properties:
+        total:
+          type: integer
+          example: 2
+        sent:
+          type: integer
+          example: 1
+        failed:
+          type: integer
+          example: 1
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/GroupInviteEmailResult"
+    GroupInviteEmailResponseWrapper:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/GroupInviteEmailResponse"
     GroupJoinRequest:
       type: object
       required:
