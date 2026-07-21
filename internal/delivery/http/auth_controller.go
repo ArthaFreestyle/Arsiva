@@ -61,8 +61,13 @@ func (c *AuthControllerImpl) RegisterMember(ctx fiber.Ctx) error {
 		return err
 	}
 
-	return ctx.Status(fiber.StatusCreated).JSON(model.WebResponse[model.UserResponse]{
-		Data: *result,
+	policy := c.UseCase.OTPPolicy()
+	return ctx.Status(fiber.StatusCreated).JSON(model.WebResponse[model.RegisterResponse]{
+		Data: model.RegisterResponse{
+			UserResponse:          *result,
+			OTPExpiresInSeconds:   policy.OTPExpiresInSeconds,
+			ResendCooldownSeconds: policy.ResendCooldownSeconds,
+		},
 	})
 }
 
@@ -79,8 +84,13 @@ func (c *AuthControllerImpl) RegisterGuru(ctx fiber.Ctx) error {
 		return err
 	}
 
-	return ctx.Status(fiber.StatusCreated).JSON(model.WebResponse[model.UserResponse]{
-		Data: *result,
+	policy := c.UseCase.OTPPolicy()
+	return ctx.Status(fiber.StatusCreated).JSON(model.WebResponse[model.RegisterResponse]{
+		Data: model.RegisterResponse{
+			UserResponse:          *result,
+			OTPExpiresInSeconds:   policy.OTPExpiresInSeconds,
+			ResendCooldownSeconds: policy.ResendCooldownSeconds,
+		},
 	})
 }
 
@@ -113,8 +123,13 @@ func (c *AuthControllerImpl) ResendOTP(ctx fiber.Ctx) error {
 		return err
 	}
 
-	return ctx.Status(fiber.StatusOK).JSON(model.WebResponse[model.MessageResponse]{
-		Data: model.MessageResponse{Message: "jika email terdaftar dan belum terverifikasi, kode baru telah dikirim"},
+	policy := c.UseCase.OTPPolicy()
+	return ctx.Status(fiber.StatusOK).JSON(model.WebResponse[model.OTPActionResponse]{
+		Data: model.OTPActionResponse{
+			Message:               "jika email terdaftar dan belum terverifikasi, kode baru telah dikirim",
+			OTPExpiresInSeconds:   policy.OTPExpiresInSeconds,
+			ResendCooldownSeconds: policy.ResendCooldownSeconds,
+		},
 	})
 }
 
@@ -130,8 +145,13 @@ func (c *AuthControllerImpl) ForgotPassword(ctx fiber.Ctx) error {
 		return err
 	}
 
-	return ctx.Status(fiber.StatusOK).JSON(model.WebResponse[model.MessageResponse]{
-		Data: model.MessageResponse{Message: "jika email terdaftar, tautan reset password telah dikirim"},
+	policy := c.UseCase.OTPPolicy()
+	return ctx.Status(fiber.StatusOK).JSON(model.WebResponse[model.OTPActionResponse]{
+		Data: model.OTPActionResponse{
+			Message:                   "jika email terdaftar, tautan reset password telah dikirim",
+			ResetLinkExpiresInSeconds: policy.ResetLinkExpiresInSeconds,
+			ResendCooldownSeconds:     policy.ResendCooldownSeconds,
+		},
 	})
 }
 

@@ -37,6 +37,9 @@ type AuthUseCase interface {
 	ForgotPassword(ctx context.Context, request *model.ForgotPasswordRequest) error
 	// ResetPassword sets a new password after a valid reset token (from the link).
 	ResetPassword(ctx context.Context, request *model.ResetPasswordRequest) error
+	// OTPPolicy returns the (static) OTP/reset-link timing knobs so controllers can
+	// hand them to the FE for countdowns and resend-button throttling.
+	OTPPolicy() model.OTPPolicy
 }
 
 type AuthUseCaseImpl struct {
@@ -48,17 +51,18 @@ type AuthUseCaseImpl struct {
 	MemberRepository repository.MemberRepository
 	Secret           []byte
 	Redis            *redis.Client
-	Mailer           mailer.Mailer
-	OTPTTL           time.Duration
-	OTPMaxAttempts   int
-	ResendCooldown   time.Duration
+	Mailer         mailer.Mailer
+	OTPTTL         time.Duration // TTL of a verification OTP (register flow)
+	ResetTTL       time.Duration // TTL of a password-reset link — longer, since it travels via email
+	OTPMaxAttempts int
+	ResendCooldown time.Duration
 	// ResetBaseURL is the frontend page the reset link points at, e.g.
 	// "https://arsiva.id/reset-password". The token + email are appended as query
 	// params when building the link.
 	ResetBaseURL string
 }
 
-func NewAuthUseCase(repo repository.UserRepository, secret []byte, validate *validator.Validate, log *logrus.Logger, DB *pgxpool.Pool, guruRepo repository.GuruRepository, memberRepo repository.MemberRepository, redisClient *redis.Client, mail mailer.Mailer, otpTTL time.Duration, otpMaxAttempts int, resendCooldown time.Duration, resetBaseURL string) AuthUseCase {
+func NewAuthUseCase(repo repository.UserRepository, secret []byte, validate *validator.Validate, log *logrus.Logger, DB *pgxpool.Pool, guruRepo repository.GuruRepository, memberRepo repository.MemberRepository, redisClient *redis.Client, mail mailer.Mailer, otpTTL time.Duration, resetTTL time.Duration, otpMaxAttempts int, resendCooldown time.Duration, resetBaseURL string) AuthUseCase {
 	return &AuthUseCaseImpl{
 		Repo:             repo,
 		Secret:           secret,
@@ -70,10 +74,29 @@ func NewAuthUseCase(repo repository.UserRepository, secret []byte, validate *val
 		Redis:            redisClient,
 		Mailer:           mail,
 		OTPTTL:           otpTTL,
+		ResetTTL:         resetTTL,
 		OTPMaxAttempts:   otpMaxAttempts,
 		ResendCooldown:   resendCooldown,
 		ResetBaseURL:     resetBaseURL,
 	}
+}
+
+// OTPPolicy exposes the static timing knobs (seconds) for the FE.
+func (c *AuthUseCaseImpl) OTPPolicy() model.OTPPolicy {
+	return model.OTPPolicy{
+		OTPExpiresInSeconds:       int(c.OTPTTL.Seconds()),
+		ResetLinkExpiresInSeconds: int(c.ResetTTL.Seconds()),
+		ResendCooldownSeconds:     int(c.ResendCooldown.Seconds()),
+	}
+}
+
+// ttlFor returns the secret lifetime for a given purpose: a short OTP for email
+// verification, a longer window for the reset link (it round-trips through email).
+func (c *AuthUseCaseImpl) ttlFor(purpose string) time.Duration {
+	if purpose == otpPurposeReset {
+		return c.ResetTTL
+	}
+	return c.OTPTTL
 }
 
 func (c *AuthUseCaseImpl) Login(ctx context.Context, request *model.LoginRequest) (*model.LoginResponse, error) {
@@ -245,7 +268,7 @@ func (c *AuthUseCaseImpl) storeSecret(ctx context.Context, purpose, email, secre
 	pipe := c.Redis.Pipeline()
 	pipe.Del(ctx, key) // drop any previous secret so attempt counters reset
 	pipe.HSet(ctx, key, map[string]any{"code_hash": secretHash, "attempts": 0})
-	pipe.Expire(ctx, key, c.OTPTTL)
+	pipe.Expire(ctx, key, c.ttlFor(purpose))
 	pipe.Set(ctx, cooldownKey, "1", c.ResendCooldown)
 	if _, err := pipe.Exec(ctx); err != nil {
 		return fmt.Errorf("store secret: %w", err)
@@ -378,7 +401,7 @@ func (c *AuthUseCaseImpl) otpEmailContent(code string) (subject, htmlBody, textB
 // resetEmailContent builds the subject plus HTML/text bodies for the password-reset
 // link email. Mirrors otpEmailContent's graceful-degradation behaviour.
 func (c *AuthUseCaseImpl) resetEmailContent(token, email string) (subject, htmlBody, textBody string) {
-	mins := int(c.OTPTTL.Minutes())
+	mins := int(c.ResetTTL.Minutes())
 
 	data := mailer.ResetLinkEmail{
 		Heading:      "Atur ulang password kamu",

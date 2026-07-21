@@ -240,7 +240,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/UserResponseWrapper"
+                $ref: "#/components/schemas/RegisterResponseWrapper"
               example:
                 data:
                   id: "42"
@@ -248,6 +248,8 @@ paths:
                   email: siswa01@example.com
                   role: member
                   created_at: "2026-05-15T10:23:11Z"
+                  otp_expires_in_seconds: 300
+                  resend_cooldown_seconds: 60
         "400":
           description: Validasi gagal (field wajib kosong, format email salah, password < 8 karakter)
           content:
@@ -299,7 +301,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/UserResponseWrapper"
+                $ref: "#/components/schemas/RegisterResponseWrapper"
               example:
                 data:
                   id: "43"
@@ -307,6 +309,8 @@ paths:
                   email: guru01@example.com
                   role: guru
                   created_at: "2026-05-15T10:24:00Z"
+                  otp_expires_in_seconds: 300
+                  resend_cooldown_seconds: 60
         "400":
           description: Validasi gagal (field wajib kosong, format email salah, password < 8 karakter)
           content:
@@ -396,10 +400,12 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/MessageResponseWrapper"
+                $ref: "#/components/schemas/OTPActionResponseWrapper"
               example:
                 data:
                   message: "jika email terdaftar dan belum terverifikasi, kode baru telah dikirim"
+                  otp_expires_in_seconds: 300
+                  resend_cooldown_seconds: 60
         "429":
           description: Masih dalam cooldown / terlalu banyak permintaan
           content:
@@ -429,10 +435,12 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/MessageResponseWrapper"
+                $ref: "#/components/schemas/OTPActionResponseWrapper"
               example:
                 data:
                   message: "jika email terdaftar, tautan reset password telah dikirim"
+                  reset_link_expires_in_seconds: 900
+                  resend_cooldown_seconds: 60
         "429":
           description: Terlalu banyak permintaan — coba lagi nanti
           content:
@@ -444,7 +452,7 @@ paths:
       tags:
         - Auth
       summary: Reset password (with token)
-      description: "Mengatur ulang password menggunakan `token` + `email` dari tautan reset yang dikirim `POST /v1/forgot-password`. Token bersifat sekali pakai dan kedaluwarsa sesuai `otp_ttl_minutes`. Rate-limited."
+      description: "Mengatur ulang password menggunakan `token` + `email` dari tautan reset yang dikirim `POST /v1/forgot-password`. Token bersifat sekali pakai dan kedaluwarsa sesuai `reset_link_ttl_minutes`. Rate-limited."
       operationId: resetPassword
       requestBody:
         required: true
@@ -5075,6 +5083,34 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/MessageResponse"
+    OTPActionResponse:
+      type: object
+      description: >
+        Acknowledgement generik untuk resend-otp / forgot-password, plus petunjuk
+        waktu (statis, dari config) agar FE bisa menampilkan hitung mundur dan
+        menonaktifkan tombol "kirim ulang". Nilai ini konstan sehingga tidak
+        membocorkan apakah email terdaftar (anti-enumeration tetap terjaga).
+      properties:
+        message:
+          type: string
+          example: jika email terdaftar dan belum terverifikasi, kode baru telah dikirim
+        otp_expires_in_seconds:
+          type: integer
+          description: Masa berlaku kode OTP verifikasi (detik). Hanya pada resend-otp.
+          example: 300
+        reset_link_expires_in_seconds:
+          type: integer
+          description: Masa berlaku tautan reset password (detik). Hanya pada forgot-password.
+          example: 900
+        resend_cooldown_seconds:
+          type: integer
+          description: Jeda minimum sebelum boleh meminta kode/tautan baru (detik).
+          example: 60
+    OTPActionResponseWrapper:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/OTPActionResponse"
     ProfileIncompleteResponse:
       type: object
       description: >
@@ -5163,6 +5199,29 @@ components:
           $ref: "#/components/schemas/UserResponse"
         paging:
           $ref: "#/components/schemas/PageMetaData"
+        errors:
+          type: string
+    RegisterResponse:
+      description: >
+        Payload registrasi: field user (id, username, …) plus petunjuk waktu
+        verifikasi agar FE bisa langsung menampilkan layar "cek email kamu".
+      allOf:
+        - $ref: "#/components/schemas/UserResponse"
+        - type: object
+          properties:
+            otp_expires_in_seconds:
+              type: integer
+              description: Masa berlaku kode OTP verifikasi (detik).
+              example: 300
+            resend_cooldown_seconds:
+              type: integer
+              description: Jeda minimum sebelum boleh meminta kode baru (detik).
+              example: 60
+    RegisterResponseWrapper:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/RegisterResponse"
         errors:
           type: string
     UserListResponseWrapper:

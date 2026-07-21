@@ -53,7 +53,12 @@ func Bootstrap(cfg BootstrapConfig) {
 	mail := mailer.NewMailer(cfg.Config, cfg.Log)
 	otpTTLMinutes := cfg.Config.GetInt("email.otp_ttl_minutes")
 	if otpTTLMinutes <= 0 {
-		otpTTLMinutes = 15
+		otpTTLMinutes = 5
+	}
+	// Reset links travel through email, so they get a longer window than the OTP.
+	resetLinkTTLMinutes := cfg.Config.GetInt("email.reset_link_ttl_minutes")
+	if resetLinkTTLMinutes <= 0 {
+		resetLinkTTLMinutes = 15
 	}
 	otpMaxAttempts := cfg.Config.GetInt("email.otp_max_attempts")
 	if otpMaxAttempts <= 0 {
@@ -72,7 +77,7 @@ func Bootstrap(cfg BootstrapConfig) {
 		groupInviteURL = "https://arsiva.id/join-group"
 	}
 
-	AuthUseCase := usecase.NewAuthUseCase(userRepo, cfg.Secret, cfg.Validate, cfg.Log, cfg.DB, guruRepo, memberRepo, cfg.Redis, mail, time.Duration(otpTTLMinutes)*time.Minute, otpMaxAttempts, time.Duration(otpResendCooldown)*time.Second, resetPasswordURL)
+	AuthUseCase := usecase.NewAuthUseCase(userRepo, cfg.Secret, cfg.Validate, cfg.Log, cfg.DB, guruRepo, memberRepo, cfg.Redis, mail, time.Duration(otpTTLMinutes)*time.Minute, time.Duration(resetLinkTTLMinutes)*time.Minute, otpMaxAttempts, time.Duration(otpResendCooldown)*time.Second, resetPasswordURL)
 	UserUseCase := usecase.NewUserUseCase(userRepo, cfg.Log, cfg.DB, cfg.Validate)
 	ArticleCategoryUseCase := usecase.NewArticleCategoryUseCase(articleCategoryRepo, cfg.Redis, cfg.Log, cfg.Validate)
 	ArticleUseCase := usecase.NewArticleUseCase(articleRepo, assetRepo, cfg.Log, cfg.Validate)

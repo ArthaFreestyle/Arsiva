@@ -44,8 +44,37 @@ type ResetPasswordRequest struct {
 }
 
 // MessageResponse is a generic acknowledgement for flows that return no entity
-// (verify, resend, forgot, reset). The message is intentionally generic for the
-// forgot-password flow so it cannot be used to probe which emails are registered.
+// (verify, reset). The message is intentionally generic for the forgot-password
+// flow so it cannot be used to probe which emails are registered.
 type MessageResponse struct {
 	Message string `json:"message"`
+}
+
+// OTPPolicy carries the (static, non-user-specific) OTP/reset-link timing knobs so
+// the FE can render countdowns and disable the "resend" button for the right
+// duration. All values come from server config; exposing them leaks nothing about
+// whether a given email is registered, so it is safe on anti-enumeration endpoints.
+type OTPPolicy struct {
+	OTPExpiresInSeconds       int `json:"otp_expires_in_seconds"`
+	ResetLinkExpiresInSeconds int `json:"reset_link_expires_in_seconds"`
+	ResendCooldownSeconds     int `json:"resend_cooldown_seconds"`
+}
+
+// RegisterResponse is the register payload: the created user plus the verification
+// timing knobs the FE needs to drive the "check your email" screen. UserResponse is
+// embedded so its fields stay at the same JSON level as before (id, username, …).
+type RegisterResponse struct {
+	UserResponse
+	OTPExpiresInSeconds   int `json:"otp_expires_in_seconds"`
+	ResendCooldownSeconds int `json:"resend_cooldown_seconds"`
+}
+
+// OTPActionResponse is the generic acknowledgement for resend/forgot, enriched with
+// timing knobs. Fields are omitempty so each endpoint only emits the ones it means:
+// resend sends otp_expires_in_seconds, forgot sends reset_link_expires_in_seconds.
+type OTPActionResponse struct {
+	Message                   string `json:"message"`
+	OTPExpiresInSeconds       int    `json:"otp_expires_in_seconds,omitempty"`
+	ResetLinkExpiresInSeconds int    `json:"reset_link_expires_in_seconds,omitempty"`
+	ResendCooldownSeconds     int    `json:"resend_cooldown_seconds,omitempty"`
 }
