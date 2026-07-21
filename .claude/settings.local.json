@@ -28,7 +28,11 @@
       "Bash(git checkout *)",
       "Bash(git ls-remote *)",
       "Bash(git merge --no-ff fix/login-drops-profile-details -m 'Merge fix/login-drops-profile-details: /member/:id route ordering fix *)",
-      "Bash(git stash *)"
+      "Bash(git stash *)",
+      "Bash(python -c \"import yaml,sys; yaml.safe_load\\(open\\('docs/openapi.yaml',encoding='utf-8'\\)\\); print\\('YAML OK'\\)\")",
+      "Bash(git merge *)",
+      "Bash(git mv *)",
+      "Bash(gh run *)"
     ]
   }
 }
