@@ -6,11 +6,22 @@ import (
 	"encoding/hex"
 	"fmt"
 	"mime"
+	"net"
 	"net/smtp"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
+)
+
+const (
+	// smtpDialTimeout bounds the TCP connect to the relay.
+	smtpDialTimeout = 10 * time.Second
+	// smtpConversationTimeout bounds the whole SMTP exchange once connected, so a
+	// relay that accepts the connection and then stalls cannot hang us either.
+	smtpConversationTimeout = 30 * time.Second
 )
 
 // Mailer sends transactional emails (OTP codes, etc.).
@@ -91,11 +102,28 @@ func (m *smtpMailer) deliver(to string, msg []byte) error {
 		return fmt.Errorf("mailer: email.host is not configured")
 	}
 
-	addr := fmt.Sprintf("%s:%d", m.cfg.Host, m.cfg.Port)
+	// JoinHostPort rather than "%s:%d" so an IPv6 literal host gets bracketed.
+	addr := net.JoinHostPort(m.cfg.Host, strconv.Itoa(m.cfg.Port))
 
-	c, err := smtp.Dial(addr)
+	// smtp.Dial applies no timeout: a wedged relay would pin the HTTP request that
+	// triggered the mail until the OS-level TCP timeout (minutes). Dial with our
+	// own deadline instead, then cap the rest of the conversation.
+	conn, err := net.DialTimeout("tcp", addr, smtpDialTimeout)
 	if err != nil {
 		return fmt.Errorf("mailer: dial %s: %w", addr, err)
+	}
+	if err := conn.SetDeadline(time.Now().Add(smtpConversationTimeout)); err != nil {
+		conn.Close()
+		return fmt.Errorf("mailer: set deadline on %s: %w", addr, err)
+	}
+
+	// NewClient reads the server greeting; the deadline above covers it. The
+	// deadline also survives the StartTLS upgrade below, since tls.Client wraps
+	// this same connection.
+	c, err := smtp.NewClient(conn, m.cfg.Host)
+	if err != nil {
+		conn.Close()
+		return fmt.Errorf("mailer: smtp greeting from %s: %w", addr, err)
 	}
 	defer c.Close()
 
@@ -186,13 +214,40 @@ func (m *smtpMailer) buildMultipartMessage(to, subject, htmlBody, textBody strin
 	return []byte(b.String())
 }
 
-// writeCommonHeaders writes From/To/Subject/MIME-Version shared by both message
-// builders. The subject is RFC 2047 encoded so non-ASCII characters survive.
+// writeCommonHeaders writes From/To/Subject/Date/Message-ID/MIME-Version shared by
+// both message builders. The subject is RFC 2047 encoded so non-ASCII characters
+// survive.
+//
+// Date and Message-ID are mandatory per RFC 5322 and enforced by the big
+// providers — Gmail rejects a message without Message-ID outright at end-of-DATA
+// with "550-5.7.1 Messages missing a valid Message-ID header are not accepted".
+// Postfix only fills in missing headers when always_add_missing_headers=yes (off
+// by default), so we emit them ourselves rather than depending on relay config.
 func (m *smtpMailer) writeCommonHeaders(b *strings.Builder, to, subject string) {
 	fmt.Fprintf(b, "From: %s <%s>\r\n", mime.QEncoding.Encode("UTF-8", m.cfg.FromName), m.cfg.From)
 	fmt.Fprintf(b, "To: %s\r\n", to)
 	fmt.Fprintf(b, "Subject: %s\r\n", mime.QEncoding.Encode("UTF-8", subject))
+	fmt.Fprintf(b, "Date: %s\r\n", time.Now().Format(time.RFC1123Z))
+	fmt.Fprintf(b, "Message-ID: %s\r\n", m.newMessageID())
 	b.WriteString("MIME-Version: 1.0\r\n")
+}
+
+// newMessageID returns a unique RFC 5322 Message-ID. The right-hand side uses the
+// sender's own domain so it lines up with the From/envelope domain that receiving
+// providers cross-check.
+func (m *smtpMailer) newMessageID() string {
+	domain := "arsiva.id"
+	if at := strings.LastIndex(m.cfg.From, "@"); at >= 0 && at+1 < len(m.cfg.From) {
+		domain = m.cfg.From[at+1:]
+	}
+
+	var buf [16]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		// rand.Read essentially never fails; the timestamp alone still yields a
+		// well-formed, practically-unique id.
+		return fmt.Sprintf("<%d@%s>", time.Now().UnixNano(), domain)
+	}
+	return fmt.Sprintf("<%d.%s@%s>", time.Now().UnixNano(), hex.EncodeToString(buf[:]), domain)
 }
 
 // toCRLF normalises line endings to CRLF as required by SMTP.

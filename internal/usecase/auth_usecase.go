@@ -276,6 +276,23 @@ func (c *AuthUseCaseImpl) storeSecret(ctx context.Context, purpose, email, secre
 	return nil
 }
 
+// clearResendCooldown disarms the resend throttle for an issue that never made it
+// out the door. storeSecret arms the cooldown *before* the mail is handed to the
+// relay, so without this rollback a single SMTP failure would lock the user out of
+// requesting another code for the whole cooldown window — no mail arrives, and the
+// retry gets a 429 (or, on forgot-password, a silent generic success).
+//
+// The stored secret itself is deliberately left alone: if the mail actually landed
+// and only the tail of the SMTP conversation failed, the code the user received
+// still works, and the next issue overwrites the key anyway.
+func (c *AuthUseCaseImpl) clearResendCooldown(ctx context.Context, purpose, email string) {
+	// WithoutCancel so cleanup still runs when the send failed because the caller's
+	// request was already cancelled (e.g. the user closed the tab mid-register).
+	if err := c.Redis.Del(context.WithoutCancel(ctx), otpCooldownKey(purpose, email)).Err(); err != nil {
+		c.Log.Warnf("clearResendCooldown: failed to drop %s cooldown for %s: %+v", purpose, email, err)
+	}
+}
+
 // issueOTP generates a fresh OTP, stores its hash in Redis (with TTL + a resend
 // cooldown), and emails the plaintext code. Returns an error on cooldown, Redis
 // failure, or mail failure — callers decide whether to surface or swallow it.
@@ -296,6 +313,7 @@ func (c *AuthUseCaseImpl) issueOTP(ctx context.Context, purpose, email string) e
 
 	subject, htmlBody, textBody := c.otpEmailContent(code)
 	if err := c.Mailer.SendHTML(email, subject, htmlBody, textBody); err != nil {
+		c.clearResendCooldown(ctx, purpose, email)
 		return fmt.Errorf("send otp mail: %w", err)
 	}
 	return nil
@@ -321,6 +339,7 @@ func (c *AuthUseCaseImpl) issueResetToken(ctx context.Context, email string) err
 
 	subject, htmlBody, textBody := c.resetEmailContent(token, email)
 	if err := c.Mailer.SendHTML(email, subject, htmlBody, textBody); err != nil {
+		c.clearResendCooldown(ctx, otpPurposeReset, email)
 		return fmt.Errorf("send reset mail: %w", err)
 	}
 	return nil
