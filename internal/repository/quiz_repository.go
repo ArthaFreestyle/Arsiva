@@ -49,7 +49,7 @@ func (r *quizRepositoryImpl) GetAll(ctx context.Context, page int, size int, sea
 	}
 
 	SQL := `SELECT k.kuis_id, k.judul, COALESCE(ass_t.url, '') AS thumbnail, k.thumbnail_asset_id, COALESCE(ass_g.url, '') AS gambar, k.gambar_asset_id, k.xp_reward,
-		k.kategori_id,
+		COALESCE(k.kategori_id::text, '') AS kategori_id,
 		COALESCE(kk.nama_kategori, '') AS kategori,
 		k.created_at, k.is_published,
 		JSON_BUILD_OBJECT(
@@ -81,7 +81,7 @@ func (r *quizRepositoryImpl) GetAll(ctx context.Context, page int, size int, sea
 func (r *quizRepositoryImpl) GetByID(ctx context.Context, quizId int) (*entity.Quiz, error) {
 	// 1. Fetch the quiz
 	quizSQL := `SELECT k.kuis_id, k.judul, COALESCE(ass_g.url, '') AS gambar, k.gambar_asset_id, COALESCE(ass_t.url, '') AS thumbnail, k.thumbnail_asset_id, k.xp_reward,
-		k.kategori_id,
+		COALESCE(k.kategori_id::text, '') AS kategori_id,
 		COALESCE(kk.nama_kategori, '') AS kategori,
 		k.created_at, k.is_published,
 		JSON_BUILD_OBJECT(
@@ -399,7 +399,7 @@ func (r *quizRepositoryImpl) GetAllManage(ctx context.Context, page int, size in
 	limitOffset := fmt.Sprintf("LIMIT $%d OFFSET $%d", len(countArgs)+1, len(countArgs)+2)
 
 	SQL := fmt.Sprintf(`SELECT k.kuis_id, k.judul, COALESCE(ass_t.url, '') AS thumbnail, k.thumbnail_asset_id, COALESCE(ass_g.url, '') AS gambar, k.gambar_asset_id, k.xp_reward,
-		k.kategori_id,
+		COALESCE(k.kategori_id::text, '') AS kategori_id,
 		COALESCE(kk.nama_kategori, '') AS kategori,
 		k.created_at, k.is_published,
 		JSON_BUILD_OBJECT(
@@ -440,7 +440,7 @@ func (r *quizRepositoryImpl) GetByIDManage(ctx context.Context, quizId int, user
 	}
 
 	quizSQL := fmt.Sprintf(`SELECT k.kuis_id, k.judul, COALESCE(ass_g.url, '') AS gambar, k.gambar_asset_id, COALESCE(ass_t.url, '') AS thumbnail, k.thumbnail_asset_id, k.xp_reward,
-		k.kategori_id,
+		COALESCE(k.kategori_id::text, '') AS kategori_id,
 		COALESCE(kk.nama_kategori, '') AS kategori,
 		k.created_at, k.is_published,
 		JSON_BUILD_OBJECT(

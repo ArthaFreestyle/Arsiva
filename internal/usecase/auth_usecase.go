@@ -109,8 +109,15 @@ func (c *AuthUseCaseImpl) Login(ctx context.Context, request *model.LoginRequest
 
 	user, err := c.Repo.FindByEmail(ctx, request.Email)
 	if err != nil {
-		c.Log.Warnf("Failed find user by email : %+v", err)
-		return nil, fiber.ErrUnauthorized
+		if errors.Is(err, pgx.ErrNoRows) {
+			c.Log.Warnf("Login failed: no user for email %s", request.Email)
+			return nil, fiber.ErrUnauthorized
+		}
+		// A non-"not found" error (DB timeout, connection pool exhaustion, etc.) is
+		// NOT a wrong-password signal — reporting it as 401 hides real outages behind
+		// a misleading "wrong email or password" message.
+		c.Log.Errorf("Login: FindByEmail failed for %s: %+v", request.Email, err)
+		return nil, fiber.ErrInternalServerError
 	}
 
 	if !utils.CheckPasswordHash(request.Password, user.PasswordHash) {
