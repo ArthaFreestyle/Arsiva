@@ -32,7 +32,9 @@
       "Bash(python -c \"import yaml,sys; yaml.safe_load\\(open\\('docs/openapi.yaml',encoding='utf-8'\\)\\); print\\('YAML OK'\\)\")",
       "Bash(git merge *)",
       "Bash(git mv *)",
-      "Bash(gh run *)"
+      "Bash(gh run *)",
+      "Bash(go env *)",
+      "Bash(git check-ignore *)"
     ]
   }
 }
