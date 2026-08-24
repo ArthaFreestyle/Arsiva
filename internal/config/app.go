@@ -135,6 +135,19 @@ func Bootstrap(cfg BootstrapConfig) {
 		KeyGenerator: middleware.AuthLimiterKey,
 	})
 
+	ipAuthLimiterMax := cfg.Config.GetInt("app.rate_limit.ip_max")
+	if ipAuthLimiterMax <= 0 {
+		// Sane default so a config.json predating this field doesn't silently
+		// fall back to fiber's built-in default of 5/60s (tighter than
+		// intended) — a whole class behind one IP needs real headroom here.
+		ipAuthLimiterMax = 60
+	}
+	ipAuthLimiter := limiter.New(limiter.Config{
+		Max:          ipAuthLimiterMax,
+		Expiration:   time.Duration(cfg.Config.GetInt("app.rate_limit.expiration_seconds")) * time.Second,
+		KeyGenerator: middleware.IPAuthLimiterKey,
+	})
+
 	routeConfig := route.RouteConfig{
 		App:                       cfg.App,
 		AuthController:            AuthController,
@@ -160,6 +173,7 @@ func Bootstrap(cfg BootstrapConfig) {
 		AuthMiddleware:              authMiddleware,
 		ProfileCompleteMiddleware:   profileCompleteMiddleware,
 		AuthLimiter:                 authLimiter,
+		IPAuthLimiter:               ipAuthLimiter,
 	}
 
 	routeConfig.SetupRoutes()

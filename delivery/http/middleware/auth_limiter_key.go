@@ -26,3 +26,15 @@ func AuthLimiterKey(c fiber.Ctx) string {
 	}
 	return c.IP() + "|" + c.Path()
 }
+
+// IPAuthLimiterKey buckets purely by source IP+path. It backstops
+// AuthLimiterKey: an attacker can trivially bypass a per-account limit by
+// rotating the email on every request (spraying registrations, or spamming
+// OTP/reset mail to many different addresses from one IP), so this layer caps
+// total request volume per IP regardless of which account each request names.
+// It must be configured with a much more generous threshold than the
+// per-account limiter — legitimate users behind the same IP (school/office
+// wifi, NAT) share this bucket.
+func IPAuthLimiterKey(c fiber.Ctx) string {
+	return c.IP() + "|" + c.Path()
+}

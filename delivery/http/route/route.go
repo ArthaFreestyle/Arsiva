@@ -30,7 +30,15 @@ type RouteConfig struct {
 	GamificationController         http.GamificationController
 	AuthMiddleware             fiber.Handler
 	ProfileCompleteMiddleware  fiber.Handler
-	AuthLimiter                fiber.Handler
+	// AuthLimiter caps requests per account (keyed by email+path where the
+	// request body carries one) — protects one target account from brute force
+	// without punishing other users behind the same IP.
+	AuthLimiter fiber.Handler
+	// IPAuthLimiter caps requests per source IP+path with a much more generous
+	// threshold. It exists because AuthLimiter alone can be bypassed by rotating
+	// the email on each request (e.g. spamming registrations or OTP mails to
+	// many different addresses from one IP) — this is the volumetric backstop.
+	IPAuthLimiter fiber.Handler
 }
 
 func (c *RouteConfig) SetupRoutes() {
@@ -39,16 +47,16 @@ func (c *RouteConfig) SetupRoutes() {
 }
 
 func (c *RouteConfig) SetupGuestRoutes() {
-	c.App.Post("/v1/login", c.AuthLimiter, c.AuthController.Login)
-	c.App.Post("/v1/register/member", c.AuthLimiter, c.AuthController.RegisterMember)
-	c.App.Post("/v1/register/guru", c.AuthLimiter, c.AuthController.RegisterGuru)
+	c.App.Post("/v1/login", c.IPAuthLimiter, c.AuthLimiter, c.AuthController.Login)
+	c.App.Post("/v1/register/member", c.IPAuthLimiter, c.AuthLimiter, c.AuthController.RegisterMember)
+	c.App.Post("/v1/register/guru", c.IPAuthLimiter, c.AuthLimiter, c.AuthController.RegisterGuru)
 
 	// Email verification (register flow) + password reset (forgot flow).
 	// All rate-limited — OTP endpoints are the prime target for brute force/abuse.
-	c.App.Post("/v1/verify-email", c.AuthLimiter, c.AuthController.VerifyEmail)
-	c.App.Post("/v1/resend-otp", c.AuthLimiter, c.AuthController.ResendOTP)
-	c.App.Post("/v1/forgot-password", c.AuthLimiter, c.AuthController.ForgotPassword)
-	c.App.Post("/v1/reset-password", c.AuthLimiter, c.AuthController.ResetPassword)
+	c.App.Post("/v1/verify-email", c.IPAuthLimiter, c.AuthLimiter, c.AuthController.VerifyEmail)
+	c.App.Post("/v1/resend-otp", c.IPAuthLimiter, c.AuthLimiter, c.AuthController.ResendOTP)
+	c.App.Post("/v1/forgot-password", c.IPAuthLimiter, c.AuthLimiter, c.AuthController.ForgotPassword)
+	c.App.Post("/v1/reset-password", c.IPAuthLimiter, c.AuthLimiter, c.AuthController.ResetPassword)
 
 	c.App.Get("uploads/*", c.UploadController.GetFile)
 

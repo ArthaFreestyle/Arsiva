@@ -51,3 +51,27 @@ func TestAuthLimiterKey_MalformedBody_FallsBackToIPAndPath(t *testing.T) {
 		t.Errorf("expected fallback key to not contain an email, got %q", key)
 	}
 }
+
+func runIPAuthLimiterKey(path, body string) string {
+	app := fiber.New()
+	var captured string
+
+	app.Post(path, func(ctx fiber.Ctx) error {
+		captured = IPAuthLimiterKey(ctx)
+		return ctx.SendStatus(fiber.StatusOK)
+	})
+
+	req := httptest.NewRequest("POST", path, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	app.Test(req)
+	return captured
+}
+
+func TestIPAuthLimiterKey_DifferentEmailsSameIP_ProducesSameKey(t *testing.T) {
+	keyA := runIPAuthLimiterKey("/v1/register/member", `{"email":"siswa-a@school.id","password":"x"}`)
+	keyB := runIPAuthLimiterKey("/v1/register/member", `{"email":"siswa-b@school.id","password":"x"}`)
+
+	if keyA != keyB {
+		t.Errorf("expected IP-based key to ignore the email (volumetric backstop), got %q vs %q", keyA, keyB)
+	}
+}

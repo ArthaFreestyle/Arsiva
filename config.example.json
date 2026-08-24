@@ -5,6 +5,7 @@
         "trust_proxy" : true,
         "rate_limit" : {
             "max" : 20,
+            "ip_max" : 60,
             "expiration_seconds" : 60
         }
     },
