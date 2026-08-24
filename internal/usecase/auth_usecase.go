@@ -121,7 +121,10 @@ func (c *AuthUseCaseImpl) Login(ctx context.Context, request *model.LoginRequest
 	}
 
 	if !utils.CheckPasswordHash(request.Password, user.PasswordHash) {
-		c.Log.Warnf("Invalid password : %+v", err)
+		// Byte length only (never the password itself) — helps spot whitespace/
+		// encoding issues from the FE or silent bcrypt truncation (bcrypt caps
+		// input at 72 bytes) without logging anything sensitive.
+		c.Log.Warnf("Login failed: wrong password for email %s (password_len_bytes=%d)", request.Email, len(request.Password))
 		return nil, fiber.ErrUnauthorized
 	}
 
