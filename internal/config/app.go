@@ -130,8 +130,9 @@ func Bootstrap(cfg BootstrapConfig) {
 	authMiddleware            := middleware.NewAuthMiddleware(cfg.Secret, cfg.Log)
 	profileCompleteMiddleware := middleware.RequireProfileComplete()
 	authLimiter              := limiter.New(limiter.Config{
-		Max:        cfg.Config.GetInt("app.rate_limit.max"),
-		Expiration: time.Duration(cfg.Config.GetInt("app.rate_limit.expiration_seconds")) * time.Second,
+		Max:          cfg.Config.GetInt("app.rate_limit.max"),
+		Expiration:   time.Duration(cfg.Config.GetInt("app.rate_limit.expiration_seconds")) * time.Second,
+		KeyGenerator: middleware.AuthLimiterKey,
 	})
 
 	routeConfig := route.RouteConfig{
