@@ -322,6 +322,15 @@ Notes if you touch this:
   sudo openssl x509 -noout -dates -in certbot/conf/live/arsiva.id/fullchain.pem
   ```
 
+**Monitoring:** `scripts/cert-expiry-check.sh` runs that comparison daily. It probes the certificate **on the wire** (what users actually get, so it catches a failed renewal *and* a failed reload), alerts below `CERT_WARN_DAYS` (default 20), and separately alerts the moment the disk cert is newer than the served one — the issue #44 signature, caught the day after a renewal instead of 40 days later. It mails through the same host Postfix relay the app uses, emitting `Date` and `Message-ID` by hand for the reason described in the Mailer section.
+
+Install once on the VPS as root — note the **missing `.sh`** on the link name, since `run-parts` silently skips any file in `/etc/cron.daily` whose name contains a dot:
+```bash
+ln -s ~artha/actions-runner/_work/Arsiva/Arsiva/scripts/cert-expiry-check.sh /etc/cron.daily/cert-expiry-check
+CERT_ALERT_TO=you@example.com run-parts --test /etc/cron.daily   # confirm it is picked up
+```
+Set `CERT_ALERT_TO` (in the cron environment or `/etc/default/`) — the built-in default `ops@arsiva.id` is a placeholder.
+
 ### CI/CD Pipeline
 GitHub Actions workflow (`.github/workflows/deploy.yml`) automates:
 1. **Build**: Docker image compilation
