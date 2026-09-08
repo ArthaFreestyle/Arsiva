@@ -99,10 +99,11 @@ services:
     # restart or a VPS reboot left the renew loop dead and silently stopped all
     # renewals -- this loop is the only scheduler there is.
     restart: unless-stopped
-    # `--webroot -w` is passed explicitly: bare `certbot renew` re-uses the
-    # authenticator recorded in renewal/arsiva.id.conf, and if that cert was
-    # first issued with --standalone the renewal would try to bind port 80
-    # inside this container (which publishes none) and fail every time.
+    # `--webroot -w` is pinned explicitly rather than inherited from
+    # renewal/arsiva.id.conf. That file currently says `authenticator = webroot`
+    # and is correct, but if it is ever rewritten to --standalone the renewal
+    # would try to bind port 80 inside this container (which publishes none) and
+    # fail every time, silently, until the cert expired.
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot; sleep 12h & wait $${!}; done;'"
 # ==========================================
 # Konfigurasi Jaringan & Volume

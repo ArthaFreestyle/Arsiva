@@ -307,9 +307,9 @@ docker compose up -d              # Start all services (API, PostgreSQL, Redis, 
 
 ### TLS renewal (IMPORTANT: a renewal is useless without an nginx reload)
 
-Renewal is a **two-part** mechanism, and both halves live in `docker-compose.yml`. Changing either one in isolation silently breaks HTTPS ~60 days later, which is exactly how issue #44 happened:
+Renewal is a **two-part** mechanism, and both halves live in `docker-compose.yml`. Changing either one in isolation silently breaks HTTPS ~60 days later — that is exactly what issue #44 was: certbot renewed cleanly on 2026-08-07, nginx went on serving the June cert from memory, and the site served an **expired** certificate from 2026-09-06 until someone reloaded nginx by hand.
 
-1. **certbot renews the file.** The `certbot` service loops `certbot renew --webroot -w /var/www/certbot` every 12h, writing into `./certbot/conf` → `/etc/letsencrypt`, which is bind-mounted into nginx too. `--webroot -w` is passed **explicitly** rather than relying on the authenticator saved in `certbot/conf/renewal/arsiva.id.conf` — a cert originally issued with `--standalone` would otherwise make renewal try to bind port 80 inside the certbot container, which publishes none, and fail forever.
+1. **certbot renews the file.** The `certbot` service loops `certbot renew --webroot -w /var/www/certbot` every 12h, writing into `./certbot/conf` → `/etc/letsencrypt`, which is bind-mounted into nginx too. `--webroot -w` is pinned **explicitly** rather than inherited from `certbot/conf/renewal/arsiva.id.conf`: that file is correct today (`authenticator = webroot`), but were it ever rewritten to `--standalone`, renewal would try to bind port 80 inside the certbot container, which publishes none, and fail silently until expiry.
 2. **nginx re-reads the file.** nginx parses `ssl_certificate` (`nginx.conf:24-25`) **once at startup** and keeps the cert in memory — it does not watch the file. So the `nginx` service overrides `command:` with a background loop that runs `nginx -s reload` every 6h (comfortably inside the ~30-day renewal window). certbot cannot signal a sibling container without the Docker socket, hence the timer rather than a `--deploy-hook`.
 
 Notes if you touch this:
