@@ -305,6 +305,32 @@ docker compose up -d              # Start all services (API, PostgreSQL, Redis, 
 - **redis**: Redis cache
 - **certbot**: SSL certificate renewal
 
+### TLS renewal (IMPORTANT: a renewal is useless without an nginx reload)
+
+Renewal is a **two-part** mechanism, and both halves live in `docker-compose.yml`. Changing either one in isolation silently breaks HTTPS ~60 days later — that is exactly what issue #44 was: certbot renewed cleanly on 2026-08-07, nginx went on serving the June cert from memory, and the site served an **expired** certificate from 2026-09-06 until someone reloaded nginx by hand.
+
+1. **certbot renews the file.** The `certbot` service loops `certbot renew --webroot -w /var/www/certbot` every 12h, writing into `./certbot/conf` → `/etc/letsencrypt`, which is bind-mounted into nginx too. `--webroot -w` is pinned **explicitly** rather than inherited from `certbot/conf/renewal/arsiva.id.conf`: that file is correct today (`authenticator = webroot`), but were it ever rewritten to `--standalone`, renewal would try to bind port 80 inside the certbot container, which publishes none, and fail silently until expiry.
+2. **nginx re-reads the file.** nginx parses `ssl_certificate` (`nginx.conf:24-25`) **once at startup** and keeps the cert in memory — it does not watch the file. So the `nginx` service overrides `command:` with a background loop that runs `nginx -s reload` every 6h (comfortably inside the ~30-day renewal window). certbot cannot signal a sibling container without the Docker socket, hence the timer rather than a `--deploy-hook`.
+
+Notes if you touch this:
+- The nginx command uses `exec nginx -g 'daemon off;'` so nginx stays **PID 1** and the image's `STOPSIGNAL SIGQUIT` still reaches it — dropping the `exec` leaves a shell as PID 1 and turns every `docker compose down` into a 10s SIGKILL timeout.
+- `certbot` needs `restart: unless-stopped` (it had none, so a reboot or crash left the loop dead with no renewals and no alert). The in-container loop is the **only** scheduler — there is no host `systemd` timer as a backstop.
+- A deploy (`docker compose up -d`) does **not** recreate nginx when neither its image nor its config changed, so deploys are not a reliable way to pick up a new certificate.
+- To confirm renewal is actually reaching users, compare the cert on the wire against the one on disk — if the file is newer, the reload half is broken:
+  ```bash
+  openssl s_client -connect arsiva.id:443 -servername arsiva.id </dev/null 2>/dev/null | openssl x509 -noout -dates
+  sudo openssl x509 -noout -dates -in certbot/conf/live/arsiva.id/fullchain.pem
+  ```
+
+**Monitoring:** `scripts/cert-expiry-check.sh` runs that comparison daily. It probes the certificate **on the wire** (what users actually get, so it catches a failed renewal *and* a failed reload), alerts below `CERT_WARN_DAYS` (default 20), and separately alerts the moment the disk cert is newer than the served one — the issue #44 signature, caught the day after a renewal instead of 40 days later. It mails through the same host Postfix relay the app uses, emitting `Date` and `Message-ID` by hand for the reason described in the Mailer section.
+
+Install once on the VPS as root — note the **missing `.sh`** on the link name, since `run-parts` silently skips any file in `/etc/cron.daily` whose name contains a dot:
+```bash
+ln -s ~artha/actions-runner/_work/Arsiva/Arsiva/scripts/cert-expiry-check.sh /etc/cron.daily/cert-expiry-check
+CERT_ALERT_TO=you@example.com run-parts --test /etc/cron.daily   # confirm it is picked up
+```
+Set `CERT_ALERT_TO` (in the cron environment or `/etc/default/`) — the built-in default `ops@arsiva.id` is a placeholder.
+
 ### CI/CD Pipeline
 GitHub Actions workflow (`.github/workflows/deploy.yml`) automates:
 1. **Build**: Docker image compilation

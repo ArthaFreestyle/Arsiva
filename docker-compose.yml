@@ -11,6 +11,16 @@ services:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
       - ./certbot/conf:/etc/letsencrypt
       - ./certbot/www:/var/www/certbot
+    # nginx parses `ssl_certificate` once at startup and keeps the cert in
+    # memory -- it does NOT watch the file. Without this, certbot could renew
+    # successfully on disk and nginx would keep serving the expiring cert until
+    # a human restarted the container (see issue #44). certbot cannot signal a
+    # sibling container without the Docker socket, so nginx reloads itself on a
+    # timer instead; 6h is far inside the ~30-day renewal window.
+    # `exec` keeps nginx as PID 1 so the image's STOPSIGNAL (SIGQUIT) still
+    # reaches it and shutdown stays graceful.
+    command: >-
+      /bin/sh -c "while :; do sleep 6h & wait $${!}; nginx -s reload; done & exec nginx -g 'daemon off;'"
     depends_on:
       - api-server
     networks:
@@ -78,7 +88,23 @@ services:
     volumes:
       - ./certbot/conf:/etc/letsencrypt
       - ./certbot/www:/var/www/certbot
-    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+    depends_on:
+      # The renew loop fires immediately on start and answers the HTTP-01
+      # challenge through nginx's /.well-known/acme-challenge/ handler, so nginx
+      # has to be up first.
+      - nginx
+    networks:
+      - app-network
+    # Was missing entirely (defaulted to `no`), so a crash, a Docker daemon
+    # restart or a VPS reboot left the renew loop dead and silently stopped all
+    # renewals -- this loop is the only scheduler there is.
+    restart: unless-stopped
+    # `--webroot -w` is pinned explicitly rather than inherited from
+    # renewal/arsiva.id.conf. That file currently says `authenticator = webroot`
+    # and is correct, but if it is ever rewritten to --standalone the renewal
+    # would try to bind port 80 inside this container (which publishes none) and
+    # fail every time, silently, until the cert expired.
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot; sleep 12h & wait $${!}; done;'"
 # ==========================================
 # Konfigurasi Jaringan & Volume
 # ==========================================
