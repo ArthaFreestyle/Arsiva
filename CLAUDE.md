@@ -305,6 +305,23 @@ docker compose up -d              # Start all services (API, PostgreSQL, Redis, 
 - **redis**: Redis cache
 - **certbot**: SSL certificate renewal
 
+### TLS renewal (IMPORTANT: a renewal is useless without an nginx reload)
+
+Renewal is a **two-part** mechanism, and both halves live in `docker-compose.yml`. Changing either one in isolation silently breaks HTTPS ~60 days later, which is exactly how issue #44 happened:
+
+1. **certbot renews the file.** The `certbot` service loops `certbot renew --webroot -w /var/www/certbot` every 12h, writing into `./certbot/conf` → `/etc/letsencrypt`, which is bind-mounted into nginx too. `--webroot -w` is passed **explicitly** rather than relying on the authenticator saved in `certbot/conf/renewal/arsiva.id.conf` — a cert originally issued with `--standalone` would otherwise make renewal try to bind port 80 inside the certbot container, which publishes none, and fail forever.
+2. **nginx re-reads the file.** nginx parses `ssl_certificate` (`nginx.conf:24-25`) **once at startup** and keeps the cert in memory — it does not watch the file. So the `nginx` service overrides `command:` with a background loop that runs `nginx -s reload` every 6h (comfortably inside the ~30-day renewal window). certbot cannot signal a sibling container without the Docker socket, hence the timer rather than a `--deploy-hook`.
+
+Notes if you touch this:
+- The nginx command uses `exec nginx -g 'daemon off;'` so nginx stays **PID 1** and the image's `STOPSIGNAL SIGQUIT` still reaches it — dropping the `exec` leaves a shell as PID 1 and turns every `docker compose down` into a 10s SIGKILL timeout.
+- `certbot` needs `restart: unless-stopped` (it had none, so a reboot or crash left the loop dead with no renewals and no alert). The in-container loop is the **only** scheduler — there is no host `systemd` timer as a backstop.
+- A deploy (`docker compose up -d`) does **not** recreate nginx when neither its image nor its config changed, so deploys are not a reliable way to pick up a new certificate.
+- To confirm renewal is actually reaching users, compare the cert on the wire against the one on disk — if the file is newer, the reload half is broken:
+  ```bash
+  openssl s_client -connect arsiva.id:443 -servername arsiva.id </dev/null 2>/dev/null | openssl x509 -noout -dates
+  sudo openssl x509 -noout -dates -in certbot/conf/live/arsiva.id/fullchain.pem
+  ```
+
 ### CI/CD Pipeline
 GitHub Actions workflow (`.github/workflows/deploy.yml`) automates:
 1. **Build**: Docker image compilation
