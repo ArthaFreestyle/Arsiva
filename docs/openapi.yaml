@@ -123,6 +123,8 @@ tags:
     description: "Ranking publik (alltime & monthly) dan ranking per-group (🔒 semua role ter-autentikasi)"
   - name: Gamification
     description: "Daily streak & daily tasks milik member yang sedang login — diperbarui otomatis saat menyelesaikan konten, tidak ada endpoint tulis (🔒 member only)"
+  - name: Analytics
+    description: "Data dashboard admin: ringkasan pengguna & konten serta grafik pertumbuhan. Endpoint saling independen agar FE bisa fetch paralel (🔒 super_admin only)"
 paths:
   /v1/login:
     post:
@@ -5023,9 +5025,177 @@ paths:
           $ref: "#/components/responses/ForbiddenResponse"
         "409":
           $ref: "#/components/responses/ProfileIncompleteResponse"
+  /v1/analytics/users/summary:
+    get:
+      tags:
+        - Analytics
+      summary: Ringkasan pengguna per role
+      description: "Jumlah pengguna **aktif** (`is_active = TRUE`, user yang di-soft-delete tidak dihitung) per role. `total` selalu sama dengan jumlah `by_role`; ketiga role selalu ada walau bernilai 0.\n\n🔒 **Role**: `super_admin`.\n"
+      operationId: getAnalyticsUserSummary
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Ringkasan pengguna berhasil diambil
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserSummaryResponseWrapper"
+              example:
+                data:
+                  total: 10
+                  by_role:
+                    super_admin: 0
+                    guru: 2
+                    member: 8
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+  /v1/analytics/content/summary:
+    get:
+      tags:
+        - Analytics
+      summary: Ringkasan konten (game & artikel)
+      description: "Jumlah konten beserta published/draft.\n\n- `game` = kuis + cerita + puzzle (artikel **tidak** termasuk game). Kartu \"Cerita Interaktif\" memakai `game.cerita`.\n- `artikel` hanya menghitung artikel aktif (`is_active = TRUE`).\n- `draft = total - published` untuk setiap tipe.\n\n🔒 **Role**: `super_admin`.\n"
+      operationId: getAnalyticsContentSummary
+      security:
+        - BearerAuth: []
+      responses:
+        "200":
+          description: Ringkasan konten berhasil diambil
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContentSummaryResponseWrapper"
+              example:
+                data:
+                  game:
+                    total: 22
+                    published: 11
+                    draft: 11
+                    kuis: { total: 9, published: 5, draft: 4 }
+                    cerita: { total: 9, published: 4, draft: 5 }
+                    puzzle: { total: 4, published: 2, draft: 2 }
+                  artikel: { total: 5, published: 3, draft: 2 }
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+  /v1/analytics/users/growth:
+    get:
+      tags:
+        - Analytics
+      summary: Grafik pertumbuhan pengguna
+      description: "Jumlah pengguna baru per periode beserta total kumulatif. Lihat parameter untuk aturan rentang.\n\n- Periode dihitung dalam zona waktu **Asia/Jakarta**; minggu dimulai **Senin**.\n- Setiap periode dalam rentang selalu ada (periode tanpa data bernilai 0).\n- `cumulative` = jumlah pengguna yang dibuat sebelum `from` + akumulasi `new_users`.\n- Dihitung dari baris yang **masih ada** (user yang di-soft-delete tidak dihitung), sehingga `cumulative` terakhir untuk rentang yang berakhir hari ini sama dengan `total` di `/v1/analytics/users/summary`.\n\n🔒 **Role**: `super_admin`.\n"
+      operationId: getAnalyticsUserGrowth
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AnalyticsInterval"
+        - $ref: "#/components/parameters/AnalyticsFrom"
+        - $ref: "#/components/parameters/AnalyticsTo"
+      responses:
+        "200":
+          description: Grafik pertumbuhan pengguna berhasil diambil
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserGrowthResponseWrapper"
+              example:
+                data:
+                  interval: monthly
+                  from: "2026-01-01"
+                  to: "2026-02-01"
+                  series:
+                    - period_start: "2026-01-01"
+                      new_users: 3
+                      new_by_role: { super_admin: 0, guru: 1, member: 2 }
+                      cumulative: 3
+                    - period_start: "2026-02-01"
+                      new_users: 0
+                      new_by_role: { super_admin: 0, guru: 0, member: 0 }
+                      cumulative: 3
+        "400":
+          description: "Parameter tidak valid (interval tidak dikenal, format tanggal salah, `to` sebelum `from`, atau rentang melebihi batas periode)"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+  /v1/analytics/content/growth:
+    get:
+      tags:
+        - Analytics
+      summary: Grafik pertumbuhan konten
+      description: "Jumlah konten baru (kuis, cerita, puzzle, artikel) per periode beserta total kumulatif, tanpa memandang status published. Aturan periode sama dengan `/v1/analytics/users/growth`.\n\nDihitung dari baris yang **masih ada**: kuis/cerita/puzzle yang dihapus dan artikel yang di-soft-delete hilang juga dari periode lampau. `cumulative` terakhir untuk rentang yang berakhir hari ini sama dengan total di `/v1/analytics/content/summary`.\n\n🔒 **Role**: `super_admin`.\n"
+      operationId: getAnalyticsContentGrowth
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/AnalyticsInterval"
+        - $ref: "#/components/parameters/AnalyticsFrom"
+        - $ref: "#/components/parameters/AnalyticsTo"
+      responses:
+        "200":
+          description: Grafik pertumbuhan konten berhasil diambil
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContentGrowthResponseWrapper"
+              example:
+                data:
+                  interval: weekly
+                  from: "2026-10-26"
+                  to: "2026-11-02"
+                  series:
+                    - period_start: "2026-10-26"
+                      new: { kuis: 2, cerita: 1, puzzle: 0, artikel: 1, total: 4 }
+                      cumulative: { kuis: 5, cerita: 4, puzzle: 2, artikel: 3, total: 14 }
+                    - period_start: "2026-11-02"
+                      new: { kuis: 0, cerita: 0, puzzle: 0, artikel: 0, total: 0 }
+                      cumulative: { kuis: 5, cerita: 4, puzzle: 2, artikel: 3, total: 14 }
+        "400":
+          description: "Parameter tidak valid (interval tidak dikenal, format tanggal salah, `to` sebelum `from`, atau rentang melebihi batas periode)"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          $ref: "#/components/responses/UnauthorizedResponse"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
 
     # =====================================================================
 components:
+  parameters:
+    AnalyticsInterval:
+      name: interval
+      in: query
+      schema:
+        type: string
+        enum: [daily, weekly, monthly]
+        default: daily
+      description: "Ukuran periode. Default rentang jika `from` kosong: daily = 30 hari, weekly = 12 minggu, monthly = 12 bulan (berakhir di `to`). Maksimal: daily 92, weekly 104, monthly 60 periode."
+    AnalyticsFrom:
+      name: from
+      in: query
+      schema:
+        type: string
+        format: date
+      example: "2026-01-01"
+      description: "Tanggal awal (YYYY-MM-DD, WIB). Dibulatkan ke awal periodenya (Senin untuk weekly, tanggal 1 untuk monthly)."
+    AnalyticsTo:
+      name: to
+      in: query
+      schema:
+        type: string
+        format: date
+      example: "2026-11-03"
+      description: "Tanggal akhir (YYYY-MM-DD, WIB), inklusif. Default hari ini; tanggal di masa depan dipotong ke hari ini. Nilai `to` di response adalah awal periode terakhir."
   responses:
     UnauthorizedResponse:
       description: Token tidak valid, expired, atau tidak diberikan
@@ -7366,3 +7536,145 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/DailyTasksResponse"
+    UserRoleCount:
+      type: object
+      properties:
+        super_admin:
+          type: integer
+          example: 0
+        guru:
+          type: integer
+          example: 2
+        member:
+          type: integer
+          example: 8
+    UserSummaryResponseWrapper:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            total:
+              type: integer
+              description: "Jumlah `by_role`"
+              example: 10
+            by_role:
+              $ref: "#/components/schemas/UserRoleCount"
+    PublishCount:
+      type: object
+      properties:
+        total:
+          type: integer
+          example: 9
+        published:
+          type: integer
+          example: 5
+        draft:
+          type: integer
+          example: 4
+    ContentSummaryResponseWrapper:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            game:
+              type: object
+              properties:
+                total:
+                  type: integer
+                  example: 22
+                published:
+                  type: integer
+                  example: 11
+                draft:
+                  type: integer
+                  example: 11
+                kuis:
+                  $ref: "#/components/schemas/PublishCount"
+                cerita:
+                  $ref: "#/components/schemas/PublishCount"
+                puzzle:
+                  $ref: "#/components/schemas/PublishCount"
+            artikel:
+              $ref: "#/components/schemas/PublishCount"
+    UserGrowthResponseWrapper:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            interval:
+              type: string
+              enum: [daily, weekly, monthly]
+            from:
+              type: string
+              format: date
+              description: "Awal periode pertama (setelah dibulatkan)"
+            to:
+              type: string
+              format: date
+              description: "Awal periode terakhir (setelah dibulatkan)"
+            series:
+              type: array
+              items:
+                type: object
+                properties:
+                  period_start:
+                    type: string
+                    format: date
+                    example: "2026-01-01"
+                  new_users:
+                    type: integer
+                    example: 3
+                  new_by_role:
+                    $ref: "#/components/schemas/UserRoleCount"
+                  cumulative:
+                    type: integer
+                    example: 3
+    ContentTypeCount:
+      type: object
+      properties:
+        kuis:
+          type: integer
+          example: 2
+        cerita:
+          type: integer
+          example: 1
+        puzzle:
+          type: integer
+          example: 0
+        artikel:
+          type: integer
+          example: 1
+        total:
+          type: integer
+          example: 4
+    ContentGrowthResponseWrapper:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            interval:
+              type: string
+              enum: [daily, weekly, monthly]
+            from:
+              type: string
+              format: date
+            to:
+              type: string
+              format: date
+            series:
+              type: array
+              items:
+                type: object
+                properties:
+                  period_start:
+                    type: string
+                    format: date
+                    example: "2026-10-26"
+                  new:
+                    $ref: "#/components/schemas/ContentTypeCount"
+                  cumulative:
+                    $ref: "#/components/schemas/ContentTypeCount"

@@ -283,6 +283,13 @@ Because scoring is server-side, member-facing **get-by-id** endpoints must not s
 ### Gamification (`GamificationUseCase`)
 `Finalize` → `HandleContentFinished` drives streaks, daily tasks, XP totals, and level-ups (`internal/utils/level.go`). XP is awarded **once per content per member** (dedup on `member_progres`); crossing a level threshold auto-levels-up.
 
+## Analytics (super_admin dashboard)
+
+`/v1/analytics/{users,content}/{summary,growth}` (`AnalyticsController` → `AnalyticsUseCase` → `AnalyticsRepository`, issue #48) are four independent `super_admin`-only endpoints the FE fetches in parallel. Non-obvious rules:
+- **Every table counts differently**: `users` and `artikel` are soft-deleted (`is_active = TRUE` filter); `kuis`/`cerita_interaktif`/`puzzles` are hard-deleted and use `is_published`; `artikel` uses `status = 'published'`. Growth uses the same filters as the summary, so the last `cumulative` point (range ending today) equals the summary total.
+- **Buckets are Jakarta days**: `created_at` is `TIMESTAMP` holding WIB wall-clock, so SQL buckets the raw column with `date_trunc` and receives bounds as `'YYYY-MM-DD'::timestamp` (never a `time.Time`, never `AT TIME ZONE` on the column). Weeks start Monday. The repo returns only non-empty buckets; the usecase builds the full bucket list, zero-fills, and adds the baseline (rows before `from`) for `cumulative`.
+- `cerita_interaktif.created_at` had no DEFAULT, so API-created stories were NULL until migration `20261103000001` backfilled them (from the thumbnail asset's `created_at`) and set `DEFAULT CURRENT_TIMESTAMP NOT NULL`.
+
 ## Background Workers (run in-process, NOT cmd/worker)
 
 `cmd/worker/main.go` is still an empty placeholder. The real background jobs run as goroutines started in `Bootstrap` (`internal/config/app.go`) and are **guarded by `if !fiber.IsChild()`** so prefork mode runs them only on the master process (otherwise every prefork child would double-run them):

@@ -28,7 +28,8 @@ type RouteConfig struct {
 	ProgressController             http.ProgressController
 	LeaderboardController          http.LeaderboardController
 	GamificationController         http.GamificationController
-	AuthMiddleware             fiber.Handler
+	AnalyticsController            http.AnalyticsController
+	AuthMiddleware            fiber.Handler
 	ProfileCompleteMiddleware  fiber.Handler
 	// AuthLimiter caps requests per account (keyed by email+path where the
 	// request body carries one) — protects one target account from brute force
@@ -96,6 +97,12 @@ func (c *RouteConfig) SetupAuthRoutes() {
 	auth.Put("/users/:id", superadminOnly, c.UserController.UpdateUser)
 	auth.Delete("/users/:id", superadminOnly, c.UserController.DeleteUser)
 	auth.Patch("/users/:id/restore", superadminOnly, c.UserController.RestoreUser)
+
+	// analytics (dashboard) — independent endpoints so the FE can fetch them in parallel
+	auth.Get("/analytics/users/summary", superadminOnly, c.AnalyticsController.GetUserSummary)
+	auth.Get("/analytics/users/growth", superadminOnly, c.AnalyticsController.GetUserGrowth)
+	auth.Get("/analytics/content/summary", superadminOnly, c.AnalyticsController.GetContentSummary)
+	auth.Get("/analytics/content/growth", superadminOnly, c.AnalyticsController.GetContentGrowth)
 
 	// ==========================================
 	// ALL AUTHENTICATED (member, guru, superadmin)
