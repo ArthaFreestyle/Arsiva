@@ -1,6 +1,8 @@
 package http
 
 import (
+	"strconv"
+
 	"ArthaFreestyle/Arsiva/internal/model"
 	"ArthaFreestyle/Arsiva/internal/usecase"
 	"github.com/gofiber/fiber/v3"
@@ -31,13 +33,20 @@ func NewUserController(userUseCase usecase.UserUseCase,log *logrus.Logger) UserC
 }
 
 func (u *UserControllerImpl) GetAllUsers(ctx fiber.Ctx) error {
-	users,err := u.UserUseCase.GetAllUsers(ctx)
+	page, _ := strconv.Atoi(ctx.Query("page", "1"))
+	size, _ := strconv.Atoi(ctx.Query("size", "10"))
+	search := ctx.Query("search", "")
+	page, size = model.NormalizePaging(page, size)
+
+	users,total,err := u.UserUseCase.GetAllUsers(ctx,page,size,search)
 	if err != nil {
+		u.Log.Warnf("Failed get all users : %+v", err)
 		return err
 	}
 
 	res := model.WebResponse[[]*model.UserResponse]{
 		Data: users,
+		Paging: model.NewPageMetaData(page, size, total),
 	}
 
 	return ctx.Status(fiber.StatusOK).JSON(res)
@@ -127,13 +136,20 @@ func (u *UserControllerImpl) DeleteUser(ctx fiber.Ctx) error {
 }
 
 func (u *UserControllerImpl) GetDeletedUsers(ctx fiber.Ctx) error {
-	users,err := u.UserUseCase.GetDeletedUsers(ctx)
+	page, _ := strconv.Atoi(ctx.Query("page", "1"))
+	size, _ := strconv.Atoi(ctx.Query("size", "10"))
+	search := ctx.Query("search", "")
+	page, size = model.NormalizePaging(page, size)
+
+	users,total,err := u.UserUseCase.GetDeletedUsers(ctx,page,size,search)
 	if err != nil {
+		u.Log.Warnf("Failed get deleted users : %+v", err)
 		return err
 	}
 
 	res := model.WebResponse[[]*model.UserResponse]{
 		Data: users,
+		Paging: model.NewPageMetaData(page, size, total),
 	}
 
 	return ctx.Status(fiber.StatusOK).JSON(res)

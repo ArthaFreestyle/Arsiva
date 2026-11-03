@@ -21,7 +21,7 @@ func TestGetDeletedUsers_ReturnsEmptySlice(t *testing.T) {
 	repo := &mockUserRepo{}
 	uc := NewUserUseCase(repo, discardLogger(), nil, validator.New())
 
-	users, err := uc.GetDeletedUsers(context.Background())
+	users, _, err := uc.GetDeletedUsers(context.Background(), 1, 10, "")
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

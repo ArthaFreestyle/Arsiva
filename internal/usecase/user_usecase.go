@@ -17,8 +17,8 @@ import (
 )
 
 type UserUseCase interface {
-	GetAllUsers(ctx context.Context) ([]*model.UserResponse, error)
-	GetDeletedUsers(ctx context.Context) ([]*model.UserResponse, error)
+	GetAllUsers(ctx context.Context,page int,size int,search string) ([]*model.UserResponse, int, error)
+	GetDeletedUsers(ctx context.Context,page int,size int,search string) ([]*model.UserResponse, int, error)
 	GetUserById(ctx context.Context,UserId string) (*model.UserResponse, error)
 	SearchUsersByEmail(ctx context.Context,emailQuery string) ([]*model.UserResponse, error)
 	CreateUser(ctx context.Context,user *model.UserRequest) (*model.UserResponse, error)
@@ -44,15 +44,15 @@ func NewUserUseCase(userRepository repository.UserRepository,log *logrus.Logger,
 }
 
 
-func (c *UserUseCaseImpl) GetAllUsers(ctx context.Context) ([]*model.UserResponse, error) {
-	users,err := c.UserRepository.GetAllUsers(ctx)
+func (c *UserUseCaseImpl) GetAllUsers(ctx context.Context,page int,size int,search string) ([]*model.UserResponse, int, error) {
+	users,total,err := c.UserRepository.GetAllUsers(ctx,page,size,search)
 	if err != nil {
-		return nil,err
+		return nil,0,err
 	}
 
 	res := converter.ToUsersResponse(users)
 
-	return res,nil
+	return res,total,nil
 }
 
 func (c *UserUseCaseImpl) GetUserById(ctx context.Context,UserId string) (*model.UserResponse, error) {
@@ -153,13 +153,13 @@ func (c *UserUseCaseImpl) DeleteUser(ctx context.Context,UserId string) (error) 
 	return nil
 }
 
-func (c *UserUseCaseImpl) GetDeletedUsers(ctx context.Context) ([]*model.UserResponse, error) {
-	users,err := c.UserRepository.GetDeletedUsers(ctx)
+func (c *UserUseCaseImpl) GetDeletedUsers(ctx context.Context,page int,size int,search string) ([]*model.UserResponse, int, error) {
+	users,total,err := c.UserRepository.GetDeletedUsers(ctx,page,size,search)
 	if err != nil {
-		return nil,err
+		return nil,0,err
 	}
 
-	return converter.ToUsersResponse(users),nil
+	return converter.ToUsersResponse(users),total,nil
 }
 
 func (c *UserUseCaseImpl) RestoreUser(ctx context.Context,UserId string) (*model.UserResponse, error) {

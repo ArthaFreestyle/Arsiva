@@ -97,7 +97,7 @@ func TestGetAllArticleCategoriesCacheHit(t *testing.T) {
 	}
 
 	uc := NewArticleCategoryUseCase(repo, cache, nil, validator.New())
-	result, err := uc.GetAllArticleCategories(context.Background())
+	result, _, err := uc.GetAllArticleCategories(context.Background(), 1, 10, "")
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
@@ -134,7 +134,7 @@ func TestGetAllArticleCategoriesCacheMissThenCacheSet(t *testing.T) {
 	}
 
 	uc := NewArticleCategoryUseCase(repo, cache, nil, validator.New())
-	result, err := uc.GetAllArticleCategories(context.Background())
+	result, _, err := uc.GetAllArticleCategories(context.Background(), 1, 10, "")
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
@@ -146,6 +146,44 @@ func TestGetAllArticleCategoriesCacheMissThenCacheSet(t *testing.T) {
 	}
 	if len(result) != 1 || result[0].NamaKategori != "Sains" {
 		t.Fatalf("unexpected cache miss result: %+v", result)
+	}
+}
+
+func TestGetAllArticleCategoriesPaginatesAndSearches(t *testing.T) {
+	repo := &articleCategoryRepoStub{
+		getAllFn: func(ctx context.Context) ([]*entity.ArticleCategory, error) {
+			return []*entity.ArticleCategory{
+				{ArticleCategoryId: "1", NamaKategori: "Sejarah Lokal"},
+				{ArticleCategoryId: "2", NamaKategori: "Sains"},
+				{ArticleCategoryId: "3", NamaKategori: "Sejarah Dunia"},
+				{ArticleCategoryId: "4", NamaKategori: "Budaya"},
+			}, nil
+		},
+	}
+	uc := NewArticleCategoryUseCase(repo, nil, nil, validator.New())
+
+	page2, total, err := uc.GetAllArticleCategories(context.Background(), 2, 3, "")
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if total != 4 || len(page2) != 1 || page2[0].NamaKategori != "Budaya" {
+		t.Fatalf("unexpected page 2: total=%d items=%+v", total, page2)
+	}
+
+	found, total, err := uc.GetAllArticleCategories(context.Background(), 1, 10, "SEJARAH")
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if total != 2 || len(found) != 2 {
+		t.Fatalf("expected 2 case-insensitive matches, got total=%d items=%+v", total, found)
+	}
+
+	beyond, total, err := uc.GetAllArticleCategories(context.Background(), 9, 10, "")
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if total != 4 || len(beyond) != 0 {
+		t.Fatalf("expected empty page past the end, got total=%d items=%+v", total, beyond)
 	}
 }
 
@@ -166,7 +204,7 @@ func TestGetAllArticleCategoriesCacheErrorFallbackToDatabase(t *testing.T) {
 	}
 
 	uc := NewArticleCategoryUseCase(repo, cache, nil, validator.New())
-	result, err := uc.GetAllArticleCategories(context.Background())
+	result, _, err := uc.GetAllArticleCategories(context.Background(), 1, 10, "")
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}

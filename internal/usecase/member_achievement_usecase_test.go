@@ -26,6 +26,10 @@ type mockMemberAchievementRepo struct {
 func (m *mockMemberAchievementRepo) FindAllByMemberId(ctx context.Context, memberId string) ([]*entity.MemberAchievement, error) {
 	return m.findAllByMemberIdFn(ctx, memberId)
 }
+func (m *mockMemberAchievementRepo) FindPageByMemberId(ctx context.Context, memberId string, page int, size int) ([]*entity.MemberAchievement, int, error) {
+	all, err := m.findAllByMemberIdFn(ctx, memberId)
+	return all, len(all), err
+}
 func (m *mockMemberAchievementRepo) FindOne(ctx context.Context, memberId, achievementId string) (*entity.MemberAchievement, error) {
 	return m.findOneFn(ctx, memberId, achievementId)
 }
@@ -264,7 +268,7 @@ func TestMemberAchievementFindAllMine_EmptyReturnsSlice(t *testing.T) {
 	}
 	uc := newTestMemberAchievementUseCase(mockRepo, nil, nil)
 
-	resp, err := uc.FindAllMine(context.Background(), memberClaims("7"))
+	resp, _, err := uc.FindAllMine(context.Background(), memberClaims("7"), 1, 10)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

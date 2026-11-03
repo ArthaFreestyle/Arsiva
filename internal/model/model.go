@@ -13,17 +13,34 @@ type PageMetaData struct {
 	TotalPage int `json:"total_page"`
 }
 
-// NewPageMetaData builds paging metadata from the requested page/size and the
-// total number of rows matching the query (before LIMIT/OFFSET).
-func NewPageMetaData(page int, size int, total int) *PageMetaData {
-	totalPage := 0
-	if size > 0 {
-		totalPage = (total + size - 1) / size
+const (
+	DefaultPageSize = 10
+	MaxPageSize     = 50
+)
+
+// NormalizePaging applies the paging rules shared by every list endpoint:
+// page starts at 1, and a size outside 1..MaxPageSize falls back to
+// DefaultPageSize.
+func NormalizePaging(page int, size int) (int, int) {
+	if page < 1 {
+		page = 1
 	}
+	if size < 1 || size > MaxPageSize {
+		size = DefaultPageSize
+	}
+	return page, size
+}
+
+// NewPageMetaData builds paging metadata from the requested page/size and the
+// total number of rows matching the query (before LIMIT/OFFSET). page/size are
+// normalized the same way the usecases do, so the echoed values match the
+// data actually returned.
+func NewPageMetaData(page int, size int, total int) *PageMetaData {
+	page, size = NormalizePaging(page, size)
 	return &PageMetaData{
 		Page:      page,
 		Size:      size,
 		TotalItem: total,
-		TotalPage: totalPage,
+		TotalPage: (total + size - 1) / size,
 	}
 }

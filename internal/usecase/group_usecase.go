@@ -37,11 +37,11 @@ type GroupUseCase interface {
 	GenerateInviteLink(ctx context.Context, groupId string, userId string) (*model.GroupInviteResponse, error)
 	JoinGroup(ctx context.Context, req *model.GroupJoinRequest, userId string) error
 	RemoveMember(ctx context.Context, groupId string, memberId int, userId string) error
-	GetGroupMembers(ctx context.Context, groupId string, userId string) ([]model.GroupMemberResponse, error)
+	GetGroupMembers(ctx context.Context, groupId string, userId string, page int, size int, search string) ([]model.GroupMemberResponse, int, error)
 
 	// Group Contents
 	AddContentToGroup(ctx context.Context, groupId string, req *model.GroupContentCreateRequest, userId string) (*model.GroupContentResponse, error)
-	GetGroupContents(ctx context.Context, groupId string, contentType string, userId string, role string) ([]model.GroupContentResponse, error)
+	GetGroupContents(ctx context.Context, groupId string, contentType string, userId string, role string, page int, size int) ([]model.GroupContentResponse, int, error)
 	RemoveContentFromGroup(ctx context.Context, groupId string, groupContentId int, userId string) error
 }
 
@@ -427,26 +427,28 @@ func (u *groupUseCaseImpl) RemoveMember(ctx context.Context, groupId string, mem
 	return nil
 }
 
-func (u *groupUseCaseImpl) GetGroupMembers(ctx context.Context, groupId string, userId string) ([]model.GroupMemberResponse, error) {
+func (u *groupUseCaseImpl) GetGroupMembers(ctx context.Context, groupId string, userId string, page int, size int, search string) ([]model.GroupMemberResponse, int, error) {
+	page, size = model.NormalizePaging(page, size)
+
 	guruId, err := u.GroupRepository.GetGuruIdByUserId(ctx, userId)
 	if err != nil {
-		return nil, fiber.ErrForbidden
+		return nil, 0, fiber.ErrForbidden
 	}
 
 	group, err := u.GroupRepository.GetGroupById(ctx, groupId)
 	if err != nil {
-		return nil, fiber.ErrNotFound
+		return nil, 0, fiber.ErrNotFound
 	}
 	if group.CreatedBy != guruId {
-		return nil, fiber.ErrForbidden
+		return nil, 0, fiber.ErrForbidden
 	}
 
-	members, err := u.GroupRepository.GetGroupMembers(ctx, groupId)
+	members, total, err := u.GroupRepository.GetGroupMembersPage(ctx, groupId, page, size, search)
 	if err != nil {
-		return nil, fiber.ErrInternalServerError
+		return nil, 0, fiber.ErrInternalServerError
 	}
 
-	return converter.ToGroupMemberResponses(members), nil
+	return converter.ToGroupMemberResponses(members), total, nil
 }
 
 func (u *groupUseCaseImpl) AddContentToGroup(ctx context.Context, groupId string, req *model.GroupContentCreateRequest, userId string) (*model.GroupContentResponse, error) {
@@ -494,45 +496,47 @@ func (u *groupUseCaseImpl) AddContentToGroup(ctx context.Context, groupId string
 	return &res, nil
 }
 
-func (u *groupUseCaseImpl) GetGroupContents(ctx context.Context, groupId string, contentType string, userId string, role string) ([]model.GroupContentResponse, error) {
+func (u *groupUseCaseImpl) GetGroupContents(ctx context.Context, groupId string, contentType string, userId string, role string, page int, size int) ([]model.GroupContentResponse, int, error) {
+	page, size = model.NormalizePaging(page, size)
+
 	group, err := u.GroupRepository.GetGroupById(ctx, groupId)
 	if err != nil {
-		return nil, fiber.ErrNotFound
+		return nil, 0, fiber.ErrNotFound
 	}
 
 	switch role {
 	case "guru":
 		guruId, err := u.GroupRepository.GetGuruIdByUserId(ctx, userId)
 		if err != nil {
-			return nil, fiber.ErrForbidden
+			return nil, 0, fiber.ErrForbidden
 		}
 		if group.CreatedBy != guruId {
-			return nil, fiber.ErrForbidden
+			return nil, 0, fiber.ErrForbidden
 		}
 	case "member":
 		memberId, err := u.GroupRepository.GetMemberIdByUserId(ctx, userId)
 		if err != nil {
-			return nil, fiber.ErrForbidden
+			return nil, 0, fiber.ErrForbidden
 		}
 		isMember, err := u.GroupRepository.IsMemberInGroup(ctx, groupId, memberId)
 		if err != nil {
-			return nil, fiber.ErrInternalServerError
+			return nil, 0, fiber.ErrInternalServerError
 		}
 		if !isMember {
-			return nil, fiber.ErrForbidden
+			return nil, 0, fiber.ErrForbidden
 		}
 	case "super_admin":
 		// super_admin can access any group's contents
 	default:
-		return nil, fiber.ErrForbidden
+		return nil, 0, fiber.ErrForbidden
 	}
 
-	contents, err := u.GroupRepository.GetContentsByGroupId(ctx, groupId, contentType)
+	contents, total, err := u.GroupRepository.GetContentsByGroupId(ctx, groupId, contentType, page, size)
 	if err != nil {
-		return nil, fiber.ErrInternalServerError
+		return nil, 0, fiber.ErrInternalServerError
 	}
 
-	return converter.ToGroupContentResponses(contents), nil
+	return converter.ToGroupContentResponses(contents), total, nil
 }
 
 func (u *groupUseCaseImpl) RemoveContentFromGroup(ctx context.Context, groupId string, groupContentId int, userId string) error {

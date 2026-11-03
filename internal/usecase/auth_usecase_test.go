@@ -31,8 +31,8 @@ func (m *mockUserRepo) FindByEmail(ctx context.Context, email string) (*entity.U
 	}
 	return nil, nil
 }
-func (m *mockUserRepo) GetAllUsers(ctx context.Context) ([]*entity.User, error) {
-	return nil, nil
+func (m *mockUserRepo) GetAllUsers(ctx context.Context, page int, size int, search string) ([]*entity.User, int, error) {
+	return nil, 0, nil
 }
 func (m *mockUserRepo) GetUserById(ctx context.Context, userId string) (*entity.User, error) {
 	if m.getUserByIdFn != nil {
@@ -58,8 +58,8 @@ func (m *mockUserRepo) UpdateUser(ctx context.Context, user *entity.User) (*enti
 func (m *mockUserRepo) DeleteUser(ctx context.Context, user *entity.User) error {
 	return nil
 }
-func (m *mockUserRepo) GetDeletedUsers(ctx context.Context) ([]*entity.User, error) {
-	return nil, nil
+func (m *mockUserRepo) GetDeletedUsers(ctx context.Context, page int, size int, search string) ([]*entity.User, int, error) {
+	return nil, 0, nil
 }
 func (m *mockUserRepo) RestoreUser(ctx context.Context, user *entity.User) error {
 	return nil
