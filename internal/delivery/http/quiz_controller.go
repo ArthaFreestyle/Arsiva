@@ -43,14 +43,9 @@ func (c *quizControllerImpl) GetAllQuiz(ctx fiber.Ctx) error {
 		return err
 	}
 
-	totalPages := (total + size - 1) / size
-
 	res := model.WebResponse[[]*model.QuizResponse]{
 		Data: quizzes,
-		Paging: &model.PageMetaData{
-			Page:  page,
-			Size:  totalPages,
-		},
+		Paging: model.NewPageMetaData(page, size, total),
 	}
 	return ctx.Status(fiber.StatusOK).JSON(res)
 }
@@ -159,14 +154,9 @@ func (c *quizControllerImpl) GetAllQuizManage(ctx fiber.Ctx) error {
 		return err
 	}
 
-	totalPages := (total + size - 1) / size
-
 	res := model.WebResponse[[]*model.QuizResponse]{
 		Data: quizzes,
-		Paging: &model.PageMetaData{
-			Page:  page,
-			Size:  totalPages,
-		},
+		Paging: model.NewPageMetaData(page, size, total),
 	}
 	return ctx.Status(fiber.StatusOK).JSON(res)
 }

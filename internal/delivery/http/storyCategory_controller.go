@@ -40,14 +40,9 @@ func (c *storyCategoryControllerImpl) GetAllStoryCategories(ctx fiber.Ctx) error
 		return err
 	}
 
-	totalPages := (total + size - 1) / size
-
 	res := model.WebResponse[[]*model.StoryCategoryResponse]{
 		Data: categories,
-		Paging: &model.PageMetaData{
-			Page: page,
-			Size: totalPages,
-		},
+		Paging: model.NewPageMetaData(page, size, total),
 	}
 	return ctx.Status(fiber.StatusOK).JSON(res)
 }

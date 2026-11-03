@@ -40,17 +40,9 @@ func (c *quizCategoryControllerImpl) GetAllQuizCategories(ctx fiber.Ctx) error {
 		return err
 	}
 
-	totalPages := (total + size - 1) / size
-	if totalPages == 0 && total > 0 {
-		totalPages = 1
-	}
-
 	res := model.WebResponse[[]*model.QuizCategoryResponse]{
 		Data: categories,
-		Paging: &model.PageMetaData{
-			Page: page,
-			Size: totalPages,
-		},
+		Paging: model.NewPageMetaData(page, size, total),
 	}
 	return ctx.Status(fiber.StatusOK).JSON(res)
 }

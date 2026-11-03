@@ -60,7 +60,7 @@ info:
 
     \  \"data\": ...,
 
-    \  \"paging\": { \"page\": 1, \"size\": 10 },
+    \  \"paging\": { \"page\": 1, \"size\": 10, \"total_item\": 42, \"total_page\": 5 },
 
     \  \"errors\": \"\"
 
@@ -3071,6 +3071,8 @@ paths:
                 paging:
                   page: 1
                   size: 10
+                  total_item: 42
+                  total_page: 5
         "401":
           $ref: "#/components/responses/UnauthorizedResponse"
         "403":
@@ -3307,6 +3309,8 @@ paths:
                 paging:
                   page: 1
                   size: 10
+                  total_item: 42
+                  total_page: 5
         "401":
           $ref: "#/components/responses/UnauthorizedResponse"
         "403":
@@ -3601,6 +3605,8 @@ paths:
                 paging:
                   page: 1
                   size: 10
+                  total_item: 42
+                  total_page: 5
         "401":
           $ref: "#/components/responses/UnauthorizedResponse"
         "403":
@@ -4309,6 +4315,8 @@ paths:
                 paging:
                   page: 1
                   size: 10
+                  total_item: 42
+                  total_page: 5
         "401":
           $ref: "#/components/responses/UnauthorizedResponse"
         "403":
@@ -5250,8 +5258,16 @@ components:
       properties:
         page:
           type: integer
+          description: Halaman saat ini (dimulai dari 1)
         size:
           type: integer
+          description: Jumlah item per halaman yang diminta
+        total_item:
+          type: integer
+          description: Total seluruh item yang cocok dengan filter/search (sebelum dipotong per halaman)
+        total_page:
+          type: integer
+          description: Total halaman (ceil(total_item / size))
     ErrorResponse:
       type: object
       properties:

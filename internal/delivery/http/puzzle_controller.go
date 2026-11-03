@@ -43,14 +43,9 @@ func (c *puzzleControllerImpl) GetAllPuzzle(ctx fiber.Ctx) (error) {
 		return fiber.NewError(fiber.StatusInternalServerError,"internal server error")
 	}
 
-	totalPages := (total + size - 1) / size
-
 	res := model.WebResponse[[]*model.PuzzleResponse]{
 		Data: puzzles,
-		Paging: &model.PageMetaData{
-			Page: page,
-			Size: totalPages,
-		},
+		Paging: model.NewPageMetaData(page, size, total),
 	}
 
 	return ctx.Status(fiber.StatusOK).JSON(res)
@@ -153,14 +148,9 @@ func (c *puzzleControllerImpl) GetAllPuzzleManage(ctx fiber.Ctx) error {
 		return err
 	}
 
-	totalPages := (total + size - 1) / size
-
 	res := model.WebResponse[[]*model.PuzzleResponse]{
 		Data: puzzles,
-		Paging: &model.PageMetaData{
-			Page: page,
-			Size: totalPages,
-		},
+		Paging: model.NewPageMetaData(page, size, total),
 	}
 	return ctx.Status(fiber.StatusOK).JSON(res)
 }

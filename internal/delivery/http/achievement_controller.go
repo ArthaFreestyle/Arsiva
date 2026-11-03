@@ -70,13 +70,9 @@ func (c *achievementControllerImpl) FindAll(ctx fiber.Ctx) error {
 		return err
 	}
 
-	_ = total
 	return ctx.Status(fiber.StatusOK).JSON(model.WebResponse[[]*model.AchievementResponse]{
 		Data: achievements,
-		Paging: &model.PageMetaData{
-			Page: page,
-			Size: size,
-		},
+		Paging: model.NewPageMetaData(page, size, total),
 	})
 }
 

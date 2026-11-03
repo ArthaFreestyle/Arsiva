@@ -64,16 +64,13 @@ func (c *groupControllerImpl) GetAllGroups(ctx fiber.Ctx) error {
 	userId := claims.UserId
 	role := claims.Role
 
-	groups, _, err := c.GroupUseCase.GetAllGroups(ctx.Context(), userId, role, page, size, search)
+	groups, total, err := c.GroupUseCase.GetAllGroups(ctx.Context(), userId, role, page, size, search)
 	if err != nil {
 		c.Log.Warnf("Failed get all groups: %v", err)
 		return err
 	}
 
-	paging := &model.PageMetaData{
-		Page: page,
-		Size: size,
-	}
+	paging := model.NewPageMetaData(page, size, total)
 
 	return ctx.Status(fiber.StatusOK).JSON(model.WebResponse[[]*model.GroupResponse]{
 		Data:   groups,
