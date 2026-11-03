@@ -90,11 +90,14 @@ func (m *mockGroupRepoForLeaderboard) RemoveMember(_ context.Context, _ string, 
 func (m *mockGroupRepoForLeaderboard) GetGroupMembers(_ context.Context, _ string) ([]*entity.GroupMember, error) {
 	return nil, nil
 }
+func (m *mockGroupRepoForLeaderboard) GetGroupMembersPage(_ context.Context, _ string, _ int, _ int, _ string) ([]*entity.GroupMember, int, error) {
+	return nil, 0, nil
+}
 func (m *mockGroupRepoForLeaderboard) AddContent(_ context.Context, _ string, _ string, _ int) (*entity.GroupContent, error) {
 	return nil, nil
 }
-func (m *mockGroupRepoForLeaderboard) GetContentsByGroupId(_ context.Context, _ string, _ string) ([]*entity.GroupContent, error) {
-	return nil, nil
+func (m *mockGroupRepoForLeaderboard) GetContentsByGroupId(_ context.Context, _ string, _ string, _ int, _ int) ([]*entity.GroupContent, int, error) {
+	return nil, 0, nil
 }
 func (m *mockGroupRepoForLeaderboard) RemoveContent(_ context.Context, _ int, _ string) error {
 	return nil

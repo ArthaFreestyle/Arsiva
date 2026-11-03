@@ -15,7 +15,7 @@ import (
 
 type MemberAchievementUseCase interface {
 	Create(ctx context.Context, req *model.MemberAchievementCreateRequest, claims *model.Claims) (*model.MemberAchievementResponse, error)
-	FindAllMine(ctx context.Context, claims *model.Claims) ([]*model.MemberAchievementResponse, error)
+	FindAllMine(ctx context.Context, claims *model.Claims, page int, size int) ([]*model.MemberAchievementResponse, int, error)
 	FindOne(ctx context.Context, achievementId string, claims *model.Claims) (*model.MemberAchievementResponse, error)
 	Delete(ctx context.Context, memberId, achievementId string, claims *model.Claims) error
 }
@@ -93,19 +93,20 @@ func (u *memberAchievementUseCaseImpl) Create(ctx context.Context, req *model.Me
 	return converter.ToMemberAchievementResponse(result), nil
 }
 
-func (u *memberAchievementUseCaseImpl) FindAllMine(ctx context.Context, claims *model.Claims) ([]*model.MemberAchievementResponse, error) {
+func (u *memberAchievementUseCaseImpl) FindAllMine(ctx context.Context, claims *model.Claims, page int, size int) ([]*model.MemberAchievementResponse, int, error) {
 	memberId := extractMemberIdFromClaims(claims)
 	if memberId == "" {
-		return nil, fiber.ErrForbidden
+		return nil, 0, fiber.ErrForbidden
 	}
 
-	achievements, err := u.Repo.FindAllByMemberId(ctx, memberId)
+	page, size = model.NormalizePaging(page, size)
+	achievements, total, err := u.Repo.FindPageByMemberId(ctx, memberId, page, size)
 	if err != nil {
 		u.Log.Warnf("Failed get member achievements: %v", err)
-		return nil, fiber.ErrInternalServerError
+		return nil, 0, fiber.ErrInternalServerError
 	}
 
-	return converter.ToMemberAchievementResponses(achievements), nil
+	return converter.ToMemberAchievementResponses(achievements), total, nil
 }
 
 func (u *memberAchievementUseCaseImpl) FindOne(ctx context.Context, achievementId string, claims *model.Claims) (*model.MemberAchievementResponse, error) {

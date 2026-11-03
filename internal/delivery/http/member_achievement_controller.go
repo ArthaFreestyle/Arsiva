@@ -1,6 +1,8 @@
 package http
 
 import (
+	"strconv"
+
 	"github.com/gofiber/fiber/v3"
 	"github.com/sirupsen/logrus"
 
@@ -48,13 +50,20 @@ func (c *memberAchievementControllerImpl) Create(ctx fiber.Ctx) error {
 func (c *memberAchievementControllerImpl) FindAllMine(ctx fiber.Ctx) error {
 	claims := ctx.Locals("user").(*model.Claims)
 
-	achievements, err := c.AchievementUseCase.FindAllMine(ctx.Context(), claims)
+	page, _ := strconv.Atoi(ctx.Query("page", "1"))
+	size, _ := strconv.Atoi(ctx.Query("size", "10"))
+	page, size = model.NormalizePaging(page, size)
+
+	achievements, total, err := c.AchievementUseCase.FindAllMine(ctx.Context(), claims, page, size)
 	if err != nil {
 		c.Log.Warnf("Failed get member achievements: %v", err)
 		return err
 	}
 
-	return ctx.Status(fiber.StatusOK).JSON(model.WebResponse[[]*model.MemberAchievementResponse]{Data: achievements})
+	return ctx.Status(fiber.StatusOK).JSON(model.WebResponse[[]*model.MemberAchievementResponse]{
+		Data:   achievements,
+		Paging: model.NewPageMetaData(page, size, total),
+	})
 }
 
 func (c *memberAchievementControllerImpl) FindOne(ctx fiber.Ctx) error {

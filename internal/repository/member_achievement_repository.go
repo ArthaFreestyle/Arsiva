@@ -21,6 +21,7 @@ var (
 
 type MemberAchievementRepository interface {
 	FindAllByMemberId(ctx context.Context, memberId string) ([]*entity.MemberAchievement, error)
+	FindPageByMemberId(ctx context.Context, memberId string, page int, size int) ([]*entity.MemberAchievement, int, error)
 	FindOne(ctx context.Context, memberId, achievementId string) (*entity.MemberAchievement, error)
 	Exists(ctx context.Context, memberId, achievementId string) (bool, error)
 	Create(ctx context.Context, memberId, achievementId string) (*entity.MemberAchievement, error)
@@ -68,6 +69,35 @@ func (r *memberAchievementRepositoryImpl) FindAllByMemberId(ctx context.Context,
 		return nil, err
 	}
 	return achievements, nil
+}
+
+func (r *memberAchievementRepositoryImpl) FindPageByMemberId(ctx context.Context, memberId string, page int, size int) ([]*entity.MemberAchievement, int, error) {
+	id, err := strconv.Atoi(memberId)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	var total int
+	err = r.DB.QueryRow(ctx, `SELECT COUNT(*) FROM member_achievements WHERE member_id = $1`, id).Scan(&total)
+	if err != nil {
+		r.Log.Errorf("Error counting FindPageByMemberId achievements: %v", err)
+		return nil, 0, err
+	}
+
+	query := memberAchievementJoinSelect + `WHERE ma.member_id = $1 ORDER BY ma.unlocked_at DESC, a.achievement_id ASC LIMIT $2 OFFSET $3`
+	rows, err := r.DB.Query(ctx, query, id, size, (page-1)*size)
+	if err != nil {
+		r.Log.Errorf("Error FindPageByMemberId achievements: %v", err)
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	achievements, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByNameLax[entity.MemberAchievement])
+	if err != nil {
+		r.Log.Errorf("Error collecting rows FindPageByMemberId achievements: %v", err)
+		return nil, 0, err
+	}
+	return achievements, total, nil
 }
 
 func (r *memberAchievementRepositoryImpl) FindOne(ctx context.Context, memberId, achievementId string) (*entity.MemberAchievement, error) {

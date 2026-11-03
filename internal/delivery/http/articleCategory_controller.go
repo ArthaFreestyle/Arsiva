@@ -1,6 +1,8 @@
 package http
 
 import (
+	"strconv"
+
 	"github.com/gofiber/fiber/v3"
 	"github.com/sirupsen/logrus"
 	"ArthaFreestyle/Arsiva/internal/usecase"
@@ -28,13 +30,19 @@ func NewArticleCategoryController(articleCategoryUseCase usecase.ArticleCategory
 }
 
 func (c *articleCategoryControllerImpl) GetAllArticleCategories(ctx fiber.Ctx) (error) {
-	category,err := c.ArticleCategoryUseCase.GetAllArticleCategories(ctx)
+	page, _ := strconv.Atoi(ctx.Query("page", "1"))
+	size, _ := strconv.Atoi(ctx.Query("size", "10"))
+	search := ctx.Query("search", "")
+	page, size = model.NormalizePaging(page, size)
+
+	category,total,err := c.ArticleCategoryUseCase.GetAllArticleCategories(ctx,page,size,search)
 	if err != nil {
 		return err
 	}
 	
 	res := model.WebResponse[[]*model.ArticleCategoryResponse]{
 		Data: category,
+		Paging: model.NewPageMetaData(page, size, total),
 	}
 	return ctx.Status(fiber.StatusOK).JSON(res)
 }

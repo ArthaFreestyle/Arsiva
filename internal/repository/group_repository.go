@@ -26,11 +26,12 @@ type GroupRepository interface {
 	AddMember(ctx context.Context, groupId string, memberId int) error
 	RemoveMember(ctx context.Context, groupId string, memberId int) error
 	GetGroupMembers(ctx context.Context, groupId string) ([]*entity.GroupMember, error)
+	GetGroupMembersPage(ctx context.Context, groupId string, page int, size int, search string) ([]*entity.GroupMember, int, error)
 	IsMemberInGroup(ctx context.Context, groupId string, memberId int) (bool, error)
 
 	// Group Contents
 	AddContent(ctx context.Context, groupId string, contentType string, contentId int) (*entity.GroupContent, error)
-	GetContentsByGroupId(ctx context.Context, groupId string, contentType string) ([]*entity.GroupContent, error)
+	GetContentsByGroupId(ctx context.Context, groupId string, contentType string, page int, size int) ([]*entity.GroupContent, int, error)
 	RemoveContent(ctx context.Context, groupContentId int, groupId string) error
 	ContentExists(ctx context.Context, contentType string, contentId int) (bool, error)
 	IsContentAlreadyAssigned(ctx context.Context, groupId string, contentType string, contentId int) (bool, error)
@@ -296,6 +297,56 @@ func (r *groupRepositoryImpl) GetGroupMembers(ctx context.Context, groupId strin
 	return members, nil
 }
 
+func (r *groupRepositoryImpl) GetGroupMembersPage(ctx context.Context, groupId string, page int, size int, search string) ([]*entity.GroupMember, int, error) {
+	searchPattern := "%" + search + "%"
+	offset := (page - 1) * size
+
+	countQuery := `
+		SELECT COUNT(*)
+		FROM group_members gm
+		JOIN members m ON gm.member_id = m.member_id
+		JOIN users u ON m.user_id = u.user_id
+		WHERE gm.group_id = $1 AND (u.username ILIKE $2 OR u.email ILIKE $2)
+	`
+	var total int
+	if err := r.DB.QueryRow(ctx, countQuery, groupId, searchPattern).Scan(&total); err != nil {
+		r.Log.Errorf("Error counting GetGroupMembersPage: %v", err)
+		return nil, 0, err
+	}
+
+	query := `
+		SELECT
+			gm.group_id,
+			gm.member_id,
+			gm.tanggal_bergabung,
+			u.username,
+			u.email,
+			m.nis,
+			m.foto_profil
+		FROM group_members gm
+		JOIN members m ON gm.member_id = m.member_id
+		JOIN users u ON m.user_id = u.user_id
+		WHERE gm.group_id = $1 AND (u.username ILIKE $2 OR u.email ILIKE $2)
+		ORDER BY gm.tanggal_bergabung ASC, gm.member_id ASC
+		LIMIT $3 OFFSET $4
+	`
+
+	rows, err := r.DB.Query(ctx, query, groupId, searchPattern, size, offset)
+	if err != nil {
+		r.Log.Errorf("Error query GetGroupMembersPage: %v", err)
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	members, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByNameLax[entity.GroupMember])
+	if err != nil {
+		r.Log.Errorf("Error collecting rows GetGroupMembersPage: %v", err)
+		return nil, 0, err
+	}
+
+	return members, total, nil
+}
+
 func (r *groupRepositoryImpl) IsMemberInGroup(ctx context.Context, groupId string, memberId int) (bool, error) {
 	query := `SELECT EXISTS(SELECT 1 FROM group_members WHERE group_id = $1 AND member_id = $2)`
 	var exists bool
@@ -402,33 +453,33 @@ func (r *groupRepositoryImpl) getContentByGroupContentId(ctx context.Context, gr
 	return content, nil
 }
 
-func (r *groupRepositoryImpl) GetContentsByGroupId(ctx context.Context, groupId string, contentType string) ([]*entity.GroupContent, error) {
-	var (
-		rows pgx.Rows
-		err  error
-	)
+func (r *groupRepositoryImpl) GetContentsByGroupId(ctx context.Context, groupId string, contentType string, page int, size int) ([]*entity.GroupContent, int, error) {
+	// An empty contentType matches every type.
+	where := `WHERE gc.group_id = $1 AND ($2::text = '' OR gc.content_type::text = $2::text)`
+	offset := (page - 1) * size
 
-	if contentType != "" {
-		query := contentJoinQuery + `WHERE gc.group_id = $1 AND gc.content_type = $2`
-		rows, err = r.DB.Query(ctx, query, groupId, contentType)
-	} else {
-		query := contentJoinQuery + `WHERE gc.group_id = $1`
-		rows, err = r.DB.Query(ctx, query, groupId)
+	var total int
+	countQuery := `SELECT COUNT(*) FROM group_contents gc ` + where
+	if err := r.DB.QueryRow(ctx, countQuery, groupId, contentType).Scan(&total); err != nil {
+		r.Log.Errorf("Error counting GetContentsByGroupId: %v", err)
+		return nil, 0, err
 	}
 
+	query := contentJoinQuery + where + ` ORDER BY gc.group_content_id ASC LIMIT $3 OFFSET $4`
+	rows, err := r.DB.Query(ctx, query, groupId, contentType, size, offset)
 	if err != nil {
 		r.Log.Errorf("Error query GetContentsByGroupId: %v", err)
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 
 	contents, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByNameLax[entity.GroupContent])
 	if err != nil {
 		r.Log.Errorf("Error collecting rows GetContentsByGroupId: %v", err)
-		return nil, err
+		return nil, 0, err
 	}
 
-	return contents, nil
+	return contents, total, nil
 }
 
 func (r *groupRepositoryImpl) RemoveContent(ctx context.Context, groupContentId int, groupId string) error {

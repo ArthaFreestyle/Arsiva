@@ -7,6 +7,7 @@ import (
 	"ArthaFreestyle/Arsiva/internal/repository"
 	"context"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/go-playground/validator/v10"
@@ -25,7 +26,7 @@ type ArticleCategoryCache interface {
 }
 
 type ArticleCategoryUseCase interface {
-	GetAllArticleCategories(ctx context.Context) ([]*model.ArticleCategoryResponse, error)
+	GetAllArticleCategories(ctx context.Context, page int, size int, search string) ([]*model.ArticleCategoryResponse, int, error)
 	GetArticleCategoryById(ctx context.Context, articleCategoryID string) (*model.ArticleCategoryResponse, error)
 	CreateArticleCategory(ctx context.Context, articleCategory *model.ArticleCategoryRequest) (*model.ArticleCategoryResponse, error)
 	UpdateArticleCategory(ctx context.Context, articleCategory *model.ArticleCategoryRequest, articleCategoryID string) (*model.ArticleCategoryResponse, error)
@@ -48,7 +49,33 @@ func NewArticleCategoryUseCase(articleCategoryRepository repository.ArticleCateg
 	}
 }
 
-func (u *ArticleCategoryUseCaseImpl) GetAllArticleCategories(ctx context.Context) ([]*model.ArticleCategoryResponse, error) {
+// GetAllArticleCategories pages through the (small, cached) full category
+// list in memory, so one cache key keeps serving every page/search combination.
+func (u *ArticleCategoryUseCaseImpl) GetAllArticleCategories(ctx context.Context, page int, size int, search string) ([]*model.ArticleCategoryResponse, int, error) {
+	page, size = model.NormalizePaging(page, size)
+
+	all, err := u.getAllArticleCategories(ctx)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	filtered := all
+	if search = strings.ToLower(strings.TrimSpace(search)); search != "" {
+		filtered = make([]*model.ArticleCategoryResponse, 0, len(all))
+		for _, category := range all {
+			if strings.Contains(strings.ToLower(category.NamaKategori), search) {
+				filtered = append(filtered, category)
+			}
+		}
+	}
+
+	total := len(filtered)
+	start := min((page-1)*size, total)
+	end := min(start+size, total)
+	return filtered[start:end], total, nil
+}
+
+func (u *ArticleCategoryUseCaseImpl) getAllArticleCategories(ctx context.Context) ([]*model.ArticleCategoryResponse, error) {
 	if u.ArticleCategoryCache != nil {
 		cachedCategories, err := u.ArticleCategoryCache.Get(ctx, articleCategoriesListCacheKey).Result()
 		if err == nil {

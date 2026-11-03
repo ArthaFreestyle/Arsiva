@@ -195,13 +195,21 @@ func (c *groupControllerImpl) GetGroupMembers(ctx fiber.Ctx) error {
 	groupId := ctx.Params("id")
 	userId := ctx.Locals("userId").(string)
 
-	members, err := c.GroupUseCase.GetGroupMembers(ctx.Context(), groupId, userId)
+	page, _ := strconv.Atoi(ctx.Query("page", "1"))
+	size, _ := strconv.Atoi(ctx.Query("size", "10"))
+	search := ctx.Query("search", "")
+	page, size = model.NormalizePaging(page, size)
+
+	members, total, err := c.GroupUseCase.GetGroupMembers(ctx.Context(), groupId, userId, page, size, search)
 	if err != nil {
 		c.Log.Warnf("Failed get group members: %v", err)
 		return err
 	}
 
-	return ctx.Status(fiber.StatusOK).JSON(model.WebResponse[[]model.GroupMemberResponse]{Data: members})
+	return ctx.Status(fiber.StatusOK).JSON(model.WebResponse[[]model.GroupMemberResponse]{
+		Data:   members,
+		Paging: model.NewPageMetaData(page, size, total),
+	})
 }
 
 func (c *groupControllerImpl) AddContent(ctx fiber.Ctx) error {
@@ -232,13 +240,20 @@ func (c *groupControllerImpl) GetGroupContents(ctx fiber.Ctx) error {
 	userId := claims.UserId
 	role := claims.Role
 
-	contents, err := c.GroupUseCase.GetGroupContents(ctx.Context(), groupId, contentType, userId, role)
+	page, _ := strconv.Atoi(ctx.Query("page", "1"))
+	size, _ := strconv.Atoi(ctx.Query("size", "10"))
+	page, size = model.NormalizePaging(page, size)
+
+	contents, total, err := c.GroupUseCase.GetGroupContents(ctx.Context(), groupId, contentType, userId, role, page, size)
 	if err != nil {
 		c.Log.Warnf("Failed get group contents: %v", err)
 		return err
 	}
 
-	return ctx.Status(fiber.StatusOK).JSON(model.WebResponse[[]model.GroupContentResponse]{Data: contents})
+	return ctx.Status(fiber.StatusOK).JSON(model.WebResponse[[]model.GroupContentResponse]{
+		Data:   contents,
+		Paging: model.NewPageMetaData(page, size, total),
+	})
 }
 
 func (c *groupControllerImpl) RemoveContent(ctx fiber.Ctx) error {

@@ -493,12 +493,29 @@ paths:
       tags:
         - Users
       summary: Get all users
-      description: "Mengambil seluruh user yang aktif (`is_active = true`). \ 
+      description: "Mengambil user yang aktif (`is_active = true`) dengan paginasi, diurutkan dari yang terbaru; `search` mencocokkan username atau email. \ 
 
         🔒 **Role**: `super_admin`\n"
       operationId: getAllUsers
       security:
         - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: size
+          in: query
+          description: Item per halaman (1-50, di luar rentang dianggap 10)
+          schema:
+            type: integer
+            default: 10
+        - name: search
+          in: query
+          description: Cari berdasarkan username atau email (case-insensitive)
+          schema:
+            type: string
       responses:
         "200":
           description: Daftar user berhasil diambil
@@ -516,6 +533,11 @@ paths:
                     username: budi
                     email: budi@example.com
                     role: guru
+                paging:
+                  page: 1
+                  size: 10
+                  total_item: 2
+                  total_page: 1
         "401":
           $ref: "#/components/responses/UnauthorizedResponse"
         "403":
@@ -592,6 +614,23 @@ paths:
       operationId: getDeletedUsers
       security:
         - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: size
+          in: query
+          description: Item per halaman (1-50, di luar rentang dianggap 10)
+          schema:
+            type: integer
+            default: 10
+        - name: search
+          in: query
+          description: Cari berdasarkan username atau email (case-insensitive)
+          schema:
+            type: string
       responses:
         "200":
           description: Daftar user yang telah dihapus
@@ -862,6 +901,23 @@ paths:
       operationId: getAllArticleCategories
       security:
         - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: size
+          in: query
+          description: Item per halaman (1-50, di luar rentang dianggap 10)
+          schema:
+            type: integer
+            default: 10
+        - name: search
+          in: query
+          description: Cari berdasarkan nama kategori (case-insensitive)
+          schema:
+            type: string
       responses:
         "200":
           description: Daftar kategori artikel
@@ -2807,6 +2863,22 @@ paths:
           required: true
           schema:
             type: string
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: size
+          in: query
+          description: Item per halaman (1-50, di luar rentang dianggap 10)
+          schema:
+            type: integer
+            default: 10
+        - name: search
+          in: query
+          description: Cari anggota berdasarkan username atau email (case-insensitive)
+          schema:
+            type: string
       responses:
         "200":
           description: Success
@@ -2946,6 +3018,17 @@ paths:
               - cerita
               - puzzle
           description: Filter berdasarkan tipe konten (opsional)
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: size
+          in: query
+          description: Item per halaman (1-50, di luar rentang dianggap 10)
+          schema:
+            type: integer
+            default: 10
       responses:
         "200":
           description: Daftar konten grup
@@ -4175,6 +4258,18 @@ paths:
       operationId: listMemberAchievements
       security:
         - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: size
+          in: query
+          description: Item per halaman (1-50, di luar rentang dianggap 10)
+          schema:
+            type: integer
+            default: 10
       responses:
         "200":
           description: Daftar achievement member
@@ -5302,6 +5397,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ArticleCategoryResponse"
+        paging:
+          $ref: "#/components/schemas/PageMetaData"
     StoryCategoryRequest:
       type: object
       required:
@@ -6084,6 +6181,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/GroupMemberResponse"
+        paging:
+          $ref: "#/components/schemas/PageMetaData"
     GroupContentCreateRequest:
       type: object
       required:
@@ -6141,6 +6240,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/GroupContentResponse"
+        paging:
+          $ref: "#/components/schemas/PageMetaData"
         errors:
           type: string
     MessageWrapper:
@@ -6666,6 +6767,8 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/MemberAchievementResponse"
+        paging:
+          $ref: "#/components/schemas/PageMetaData"
     MemberProfileResponse:
       type: object
       properties:
