@@ -48,6 +48,7 @@ func Bootstrap(cfg BootstrapConfig) {
 	memberProgressRepo := repository.NewMemberProgressRepository(cfg.DB, cfg.Log)
 	leaderboardRepo := repository.NewLeaderboardRepository(cfg.DB, cfg.Log)
 	gamificationRepo := repository.NewGamificationRepository(cfg.DB, cfg.Log)
+	analyticsRepo := repository.NewAnalyticsRepository(cfg.DB, cfg.Log)
 
 	// Mailer + OTP settings for email verification / password reset.
 	mail := mailer.NewMailer(cfg.Config, cfg.Log)
@@ -97,6 +98,7 @@ func Bootstrap(cfg BootstrapConfig) {
 	GamificationUseCase := usecase.NewGamificationUseCase(gamificationRepo, cfg.Log)
 	ProgressSessionUseCase := usecase.NewProgressSessionUseCase(memberProgressRepo, cfg.Redis, cfg.Log, cfg.Validate, GamificationUseCase)
 	LeaderboardUseCase := usecase.NewLeaderboardUseCase(leaderboardRepo, groupRepo, cfg.Log)
+	AnalyticsUseCase := usecase.NewAnalyticsUseCase(analyticsRepo, cfg.Log)
 
 	if !fiber.IsChild() {
 		cfg.Log.Info("Starting asset cleanup worker on master process...")
@@ -125,6 +127,7 @@ func Bootstrap(cfg BootstrapConfig) {
 	ProgressController := http.NewProgressController(ProgressSessionUseCase, cfg.Log)
 	LeaderboardController := http.NewLeaderboardController(LeaderboardUseCase, cfg.Log)
 	GamificationController := http.NewGamificationController(GamificationUseCase, cfg.Log)
+	AnalyticsController := http.NewAnalyticsController(AnalyticsUseCase, cfg.Log)
 
 	// Create middleware
 	authMiddleware            := middleware.NewAuthMiddleware(cfg.Secret, cfg.Log)
@@ -170,6 +173,7 @@ func Bootstrap(cfg BootstrapConfig) {
 		ProgressController:          ProgressController,
 		LeaderboardController:       LeaderboardController,
 		GamificationController:      GamificationController,
+		AnalyticsController:         AnalyticsController,
 		AuthMiddleware:              authMiddleware,
 		ProfileCompleteMiddleware:   profileCompleteMiddleware,
 		AuthLimiter:                 authLimiter,
