@@ -63,7 +63,7 @@ func (c *sekolahControllerImpl) FindAll(ctx fiber.Ctx) error {
 	size, _ := strconv.Atoi(ctx.Query("size", "10"))
 	search := ctx.Query("search", "")
 
-	sekolahs, _, err := c.SekolahUseCase.FindAll(ctx.Context(), search, page, size)
+	sekolahs, total, err := c.SekolahUseCase.FindAll(ctx.Context(), search, page, size)
 	if err != nil {
 		c.Log.Warnf("Failed get all sekolah: %v", err)
 		return err
@@ -71,10 +71,7 @@ func (c *sekolahControllerImpl) FindAll(ctx fiber.Ctx) error {
 
 	return ctx.Status(fiber.StatusOK).JSON(model.WebResponse[[]*model.SekolahResponse]{
 		Data: sekolahs,
-		Paging: &model.PageMetaData{
-			Page: page,
-			Size: size,
-		},
+		Paging: model.NewPageMetaData(page, size, total),
 	})
 }
 

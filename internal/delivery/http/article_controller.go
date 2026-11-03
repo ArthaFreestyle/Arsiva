@@ -44,14 +44,9 @@ func (c *articleControllerImpl) GetAllArticle(ctx fiber.Ctx) error {
 		return err
 	}
 
-	totalPages := (total + size - 1) / size
-
 	res := model.WebResponse[[]*model.ArticleResponse]{
 		Data: articles,
-		Paging: &model.PageMetaData{
-			Page: page,
-			Size: totalPages,
-		},
+		Paging: model.NewPageMetaData(page, size, total),
 	}
 	return ctx.Status(fiber.StatusOK).JSON(res)
 }
@@ -161,14 +156,9 @@ func (c *articleControllerImpl) GetAllArticleManage(ctx fiber.Ctx) error {
 		return err
 	}
 
-	totalPages := (total + size - 1) / size
-
 	res := model.WebResponse[[]*model.ArticleResponse]{
 		Data: articles,
-		Paging: &model.PageMetaData{
-			Page: page,
-			Size: totalPages,
-		},
+		Paging: model.NewPageMetaData(page, size, total),
 	}
 	return ctx.Status(fiber.StatusOK).JSON(res)
 }
