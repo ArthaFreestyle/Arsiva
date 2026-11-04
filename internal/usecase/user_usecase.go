@@ -17,7 +17,7 @@ import (
 )
 
 type UserUseCase interface {
-	GetAllUsers(ctx context.Context,page int,size int,search string) ([]*model.UserResponse, int, error)
+	GetAllUsers(ctx context.Context,page int,size int,search string,role string) ([]*model.UserResponse, int, error)
 	GetDeletedUsers(ctx context.Context,page int,size int,search string) ([]*model.UserResponse, int, error)
 	GetUserById(ctx context.Context,UserId string) (*model.UserResponse, error)
 	SearchUsersByEmail(ctx context.Context,emailQuery string) ([]*model.UserResponse, error)
@@ -44,8 +44,8 @@ func NewUserUseCase(userRepository repository.UserRepository,log *logrus.Logger,
 }
 
 
-func (c *UserUseCaseImpl) GetAllUsers(ctx context.Context,page int,size int,search string) ([]*model.UserResponse, int, error) {
-	users,total,err := c.UserRepository.GetAllUsers(ctx,page,size,search)
+func (c *UserUseCaseImpl) GetAllUsers(ctx context.Context,page int,size int,search string,role string) ([]*model.UserResponse, int, error) {
+	users,total,err := c.UserRepository.GetAllUsers(ctx,page,size,search,role)
 	if err != nil {
 		return nil,0,err
 	}

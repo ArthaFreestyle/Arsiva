@@ -31,7 +31,7 @@ func (m *mockUserRepo) FindByEmail(ctx context.Context, email string) (*entity.U
 	}
 	return nil, nil
 }
-func (m *mockUserRepo) GetAllUsers(ctx context.Context, page int, size int, search string) ([]*entity.User, int, error) {
+func (m *mockUserRepo) GetAllUsers(ctx context.Context, page int, size int, search string, role string) ([]*entity.User, int, error) {
 	return nil, 0, nil
 }
 func (m *mockUserRepo) GetUserById(ctx context.Context, userId string) (*entity.User, error) {

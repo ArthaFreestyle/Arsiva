@@ -495,7 +495,7 @@ paths:
       tags:
         - Users
       summary: Get all users
-      description: "Mengambil user yang aktif (`is_active = true`) dengan paginasi, diurutkan dari yang terbaru; `search` mencocokkan username atau email. \ 
+      description: "Mengambil user yang aktif (`is_active = true`) dengan paginasi, diurutkan dari yang terbaru; `search` mencocokkan username atau email; `role` memfilter berdasarkan role. \ 
 
         🔒 **Role**: `super_admin`\n"
       operationId: getAllUsers
@@ -518,6 +518,12 @@ paths:
           description: Cari berdasarkan username atau email (case-insensitive)
           schema:
             type: string
+        - name: role
+          in: query
+          description: Filter berdasarkan role. Kosongkan untuk semua role; nilai lain menghasilkan 400.
+          schema:
+            type: string
+            enum: [super_admin, guru, member]
       responses:
         "200":
           description: Daftar user berhasil diambil

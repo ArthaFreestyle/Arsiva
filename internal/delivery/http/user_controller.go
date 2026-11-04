@@ -36,9 +36,15 @@ func (u *UserControllerImpl) GetAllUsers(ctx fiber.Ctx) error {
 	page, _ := strconv.Atoi(ctx.Query("page", "1"))
 	size, _ := strconv.Atoi(ctx.Query("size", "10"))
 	search := ctx.Query("search", "")
+	role := ctx.Query("role", "")
+	switch role {
+	case "", "super_admin", "guru", "member":
+	default:
+		return fiber.NewError(fiber.StatusBadRequest, "role tidak valid (super_admin, guru, member)")
+	}
 	page, size = model.NormalizePaging(page, size)
 
-	users,total,err := u.UserUseCase.GetAllUsers(ctx,page,size,search)
+	users,total,err := u.UserUseCase.GetAllUsers(ctx,page,size,search,role)
 	if err != nil {
 		u.Log.Warnf("Failed get all users : %+v", err)
 		return err
