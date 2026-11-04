@@ -10,7 +10,7 @@ import (
 
 type UserRepository interface {
 	FindByEmail(ctx context.Context,email string) (*entity.User, error)
-	GetAllUsers(ctx context.Context,page int,size int,search string) ([]*entity.User, int, error)
+	GetAllUsers(ctx context.Context,page int,size int,search string,role string) ([]*entity.User, int, error)
 	GetDeletedUsers(ctx context.Context,page int,size int,search string) ([]*entity.User, int, error)
 	GetUserById(ctx context.Context,userId string) (*entity.User, error)
 	SearchByEmail(ctx context.Context,emailQuery string,limit int) ([]*entity.User, error)
@@ -53,30 +53,33 @@ func (r *UserRepositoryImpl) FindByEmail(ctx context.Context,email string) (*ent
 	return user,nil
 }
 
-func (r *UserRepositoryImpl) GetAllUsers(ctx context.Context,page int,size int,search string) ([]*entity.User, int, error) {
-	return r.findUsersPage(ctx,true,page,size,search)
+func (r *UserRepositoryImpl) GetAllUsers(ctx context.Context,page int,size int,search string,role string) ([]*entity.User, int, error) {
+	return r.findUsersPage(ctx,true,page,size,search,role)
 }
 
 // findUsersPage lists users with the given is_active flag, newest first,
-// filtered by username/email and paginated.
-func (r *UserRepositoryImpl) findUsersPage(ctx context.Context,isActive bool,page int,size int,search string) ([]*entity.User, int, error) {
+// filtered by username/email, optionally by role (empty role = all roles),
+// and paginated.
+func (r *UserRepositoryImpl) findUsersPage(ctx context.Context,isActive bool,page int,size int,search string,role string) ([]*entity.User, int, error) {
 	offset := (page - 1) * size
 	searchPattern := "%" + search + "%"
 
 	var total int
 	err := r.DB.QueryRow(ctx,
-		`SELECT COUNT(*) FROM users u WHERE u.is_active = $1 AND (u.username ILIKE $2 OR u.email ILIKE $2)`,
-		isActive,searchPattern).Scan(&total)
+		`SELECT COUNT(*) FROM users u WHERE u.is_active = $1 AND (u.username ILIKE $2 OR u.email ILIKE $2)
+		AND ($3 = '' OR u.role::text = $3)`,
+		isActive,searchPattern,role).Scan(&total)
 	if err != nil {
 		return nil,0,err
 	}
 
 	SQL := `SELECT u.user_id, u.username, u.email, u.role FROM users u
 	WHERE u.is_active = $1 AND (u.username ILIKE $2 OR u.email ILIKE $2)
+	AND ($3 = '' OR u.role::text = $3)
 	ORDER BY u.created_at DESC, u.user_id
-	LIMIT $3 OFFSET $4`
+	LIMIT $4 OFFSET $5`
 
-	rows,err := r.DB.Query(ctx,SQL,isActive,searchPattern,size,offset)
+	rows,err := r.DB.Query(ctx,SQL,isActive,searchPattern,role,size,offset)
 	if err != nil {
 		return nil,0,err
 	}
@@ -173,7 +176,7 @@ func (r *UserRepositoryImpl) DeleteUser(ctx context.Context,user *entity.User) (
 }
 
 func (r *UserRepositoryImpl) GetDeletedUsers(ctx context.Context,page int,size int,search string) ([]*entity.User, int, error) {
-	return r.findUsersPage(ctx,false,page,size,search)
+	return r.findUsersPage(ctx,false,page,size,search,"")
 }
 
 func (r *UserRepositoryImpl) RestoreUser(ctx context.Context,user *entity.User) error {
