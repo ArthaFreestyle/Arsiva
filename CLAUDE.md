@@ -175,9 +175,17 @@ The application manages these core domains:
 ### JWT-Based Auth
 - Users login via `/v1/login` endpoint with email + password
 - Login also accepts an `expected_role` field; the server rejects mismatched roles (prevents a member token being issued to someone using the guru login form, etc.)
-- Server returns `access_token` and `refresh_token`
+- Server returns `access_token` (60 min), `refresh_token` (7 days) and `expires_in` (access lifetime, seconds)
 - Tokens are validated using `AuthMiddleware` on protected routes
 - JWT secret configured in `config.json` under `app.jwt-secret`
+
+### Access vs refresh tokens (issue #51)
+Every JWT signed with `app.jwt-secret` — access, refresh, **and** the `group_invite` token — shares one secret, so the **`token_type` claim** is what separates them (`model.TokenTypeAccess` / `TokenTypeRefresh`, `internal/model/claims.go`):
+- `AuthMiddleware` uses `utils.ValidateAccessToken` and accepts **only** `token_type: "access"`. Refresh tokens, group-invite tokens and any token minted before the claim existed get the same generic 401. Never switch it back to a type-agnostic parse — that is how a 7-day refresh token used to work as a Bearer token. Both validators pin HS256 and require `exp`.
+- The refresh token carries **only** `user_id`, `token_type`, `jti`, `exp`, `iat` — no role/details. `POST /v1/refresh` re-reads the user (`GetUserById`, which **must keep selecting `is_verified`**: `RowToAddrOfStructByNameLax` zero-fills missing columns, which would 401 every refresh) and the guru/member details (`loadTokenDetails`, shared with `Login` — keep one copy).
+- **Rotation + revocation in Redis** (`internal/usecase/refresh_token_store.go`): `refresh:token:{jti}` → user_id (TTL = token lifetime) and set `refresh:user:{user_id}` → live jtis. `issueTokenPair` stores the jti on every login/refresh (Redis down ⇒ login **500**, fail closed). `/refresh` consumes the jti with atomic `GETDEL` **before** anything else, so a refresh token is single-use even under concurrent requests; a reused/unknown jti is 401. Inactive or unverified users are 401'd and all their tokens revoked.
+- `POST /v1/logout` revokes one refresh token (idempotent: garbage token ⇒ 200). `ResetPassword` and `UserUseCase.DeleteUser` call `RevokeAll`. Access tokens are stateless and simply expire — there is no access-token blacklist.
+- `/v1/refresh` and `/v1/logout` are **guest routes** (`SetupGuestRoutes`): the caller's access token is expired when they are needed, so putting them behind `AuthMiddleware` makes them unreachable. Redis/DB failures return 500, never 401 (a 401 makes the FE log the user out).
 
 ### Email Verification (OTP) & Password Reset
 Both flows are OTP-based (6-digit numeric codes emailed to the user) and share one Redis-backed helper in `internal/usecase/auth_usecase.go`:
@@ -404,7 +412,7 @@ func TestNewUserUseCase(t *testing.T) {
 The OpenAPI spec lives at `docs/openapi.yaml`. The server mounts that folder as static files at `/docs/*` (`app.Get("/docs/*", static.New("./docs"))` in `internal/config/fiber.go`) — it serves the raw YAML, not a Swagger UI. Use the petstore.swagger.io link in `README.md` to view it rendered.
 
 Routes are organized by resource and role requirements in `delivery/http/route/route.go`:
-- Guest routes: `POST /v1/login`, `POST /v1/register/member`, `POST /v1/register/guru`, `GET /uploads/*`
+- Guest routes: `POST /v1/login`, `POST /v1/refresh`, `POST /v1/logout`, `POST /v1/register/member`, `POST /v1/register/guru`, `GET /uploads/*`
 - Authenticated routes: protected by `AuthMiddleware` (applied at `/v1` group level)
 - Admin routes: additionally guarded by `RoleMiddleware("super_admin")`
 - Content management: additionally guarded by `RoleMiddleware("guru", "super_admin")` + `ProfileCompleteMiddleware`

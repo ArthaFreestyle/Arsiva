@@ -94,10 +94,13 @@ func (r *UserRepositoryImpl) findUsersPage(ctx context.Context,isActive bool,pag
 }
 
 func (r *UserRepositoryImpl) GetUserById(ctx context.Context,userId string) (*entity.User, error) {
-	SQL := `SELECT u.user_id, u.username, u.email, u.role, u.is_active FROM users u
+	// is_verified MUST be selected: RowToAddrOfStructByNameLax leaves missing
+	// columns at their zero value, and POST /v1/refresh rejects IsVerified=false —
+	// dropping the column would 401 every refresh.
+	SQL := `SELECT u.user_id, u.username, u.email, u.role, u.created_at, u.is_active, u.is_verified FROM users u
 	WHERE u.user_id = $1`
-	
-	rows,err := r.DB.Query(context.Background(),SQL,userId)
+
+	rows,err := r.DB.Query(ctx,SQL,userId)
 	if err != nil {
 		return nil,err
 	}

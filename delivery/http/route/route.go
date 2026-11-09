@@ -59,6 +59,12 @@ func (c *RouteConfig) SetupGuestRoutes() {
 	c.App.Post("/v1/forgot-password", c.IPAuthLimiter, c.AuthLimiter, c.AuthController.ForgotPassword)
 	c.App.Post("/v1/reset-password", c.IPAuthLimiter, c.AuthLimiter, c.AuthController.ResetPassword)
 
+	// Token refresh (rotation) + logout. These MUST stay guest routes: the caller's
+	// access token is expired when /refresh is needed, so AuthMiddleware would
+	// reject it. Authentication here is the refresh token in the request body.
+	c.App.Post("/v1/refresh", c.IPAuthLimiter, c.AuthLimiter, c.AuthController.Refresh)
+	c.App.Post("/v1/logout", c.IPAuthLimiter, c.AuthLimiter, c.AuthController.Logout)
+
 	c.App.Get("uploads/*", c.UploadController.GetFile)
 
 	// Article reads are public (no login required) for SEO/crawlers.

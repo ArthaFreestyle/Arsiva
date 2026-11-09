@@ -10,6 +10,14 @@ type LoginResponse struct {
 	User			UserResponse	`json:"user"`
 	AccessToken		string			`json:"access_token"`
 	RefreshToken	string			`json:"refresh_token"`
+	// ExpiresIn is the access-token lifetime in seconds, so the FE can refresh
+	// proactively shortly before expiry.
+	ExpiresIn		int				`json:"expires_in"`
+}
+
+// RefreshTokenRequest is the body of POST /v1/refresh and POST /v1/logout.
+type RefreshTokenRequest struct {
+	RefreshToken string `json:"refresh_token" validate:"required"`
 }
 
 type RegisterRequest struct {

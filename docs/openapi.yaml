@@ -136,6 +136,13 @@ paths:
 
         Mengembalikan **access token** (expired 60 menit) dan **refresh token** (expired 7 hari).
 
+        ### Access vs refresh token
+        - `access_token` dipakai sebagai `Authorization: Bearer ...`. Field `expires_in` = umur access token (detik).
+        - `refresh_token` **tidak bisa** dipakai sebagai Bearer token (401). Gunakan hanya untuk
+          `POST /v1/refresh` (tukar dengan pasangan token baru) dan `POST /v1/logout`.
+        - Refresh token **sekali pakai** (rotasi): setiap refresh mengembalikan refresh token baru,
+          dan yang lama langsung tidak berlaku.
+
         ### Field `expected_role` (opsional)
         Digunakan oleh frontend yang memiliki halaman login terpisah untuk member dan guru.
         Jika diisi:
@@ -187,6 +194,7 @@ paths:
                     role: member
                   access_token: eyJhbGciOiJIUzI1NiIs...
                   refresh_token: eyJhbGciOiJIUzI1NiIs...
+                  expires_in: 3600
         "400":
           description: "Validasi gagal — field wajib kosong, format email salah, atau `expected_role: super_admin`"
           content:
@@ -454,7 +462,7 @@ paths:
       tags:
         - Auth
       summary: Reset password (with token)
-      description: "Mengatur ulang password menggunakan `token` + `email` dari tautan reset yang dikirim `POST /v1/forgot-password`. Token bersifat sekali pakai dan kedaluwarsa sesuai `reset_link_ttl_minutes`. Rate-limited."
+      description: "Mengatur ulang password menggunakan `token` + `email` dari tautan reset yang dikirim `POST /v1/forgot-password`. Token bersifat sekali pakai dan kedaluwarsa sesuai `reset_link_ttl_minutes`. Setelah berhasil, **semua refresh token** milik user dicabut (semua sesi harus login ulang). Rate-limited."
       operationId: resetPassword
       requestBody:
         required: true
@@ -486,6 +494,126 @@ paths:
                 errors: kode tidak valid atau sudah kedaluwarsa
         "429":
           description: Terlalu banyak permintaan — coba lagi nanti
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /v1/refresh:
+    post:
+      tags:
+        - Auth
+      summary: Refresh access token (rotation)
+      description: |
+        Menukar `refresh_token` yang masih berlaku dengan pasangan **access + refresh token baru**.
+        Endpoint guest (tanpa `Authorization` header) karena access token pemanggil memang sudah expired.
+
+        - Refresh token **sekali pakai**: setelah dipakai, refresh token lama langsung tidak berlaku.
+          FE wajib mengganti **kedua** token dengan hasil response.
+        - Role dan `details` di access token baru dibaca ulang dari database (contoh: member yang baru
+          melengkapi profil langsung mendapat `member_id`).
+        - User nonaktif atau belum terverifikasi: 401 dan semua refresh token-nya dicabut.
+        - Semua kegagalan dari sisi client mengembalikan **401 generik yang sama** (tidak membedakan
+          expired / sudah dipakai / dicabut / salah tipe).
+
+        **Panduan FE:** saat endpoint terproteksi mengembalikan 401, panggil endpoint ini **satu kali**
+        (single-flight: jangan paralel dengan refresh token yang sama, request kedua akan 401), lalu
+        ulangi request awal. Jika endpoint ini mengembalikan 401, hapus token dan arahkan ke login.
+        Rate-limited.
+      operationId: refreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshTokenRequest"
+            example:
+              refresh_token: eyJhbGciOiJIUzI1NiIs...
+      responses:
+        "200":
+          description: Pasangan token baru
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponseWrapper"
+              example:
+                data:
+                  user:
+                    id: "1"
+                    username: siswa01
+                    email: siswa01@example.com
+                    role: member
+                  access_token: eyJhbGciOiJIUzI1NiIs...
+                  refresh_token: eyJhbGciOiJIUzI1NiIs...
+                  expires_in: 3600
+        "400":
+          description: Body tidak valid atau `refresh_token` kosong
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Refresh token tidak valid, expired, sudah dipakai, sudah dicabut, atau user nonaktif/belum terverifikasi
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                errors: Unauthorized
+        "429":
+          description: Terlalu banyak permintaan, coba lagi nanti
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Gangguan server (Redis/database). Token belum tentu tidak valid, jangan paksa logout
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /v1/logout:
+    post:
+      tags:
+        - Auth
+      summary: Logout (revoke refresh token)
+      description: |
+        Mencabut `refresh_token` sehingga tidak bisa dipakai untuk refresh lagi. Endpoint guest.
+        **Idempotent**: token yang tidak valid / sudah expired / sudah dicabut tetap mengembalikan 200.
+        Access token bersifat stateless dan tetap berlaku sampai expired (maksimal 60 menit); FE cukup
+        menghapusnya dari storage. Rate-limited.
+      operationId: logout
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshTokenRequest"
+            example:
+              refresh_token: eyJhbGciOiJIUzI1NiIs...
+      responses:
+        "200":
+          description: Logout berhasil
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponseWrapper"
+              example:
+                data:
+                  message: logged out
+        "400":
+          description: Body tidak valid atau `refresh_token` kosong
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Terlalu banyak permintaan, coba lagi nanti
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Gangguan server (Redis). Refresh token mungkin masih aktif
           content:
             application/json:
               schema:
@@ -5470,7 +5598,18 @@ components:
           description: JWT access token (expired 60 menit)
         refresh_token:
           type: string
-          description: JWT refresh token (expired 7 hari)
+          description: JWT refresh token (expired 7 hari, sekali pakai, hanya untuk /v1/refresh dan /v1/logout)
+        expires_in:
+          type: integer
+          description: Umur access token dalam detik
+          example: 3600
+    RefreshTokenRequest:
+      type: object
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
     UserResponseWrapper:
       type: object
       properties:

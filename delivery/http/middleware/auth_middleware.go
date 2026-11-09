@@ -28,7 +28,10 @@ func NewAuthMiddleware(jwtSecret []byte, log *logrus.Logger) fiber.Handler {
 		}
 
 		tokenString := parts[1]
-		claims, err := utils.ValidateToken(tokenString, jwtSecret)
+		// Only access tokens are accepted here. Refresh tokens and any other JWT
+		// signed with the same secret (group_invite) are rejected with the same
+		// generic 401 — never reveal *why* a token was refused.
+		claims, err := utils.ValidateAccessToken(tokenString, jwtSecret)
 		if err != nil {
 			log.Warnf("Invalid or expired token: %+v", err)
 			return ctx.Status(fiber.StatusUnauthorized).JSON(model.WebResponse[any]{
