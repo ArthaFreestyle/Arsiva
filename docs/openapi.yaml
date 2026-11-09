@@ -212,7 +212,7 @@ paths:
               example:
                 errors: Unauthorized
         "403":
-          description: "`expected_role` tidak cocok dengan role akun (pesan tidak mengungkap role sebenarnya), **atau** email belum diverifikasi (`email belum diverifikasi, cek email untuk kode verifikasi`)"
+          description: "`expected_role` tidak cocok dengan role akun (pesan tidak mengungkap role sebenarnya), email belum diverifikasi (`email belum diverifikasi, cek email untuk kode verifikasi`), **atau** akun sudah dinonaktifkan admin (`akun dinonaktifkan, hubungi admin`). Ketiganya hanya dicek **setelah** password benar; password salah tetap 401."
           content:
             application/json:
               schema:
