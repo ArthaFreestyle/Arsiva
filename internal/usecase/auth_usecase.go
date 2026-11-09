@@ -138,6 +138,16 @@ func (c *AuthUseCaseImpl) Login(ctx context.Context, request *model.LoginRequest
 		return nil, fiber.ErrUnauthorized
 	}
 
+	// Deactivation check AFTER password verification (same reason as the
+	// verification check below): without the correct password an attacker must
+	// not learn that an account exists but was deactivated by an admin. A soft
+	// delete only flips is_active, so without this check a deactivated user could
+	// simply log in again (issue #52).
+	if !user.IsActive {
+		c.Log.Warnf("Login blocked: account deactivated for user %s", user.UserId)
+		return nil, fiber.NewError(fiber.StatusForbidden, "akun dinonaktifkan, hubungi admin")
+	}
+
 	// Verification check AFTER password verification so an attacker without the
 	// correct password cannot learn whether an email is registered/verified.
 	if !user.IsVerified {
@@ -586,6 +596,11 @@ func (c *AuthUseCaseImpl) VerifyEmail(ctx context.Context, request *model.Verify
 		c.Log.Warnf("VerifyEmail: user not found after OTP match for %s: %+v", email, err)
 		return fiber.NewError(fiber.StatusBadRequest, "kode tidak valid atau sudah kedaluwarsa")
 	}
+	if !user.IsActive {
+		// Deactivated accounts are treated exactly like missing ones.
+		c.Log.Warnf("VerifyEmail: account deactivated for user %s", user.UserId)
+		return fiber.NewError(fiber.StatusBadRequest, "kode tidak valid atau sudah kedaluwarsa")
+	}
 	if user.IsVerified {
 		return nil
 	}
@@ -598,8 +613,9 @@ func (c *AuthUseCaseImpl) VerifyEmail(ctx context.Context, request *model.Verify
 }
 
 // ResendVerificationOTP re-issues a verification OTP. Responses are kept generic
-// (the controller returns a fixed message): a non-existent or already-verified
-// account is silently a no-op so this endpoint cannot enumerate accounts.
+// (the controller returns a fixed message): a non-existent, deactivated or
+// already-verified account is silently a no-op so this endpoint cannot enumerate
+// accounts.
 func (c *AuthUseCaseImpl) ResendVerificationOTP(ctx context.Context, request *model.ResendOTPRequest) error {
 	if err := c.Validate.Struct(request); err != nil {
 		c.Log.Warnf("ResendVerificationOTP: invalid request: %+v", err)
@@ -608,8 +624,8 @@ func (c *AuthUseCaseImpl) ResendVerificationOTP(ctx context.Context, request *mo
 	email := strings.ToLower(request.Email)
 
 	user, err := c.Repo.FindByEmail(ctx, email)
-	if err != nil || user.IsVerified {
-		return nil // no-op; do not reveal existence/verification state
+	if err != nil || !user.IsActive || user.IsVerified {
+		return nil // no-op; do not reveal existence/activation/verification state
 	}
 
 	if err := c.issueOTP(ctx, otpPurposeVerify, email); err != nil {
@@ -638,6 +654,11 @@ func (c *AuthUseCaseImpl) ForgotPassword(ctx context.Context, request *model.For
 		c.Log.Infof("ForgotPassword: no account for %s (returning generic success)", email)
 		return nil
 	}
+	if !user.IsActive {
+		// Same generic success as a missing account — never leak the deactivated state.
+		c.Log.Infof("ForgotPassword: account deactivated for user %s (returning generic success)", user.UserId)
+		return nil
+	}
 
 	if err := c.issueResetToken(ctx, user.Email); err != nil {
 		// Swallow everything (including cooldown) so this endpoint stays uniform.
@@ -663,6 +684,12 @@ func (c *AuthUseCaseImpl) ResetPassword(ctx context.Context, request *model.Rese
 	user, err := c.Repo.FindByEmail(ctx, email)
 	if err != nil {
 		c.Log.Warnf("ResetPassword: user not found after OTP match for %s: %+v", email, err)
+		return fiber.NewError(fiber.StatusBadRequest, "kode tidak valid atau sudah kedaluwarsa")
+	}
+	if !user.IsActive {
+		// A reset link mailed before the admin deactivated the account must not
+		// work afterwards. Same generic error as a missing account.
+		c.Log.Warnf("ResetPassword: account deactivated for user %s", user.UserId)
 		return fiber.NewError(fiber.StatusBadRequest, "kode tidak valid atau sudah kedaluwarsa")
 	}
 

@@ -256,6 +256,7 @@ func makeLoginRepo(role string) *mockUserRepo {
 				Role:         role,
 				PasswordHash: hash,
 				CreatedAt:    &now,
+				IsActive:     true,
 				IsVerified:   true,
 			}, nil
 		},
@@ -533,6 +534,7 @@ func TestLogin_Unverified_Returns403(t *testing.T) {
 				Role:         "member",
 				PasswordHash: hash,
 				CreatedAt:    &now,
+				IsActive:     true,
 				IsVerified:   false,
 			}, nil
 		},
@@ -559,7 +561,7 @@ func TestLogin_Unverified_WrongPassword_Returns401(t *testing.T) {
 	hash, _ := utils.HashPassword("Rahasia123!")
 	repo := &mockUserRepo{
 		findByEmailFn: func(ctx context.Context, email string) (*entity.User, error) {
-			return &entity.User{UserId: "1", Email: email, Role: "member", PasswordHash: hash, IsVerified: false}, nil
+			return &entity.User{UserId: "1", Email: email, Role: "member", PasswordHash: hash, IsActive: true, IsVerified: false}, nil
 		},
 	}
 	uc := newTestAuthUseCase(t, repo)
