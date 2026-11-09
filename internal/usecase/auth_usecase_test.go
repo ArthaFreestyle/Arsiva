@@ -11,18 +11,21 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v3"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
 )
 
 // mockUserRepo implements repository.UserRepository for testing.
 type mockUserRepo struct {
-	createFn      func(ctx context.Context, user *entity.User) (*entity.User, error)
-	findByEmailFn func(ctx context.Context, email string) (*entity.User, error)
-	getUserByIdFn func(ctx context.Context, userId string) (*entity.User, error)
+	createFn         func(ctx context.Context, user *entity.User) (*entity.User, error)
+	findByEmailFn    func(ctx context.Context, email string) (*entity.User, error)
+	getUserByIdFn    func(ctx context.Context, userId string) (*entity.User, error)
+	updatePasswordFn func(ctx context.Context, userId string, passwordHash string) error
 }
 
 func (m *mockUserRepo) FindByEmail(ctx context.Context, email string) (*entity.User, error) {
@@ -65,6 +68,9 @@ func (m *mockUserRepo) RestoreUser(ctx context.Context, user *entity.User) error
 	return nil
 }
 func (m *mockUserRepo) UpdatePassword(ctx context.Context, userId string, passwordHash string) error {
+	if m.updatePasswordFn != nil {
+		return m.updatePasswordFn(ctx, userId, passwordHash)
+	}
 	return nil
 }
 func (m *mockUserRepo) MarkVerified(ctx context.Context, userId string) error {
@@ -77,8 +83,22 @@ func discardLogger() *logrus.Logger {
 	return log
 }
 
-func newTestAuthUseCase(repo *mockUserRepo) AuthUseCase {
-	return NewAuthUseCase(repo, []byte("secret"), validator.New(), discardLogger(), nil, nil, nil, nil, nil, 5*time.Minute, 15*time.Minute, 5, time.Minute, "https://arsiva.id/reset-password")
+// newTestRedis starts an in-memory Redis for one test. Login/Refresh need it:
+// every issued refresh token's jti is stored server-side.
+func newTestRedis(t *testing.T) (*redis.Client, *miniredis.Miniredis) {
+	t.Helper()
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("miniredis: %v", err)
+	}
+	t.Cleanup(mr.Close)
+	return redis.NewClient(&redis.Options{Addr: mr.Addr()}), mr
+}
+
+func newTestAuthUseCase(t *testing.T, repo *mockUserRepo) AuthUseCase {
+	t.Helper()
+	rdb, _ := newTestRedis(t)
+	return NewAuthUseCase(repo, []byte("secret"), validator.New(), discardLogger(), nil, nil, nil, rdb, nil, 5*time.Minute, 15*time.Minute, 5, time.Minute, "https://arsiva.id/reset-password")
 }
 
 func TestNewAuthUseCase(t *testing.T) {
@@ -89,7 +109,7 @@ func TestNewAuthUseCase(t *testing.T) {
 }
 
 func TestRegisterMember_HappyPath(t *testing.T) {
-	uc := newTestAuthUseCase(&mockUserRepo{})
+	uc := newTestAuthUseCase(t, &mockUserRepo{})
 
 	req := &model.RegisterRequest{
 		Username: "siswa01",
@@ -110,7 +130,7 @@ func TestRegisterMember_HappyPath(t *testing.T) {
 }
 
 func TestRegisterGuru_HappyPath(t *testing.T) {
-	uc := newTestAuthUseCase(&mockUserRepo{})
+	uc := newTestAuthUseCase(t, &mockUserRepo{})
 
 	req := &model.RegisterRequest{
 		Username: "guru01",
@@ -128,7 +148,7 @@ func TestRegisterGuru_HappyPath(t *testing.T) {
 }
 
 func TestRegisterMember_ValidationFailure(t *testing.T) {
-	uc := newTestAuthUseCase(&mockUserRepo{})
+	uc := newTestAuthUseCase(t, &mockUserRepo{})
 
 	// Missing password
 	req := &model.RegisterRequest{
@@ -148,7 +168,7 @@ func TestRegisterMember_ValidationFailure(t *testing.T) {
 }
 
 func TestRegisterMember_PasswordTooShort(t *testing.T) {
-	uc := newTestAuthUseCase(&mockUserRepo{})
+	uc := newTestAuthUseCase(t, &mockUserRepo{})
 
 	req := &model.RegisterRequest{
 		Username: "siswa01",
@@ -180,7 +200,7 @@ func TestRegisterMember_RoleInjectionIgnored(t *testing.T) {
 			return user, nil
 		},
 	}
-	uc := newTestAuthUseCase(repo)
+	uc := newTestAuthUseCase(t, repo)
 
 	req := &model.RegisterRequest{
 		Username: "sneaky",
@@ -203,7 +223,7 @@ func TestRegisterMember_UniqueViolation_Returns409(t *testing.T) {
 			return nil, &pgconn.PgError{Code: "23505"}
 		},
 	}
-	uc := newTestAuthUseCase(repo)
+	uc := newTestAuthUseCase(t, repo)
 
 	req := &model.RegisterRequest{
 		Username: "siswa01",
@@ -243,7 +263,7 @@ func makeLoginRepo(role string) *mockUserRepo {
 }
 
 func TestLogin_NoExpectedRole_Success(t *testing.T) {
-	uc := newTestAuthUseCase(makeLoginRepo("member"))
+	uc := newTestAuthUseCase(t, makeLoginRepo("member"))
 	resp, err := uc.Login(context.Background(), &model.LoginRequest{
 		Email:    "siswa01@example.com",
 		Password: "Rahasia123!",
@@ -257,7 +277,7 @@ func TestLogin_NoExpectedRole_Success(t *testing.T) {
 }
 
 func TestLogin_ExpectedRole_Match_Success(t *testing.T) {
-	uc := newTestAuthUseCase(makeLoginRepo("member"))
+	uc := newTestAuthUseCase(t, makeLoginRepo("member"))
 	resp, err := uc.Login(context.Background(), &model.LoginRequest{
 		Email:        "siswa01@example.com",
 		Password:     "Rahasia123!",
@@ -272,7 +292,7 @@ func TestLogin_ExpectedRole_Match_Success(t *testing.T) {
 }
 
 func TestLogin_ExpectedRole_Mismatch_Returns403(t *testing.T) {
-	uc := newTestAuthUseCase(makeLoginRepo("guru"))
+	uc := newTestAuthUseCase(t, makeLoginRepo("guru"))
 	_, err := uc.Login(context.Background(), &model.LoginRequest{
 		Email:        "guru01@example.com",
 		Password:     "Rahasia123!",
@@ -292,7 +312,7 @@ func TestLogin_ExpectedRole_Mismatch_Returns403(t *testing.T) {
 }
 
 func TestLogin_WrongPassword_Returns401_BeforeRoleCheck(t *testing.T) {
-	uc := newTestAuthUseCase(makeLoginRepo("member"))
+	uc := newTestAuthUseCase(t, makeLoginRepo("member"))
 	_, err := uc.Login(context.Background(), &model.LoginRequest{
 		Email:        "siswa01@example.com",
 		Password:     "WrongPassword!",
@@ -308,7 +328,7 @@ func TestLogin_WrongPassword_Returns401_BeforeRoleCheck(t *testing.T) {
 }
 
 func TestLogin_ExpectedRole_SuperAdmin_Returns400(t *testing.T) {
-	uc := newTestAuthUseCase(makeLoginRepo("super_admin"))
+	uc := newTestAuthUseCase(t, makeLoginRepo("super_admin"))
 	_, err := uc.Login(context.Background(), &model.LoginRequest{
 		Email:        "admin@example.com",
 		Password:     "Rahasia123!",
@@ -387,8 +407,10 @@ func (m *mockGuruRepo) FindGroupsByGuruId(ctx context.Context, guruId string) ([
 	return nil, nil
 }
 
-func newTestAuthUseCaseWithRepos(userRepo *mockUserRepo, memberRepo *mockMemberRepo, guruRepo *mockGuruRepo) AuthUseCase {
-	return NewAuthUseCase(userRepo, []byte("secret"), validator.New(), discardLogger(), nil, guruRepo, memberRepo, nil, nil, 5*time.Minute, 15*time.Minute, 5, time.Minute, "https://arsiva.id/reset-password")
+func newTestAuthUseCaseWithRepos(t *testing.T, userRepo *mockUserRepo, memberRepo *mockMemberRepo, guruRepo *mockGuruRepo) AuthUseCase {
+	t.Helper()
+	rdb, _ := newTestRedis(t)
+	return NewAuthUseCase(userRepo, []byte("secret"), validator.New(), discardLogger(), nil, guruRepo, memberRepo, rdb, nil, 5*time.Minute, 15*time.Minute, 5, time.Minute, "https://arsiva.id/reset-password")
 }
 
 func TestLogin_Member_WithProfile_DetailsPopulated(t *testing.T) {
@@ -397,7 +419,7 @@ func TestLogin_Member_WithProfile_DetailsPopulated(t *testing.T) {
 			return &entity.Member{MemberId: "42", NIS: "12345", SekolahId: "7", Level: 1}, nil
 		},
 	}
-	uc := newTestAuthUseCaseWithRepos(makeLoginRepo("member"), memberRepo, nil)
+	uc := newTestAuthUseCaseWithRepos(t, makeLoginRepo("member"), memberRepo, nil)
 
 	resp, err := uc.Login(context.Background(), &model.LoginRequest{
 		Email:    "siswa01@example.com",
@@ -419,7 +441,7 @@ func TestLogin_Member_NoProfile_TokenIssuedWithoutDetails(t *testing.T) {
 			return nil, pgx.ErrNoRows
 		},
 	}
-	uc := newTestAuthUseCaseWithRepos(makeLoginRepo("member"), memberRepo, nil)
+	uc := newTestAuthUseCaseWithRepos(t, makeLoginRepo("member"), memberRepo, nil)
 
 	resp, err := uc.Login(context.Background(), &model.LoginRequest{
 		Email:    "siswa01@example.com",
@@ -441,7 +463,7 @@ func TestLogin_Member_RepoError_Returns500(t *testing.T) {
 			return nil, errors.New("connection reset by peer")
 		},
 	}
-	uc := newTestAuthUseCaseWithRepos(makeLoginRepo("member"), memberRepo, nil)
+	uc := newTestAuthUseCaseWithRepos(t, makeLoginRepo("member"), memberRepo, nil)
 
 	_, err := uc.Login(context.Background(), &model.LoginRequest{
 		Email:    "siswa01@example.com",
@@ -462,7 +484,7 @@ func TestLogin_Guru_WithProfile_DetailsPopulated(t *testing.T) {
 			return &entity.Guru{GuruId: "10", NIP: "9876", BidangAjar: "Matematika", SekolahId: "3"}, nil
 		},
 	}
-	uc := newTestAuthUseCaseWithRepos(makeLoginRepo("guru"), nil, guruRepo)
+	uc := newTestAuthUseCaseWithRepos(t, makeLoginRepo("guru"), nil, guruRepo)
 
 	resp, err := uc.Login(context.Background(), &model.LoginRequest{
 		Email:    "guru01@example.com",
@@ -482,7 +504,7 @@ func TestLogin_Guru_RepoError_Returns500(t *testing.T) {
 			return nil, errors.New("timeout")
 		},
 	}
-	uc := newTestAuthUseCaseWithRepos(makeLoginRepo("guru"), nil, guruRepo)
+	uc := newTestAuthUseCaseWithRepos(t, makeLoginRepo("guru"), nil, guruRepo)
 
 	_, err := uc.Login(context.Background(), &model.LoginRequest{
 		Email:    "guru01@example.com",
@@ -515,7 +537,7 @@ func TestLogin_Unverified_Returns403(t *testing.T) {
 			}, nil
 		},
 	}
-	uc := newTestAuthUseCase(repo)
+	uc := newTestAuthUseCase(t, repo)
 
 	_, err := uc.Login(context.Background(), &model.LoginRequest{
 		Email:    "belumverif@example.com",
@@ -540,7 +562,7 @@ func TestLogin_Unverified_WrongPassword_Returns401(t *testing.T) {
 			return &entity.User{UserId: "1", Email: email, Role: "member", PasswordHash: hash, IsVerified: false}, nil
 		},
 	}
-	uc := newTestAuthUseCase(repo)
+	uc := newTestAuthUseCase(t, repo)
 
 	_, err := uc.Login(context.Background(), &model.LoginRequest{
 		Email:    "belumverif@example.com",

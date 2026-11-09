@@ -15,6 +15,8 @@ type AuthController interface {
 	ResendOTP(ctx fiber.Ctx) error
 	ForgotPassword(ctx fiber.Ctx) error
 	ResetPassword(ctx fiber.Ctx) error
+	Refresh(ctx fiber.Ctx) error
+	Logout(ctx fiber.Ctx) error
 }
 
 type AuthControllerImpl struct {
@@ -169,5 +171,44 @@ func (c *AuthControllerImpl) ResetPassword(ctx fiber.Ctx) error {
 
 	return ctx.Status(fiber.StatusOK).JSON(model.WebResponse[model.MessageResponse]{
 		Data: model.MessageResponse{Message: "password berhasil diperbarui, silakan login"},
+	})
+}
+// Refresh exchanges a refresh token for a new access+refresh pair. Guest route:
+// the caller's access token is expired by definition, so it must NOT sit behind
+// AuthMiddleware.
+func (c *AuthControllerImpl) Refresh(ctx fiber.Ctx) error {
+	var request model.RefreshTokenRequest
+	if err := ctx.Bind().Body(&request); err != nil {
+		c.Log.Warnf("Invalid request body  : %+v", err)
+		return fiber.ErrBadRequest
+	}
+
+	result, err := c.UseCase.Refresh(ctx, &request)
+	if err != nil {
+		c.Log.Warnf("Failed refresh token : %+v", err)
+		return err
+	}
+
+	return ctx.Status(fiber.StatusOK).JSON(model.WebResponse[model.LoginResponse]{
+		Data: *result,
+	})
+}
+
+// Logout revokes the given refresh token. Idempotent: an unknown/expired token
+// still returns 200.
+func (c *AuthControllerImpl) Logout(ctx fiber.Ctx) error {
+	var request model.RefreshTokenRequest
+	if err := ctx.Bind().Body(&request); err != nil {
+		c.Log.Warnf("Invalid request body  : %+v", err)
+		return fiber.ErrBadRequest
+	}
+
+	if err := c.UseCase.Logout(ctx, &request); err != nil {
+		c.Log.Warnf("Failed logout : %+v", err)
+		return err
+	}
+
+	return ctx.Status(fiber.StatusOK).JSON(model.WebResponse[model.MessageResponse]{
+		Data: model.MessageResponse{Message: "logged out"},
 	})
 }

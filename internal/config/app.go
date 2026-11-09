@@ -79,7 +79,7 @@ func Bootstrap(cfg BootstrapConfig) {
 	}
 
 	AuthUseCase := usecase.NewAuthUseCase(userRepo, cfg.Secret, cfg.Validate, cfg.Log, cfg.DB, guruRepo, memberRepo, cfg.Redis, mail, time.Duration(otpTTLMinutes)*time.Minute, time.Duration(resetLinkTTLMinutes)*time.Minute, otpMaxAttempts, time.Duration(otpResendCooldown)*time.Second, resetPasswordURL)
-	UserUseCase := usecase.NewUserUseCase(userRepo, cfg.Log, cfg.DB, cfg.Validate)
+	UserUseCase := usecase.NewUserUseCase(userRepo, cfg.Log, cfg.DB, cfg.Validate, usecase.NewRefreshTokenStore(cfg.Redis))
 	ArticleCategoryUseCase := usecase.NewArticleCategoryUseCase(articleCategoryRepo, cfg.Redis, cfg.Log, cfg.Validate)
 	ArticleUseCase := usecase.NewArticleUseCase(articleRepo, assetRepo, cfg.Log, cfg.Validate)
 	PuzzleUseCase := usecase.NewPuzzleUseCase(puzzleRepo, assetRepo, cfg.Log, cfg.Validate)

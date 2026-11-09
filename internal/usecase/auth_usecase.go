@@ -36,7 +36,13 @@ type AuthUseCase interface {
 	// caller's view (anti-enumeration) regardless of whether the email is registered.
 	ForgotPassword(ctx context.Context, request *model.ForgotPasswordRequest) error
 	// ResetPassword sets a new password after a valid reset token (from the link).
+	// It also revokes every refresh token of the user.
 	ResetPassword(ctx context.Context, request *model.ResetPasswordRequest) error
+	// Refresh exchanges a live refresh token for a new access+refresh pair
+	// (rotation: the presented refresh token becomes unusable).
+	Refresh(ctx context.Context, request *model.RefreshTokenRequest) (*model.LoginResponse, error)
+	// Logout revokes a refresh token. Idempotent.
+	Logout(ctx context.Context, request *model.RefreshTokenRequest) error
 	// OTPPolicy returns the (static) OTP/reset-link timing knobs so controllers can
 	// hand them to the FE for countdowns and resend-button throttling.
 	OTPPolicy() model.OTPPolicy
@@ -60,6 +66,9 @@ type AuthUseCaseImpl struct {
 	// "https://arsiva.id/reset-password". The token + email are appended as query
 	// params when building the link.
 	ResetBaseURL string
+	// RefreshTokens holds the server-side state of refresh tokens (rotation +
+	// revocation), backed by the same Redis client.
+	RefreshTokens *RefreshTokenStore
 }
 
 func NewAuthUseCase(repo repository.UserRepository, secret []byte, validate *validator.Validate, log *logrus.Logger, DB *pgxpool.Pool, guruRepo repository.GuruRepository, memberRepo repository.MemberRepository, redisClient *redis.Client, mail mailer.Mailer, otpTTL time.Duration, resetTTL time.Duration, otpMaxAttempts int, resendCooldown time.Duration, resetBaseURL string) AuthUseCase {
@@ -78,6 +87,7 @@ func NewAuthUseCase(repo repository.UserRepository, secret []byte, validate *val
 		OTPMaxAttempts:   otpMaxAttempts,
 		ResendCooldown:   resendCooldown,
 		ResetBaseURL:     resetBaseURL,
+		RefreshTokens:    NewRefreshTokenStore(redisClient),
 	}
 }
 
@@ -142,66 +152,173 @@ func (c *AuthUseCaseImpl) Login(ctx context.Context, request *model.LoginRequest
 		return nil, fiber.NewError(fiber.StatusForbidden, "wrong login page for this account")
 	}
 
-	// Embed the profile details into the JWT so downstream stateless checks
-	// (RequireProfileComplete, member_id extraction) work without DB hits.
-	// A missing profile row (pgx.ErrNoRows) is legitimate — the user just hasn't
-	// completed onboarding, so leave details nil and let ProfileCompleteMiddleware
-	// gate them. Any OTHER error must NOT be swallowed: doing so mints a token
-	// with empty Details that permanently 403s every member_id/profile-based
-	// endpoint with no way to diagnose it.
-	var details any
+	return c.issueTokenPair(ctx, user)
+}
+
+// loadTokenDetails returns the guru/member profile details embedded in the access
+// token so downstream stateless checks (RequireProfileComplete, member_id
+// extraction) work without DB hits. Shared by Login and Refresh — keep ONE copy so
+// the two never drift.
+//
+// A missing profile row (pgx.ErrNoRows) is legitimate — the user just hasn't
+// completed onboarding, so details stay nil and ProfileCompleteMiddleware gates
+// them. Any OTHER error must NOT be swallowed: doing so mints a token with empty
+// Details that permanently 403s every member_id/profile-based endpoint with no way
+// to diagnose it.
+func (c *AuthUseCaseImpl) loadTokenDetails(ctx context.Context, user *entity.User) (any, error) {
 	switch user.Role {
 	case "guru":
-		if c.GuruRepository != nil {
-			guru, err := c.GuruRepository.FindByUserId(ctx, user.UserId)
-			switch {
-			case err == nil:
-				details = model.GuruDetails{
-					GuruId:     guru.GuruId,
-					NIP:        guru.NIP,
-					BidangAjar: guru.BidangAjar,
-					SekolahId:  guru.SekolahId,
-				}
-			case errors.Is(err, pgx.ErrNoRows):
-				c.Log.Infof("Guru profile not yet created for user %s; issuing token without details", user.UserId)
-			default:
-				c.Log.Errorf("Failed to load guru profile for user %s: %+v", user.UserId, err)
-				return nil, fiber.ErrInternalServerError
-			}
+		if c.GuruRepository == nil {
+			return nil, nil
+		}
+		guru, err := c.GuruRepository.FindByUserId(ctx, user.UserId)
+		switch {
+		case err == nil:
+			return model.GuruDetails{
+				GuruId:     guru.GuruId,
+				NIP:        guru.NIP,
+				BidangAjar: guru.BidangAjar,
+				SekolahId:  guru.SekolahId,
+			}, nil
+		case errors.Is(err, pgx.ErrNoRows):
+			c.Log.Infof("Guru profile not yet created for user %s; issuing token without details", user.UserId)
+			return nil, nil
+		default:
+			return nil, fmt.Errorf("load guru profile: %w", err)
 		}
 	case "member":
-		if c.MemberRepository != nil {
-			member, err := c.MemberRepository.FindByUserId(ctx, user.UserId)
-			switch {
-			case err == nil:
-				details = model.MemberDetails{
-					MemberId:  member.MemberId,
-					NIS:       member.NIS,
-					SekolahId: member.SekolahId,
-					Level:     member.Level,
-				}
-			case errors.Is(err, pgx.ErrNoRows):
-				c.Log.Infof("Member profile not yet created for user %s; issuing token without details", user.UserId)
-			default:
-				c.Log.Errorf("Failed to load member profile for user %s: %+v", user.UserId, err)
-				return nil, fiber.ErrInternalServerError
-			}
+		if c.MemberRepository == nil {
+			return nil, nil
+		}
+		member, err := c.MemberRepository.FindByUserId(ctx, user.UserId)
+		switch {
+		case err == nil:
+			return model.MemberDetails{
+				MemberId:  member.MemberId,
+				NIS:       member.NIS,
+				SekolahId: member.SekolahId,
+				Level:     member.Level,
+			}, nil
+		case errors.Is(err, pgx.ErrNoRows):
+			c.Log.Infof("Member profile not yet created for user %s; issuing token without details", user.UserId)
+			return nil, nil
+		default:
+			return nil, fmt.Errorf("load member profile: %w", err)
 		}
 	}
+	return nil, nil
+}
 
-	access, refresh, err := utils.GenerateToken(user, details, c.Secret)
+// issueTokenPair mints a new access + refresh token for user, registers the
+// refresh token's jti in Redis, and returns the login-shaped payload. Any failure
+// is a 500: without a stored jti the refresh token would be unusable, so we fail
+// closed rather than hand out a pair that silently breaks in 60 minutes.
+func (c *AuthUseCaseImpl) issueTokenPair(ctx context.Context, user *entity.User) (*model.LoginResponse, error) {
+	details, err := c.loadTokenDetails(ctx, user)
 	if err != nil {
-		c.Log.Warnf("Failed generate token : %+v", err)
+		c.Log.Errorf("issueTokenPair: %+v (user %s)", err, user.UserId)
 		return nil, fiber.ErrInternalServerError
 	}
 
-	AuthResponse := converter.ToUserResponse(user)
+	access, err := utils.GenerateAccessToken(user, details, c.Secret)
+	if err != nil {
+		c.Log.Errorf("issueTokenPair: generate access token for user %s: %+v", user.UserId, err)
+		return nil, fiber.ErrInternalServerError
+	}
+	refresh, jti, err := utils.GenerateRefreshToken(user.UserId, c.Secret)
+	if err != nil {
+		c.Log.Errorf("issueTokenPair: generate refresh token for user %s: %+v", user.UserId, err)
+		return nil, fiber.ErrInternalServerError
+	}
+	if err := c.RefreshTokens.Save(ctx, user.UserId, jti, utils.RefreshTokenTTL); err != nil {
+		c.Log.Errorf("issueTokenPair: store refresh token for user %s: %+v", user.UserId, err)
+		return nil, fiber.ErrInternalServerError
+	}
 
 	return &model.LoginResponse{
-		User:         *AuthResponse,
+		User:         *converter.ToUserResponse(user),
 		AccessToken:  access,
 		RefreshToken: refresh,
+		ExpiresIn:    int(utils.AccessTokenTTL.Seconds()),
 	}, nil
+}
+
+// Refresh exchanges a live refresh token for a brand-new token pair (rotation).
+// The presented refresh token is consumed atomically FIRST, so it is dead even if
+// a later step fails — the user then simply logs in again (fail closed).
+//
+// Every client-side failure returns the same generic 401 so the endpoint cannot be
+// used as an oracle ("was this token already used?"). Infrastructure failures
+// (Redis/DB) are 500 — mapping an outage to 401 would log everyone out.
+func (c *AuthUseCaseImpl) Refresh(ctx context.Context, request *model.RefreshTokenRequest) (*model.LoginResponse, error) {
+	if err := c.Validate.Struct(request); err != nil {
+		c.Log.Warnf("Refresh: invalid request body: %+v", err)
+		return nil, fiber.ErrBadRequest
+	}
+
+	claims, err := utils.ValidateRefreshToken(request.RefreshToken, c.Secret)
+	if err != nil {
+		c.Log.Warnf("Refresh: rejected token: %v", err)
+		return nil, fiber.ErrUnauthorized
+	}
+
+	ownerId, err := c.RefreshTokens.Consume(ctx, claims.ID)
+	if errors.Is(err, ErrRefreshTokenNotFound) {
+		// Valid signature but not live: reused, revoked, or minted before rotation existed.
+		c.Log.Warnf("Refresh: refresh token not live for user %s (reused or revoked)", claims.UserId)
+		return nil, fiber.ErrUnauthorized
+	}
+	if err != nil {
+		c.Log.Errorf("Refresh: %+v", err)
+		return nil, fiber.ErrInternalServerError
+	}
+	if ownerId != claims.UserId {
+		c.Log.Errorf("Refresh: jti owner mismatch (token user %s, stored user %s)", claims.UserId, ownerId)
+		return nil, fiber.ErrUnauthorized
+	}
+
+	user, err := c.Repo.GetUserById(ctx, claims.UserId)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			c.Log.Warnf("Refresh: user %s no longer exists", claims.UserId)
+			return nil, fiber.ErrUnauthorized
+		}
+		c.Log.Errorf("Refresh: load user %s: %+v", claims.UserId, err)
+		return nil, fiber.ErrInternalServerError
+	}
+
+	if !user.IsActive || !user.IsVerified {
+		c.Log.Warnf("Refresh: blocked for user %s (active=%t verified=%t); revoking all refresh tokens", user.UserId, user.IsActive, user.IsVerified)
+		if err := c.RefreshTokens.RevokeAll(ctx, user.UserId); err != nil {
+			c.Log.Errorf("Refresh: revoke all for user %s: %+v", user.UserId, err)
+		}
+		return nil, fiber.ErrUnauthorized
+	}
+
+	return c.issueTokenPair(ctx, user)
+}
+
+// Logout revokes a refresh token. It is idempotent: an invalid, expired or
+// already-revoked token is not an error (there is nothing left to revoke). Only an
+// infrastructure failure is surfaced (500), so the FE knows the token may still
+// be live. Access tokens are stateless and simply expire (<= 60 min).
+func (c *AuthUseCaseImpl) Logout(ctx context.Context, request *model.RefreshTokenRequest) error {
+	if err := c.Validate.Struct(request); err != nil {
+		c.Log.Warnf("Logout: invalid request body: %+v", err)
+		return fiber.ErrBadRequest
+	}
+
+	claims, err := utils.ValidateRefreshToken(request.RefreshToken, c.Secret)
+	if err != nil {
+		c.Log.Infof("Logout: token not valid (%v); nothing to revoke", err)
+		return nil
+	}
+
+	if err := c.RefreshTokens.Revoke(ctx, claims.UserId, claims.ID); err != nil {
+		c.Log.Errorf("Logout: %+v (user %s)", err, claims.UserId)
+		return fiber.ErrInternalServerError
+	}
+	return nil
 }
 
 func (c *AuthUseCaseImpl) RegisterMember(ctx context.Context, request *model.RegisterRequest) (*model.UserResponse, error) {
@@ -558,6 +675,13 @@ func (c *AuthUseCaseImpl) ResetPassword(ctx context.Context, request *model.Rese
 	if err := c.Repo.UpdatePassword(ctx, user.UserId, hashed); err != nil {
 		c.Log.Errorf("ResetPassword: update failed for %s: %+v", user.UserId, err)
 		return fiber.ErrInternalServerError
+	}
+
+	// Sign out every session: whoever knew the old password may hold a refresh
+	// token. The password is already changed, so a failure here must not fail the
+	// request — but log it loudly, those sessions stay alive for up to 7 days.
+	if err := c.RefreshTokens.RevokeAll(ctx, user.UserId); err != nil {
+		c.Log.Errorf("ResetPassword: password changed but FAILED to revoke refresh tokens for %s: %+v", user.UserId, err)
 	}
 	return nil
 }

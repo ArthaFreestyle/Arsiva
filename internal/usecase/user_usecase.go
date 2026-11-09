@@ -32,14 +32,18 @@ type UserUseCaseImpl struct {
 	Log *logrus.Logger
 	Validate *validator.Validate
 	DB *pgxpool.Pool
+	// RefreshTokens is used to sign a user out everywhere when the account is
+	// deactivated. May be nil in tests; Refresh also rejects inactive users.
+	RefreshTokens *RefreshTokenStore
 }
 
-func NewUserUseCase(userRepository repository.UserRepository,log *logrus.Logger,db *pgxpool.Pool,val *validator.Validate) UserUseCase {
+func NewUserUseCase(userRepository repository.UserRepository,log *logrus.Logger,db *pgxpool.Pool,val *validator.Validate,refreshTokens *RefreshTokenStore) UserUseCase {
 	return &UserUseCaseImpl{
 		UserRepository: userRepository,
 		Log: log,
 		Validate: val,
 		DB: db,
+		RefreshTokens: refreshTokens,
 	}
 }
 
@@ -148,6 +152,15 @@ func (c *UserUseCaseImpl) DeleteUser(ctx context.Context,UserId string) (error) 
 	if err != nil {
 		c.Log.Warnf("Error deleting user: %v", err)
 		return fiber.ErrInternalServerError
+	}
+
+	// Defense in depth: Refresh already rejects inactive users, but drop their
+	// refresh tokens right away too. The account is already deactivated, so a
+	// failure here is logged, not returned.
+	if c.RefreshTokens != nil {
+		if err := c.RefreshTokens.RevokeAll(ctx,user.UserId); err != nil {
+			c.Log.Errorf("DeleteUser: user %s deactivated but failed to revoke refresh tokens: %+v", user.UserId, err)
+		}
 	}
 
 	return nil

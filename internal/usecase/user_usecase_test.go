@@ -11,7 +11,7 @@ import (
 )
 
 func TestNewUserUseCase(t *testing.T) {
-	uc := NewUserUseCase(nil, nil, nil, validator.New())
+	uc := NewUserUseCase(nil, nil, nil, validator.New(), nil)
 	if uc == nil {
 		t.Fatal("expected usecase instance")
 	}
@@ -19,7 +19,7 @@ func TestNewUserUseCase(t *testing.T) {
 
 func TestGetDeletedUsers_ReturnsEmptySlice(t *testing.T) {
 	repo := &mockUserRepo{}
-	uc := NewUserUseCase(repo, discardLogger(), nil, validator.New())
+	uc := NewUserUseCase(repo, discardLogger(), nil, validator.New(), nil)
 
 	users, _, err := uc.GetDeletedUsers(context.Background(), 1, 10, "")
 	if err != nil {
@@ -36,7 +36,7 @@ func TestRestoreUser_NotFound(t *testing.T) {
 			return nil, pgx.ErrNoRows
 		},
 	}
-	uc := NewUserUseCase(repo, discardLogger(), nil, validator.New())
+	uc := NewUserUseCase(repo, discardLogger(), nil, validator.New(), nil)
 
 	_, err := uc.RestoreUser(context.Background(), "non-existent-id")
 	if err != fiber.ErrNotFound {
@@ -51,7 +51,7 @@ func TestRestoreUser_AlreadyActive_ReturnsConflict(t *testing.T) {
 			return activeUser, nil
 		},
 	}
-	uc := NewUserUseCase(repo, discardLogger(), nil, validator.New())
+	uc := NewUserUseCase(repo, discardLogger(), nil, validator.New(), nil)
 
 	_, err := uc.RestoreUser(context.Background(), "abc")
 	if err != fiber.ErrConflict {
@@ -66,7 +66,7 @@ func TestRestoreUser_Success(t *testing.T) {
 			return inactiveUser, nil
 		},
 	}
-	uc := NewUserUseCase(repo, discardLogger(), nil, validator.New())
+	uc := NewUserUseCase(repo, discardLogger(), nil, validator.New(), nil)
 
 	res, err := uc.RestoreUser(context.Background(), "xyz")
 	if err != nil {
