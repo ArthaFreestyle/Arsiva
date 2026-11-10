@@ -30,6 +30,9 @@ Every repository, use case, and controller is defined as an `interface` paired w
 - **Gamification** — XP/levels, public & group leaderboards, **daily streaks** (with freeze shields), and **daily tasks** (member-only).
 - **Assets** — uploaded images (with webp support) and a 24h cron that cleans up orphaned files.
 
+For one-time server cleanup of historical orphan files and group relations, see
+[the cleanup guide](docs/cleanup-orphans.md) (dry-run and offline apply commands).
+
 ## Tech Stack
 
 - **Go 1.25** — https://github.com/golang/go
