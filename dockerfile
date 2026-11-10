@@ -11,6 +11,7 @@ RUN go mod download
 COPY . .
 # KUNCI 1: Hapus GOARCH, dan tambahin flag -extldflags "-static" biar C library-nya dibungkus mati ke dalam binary
 RUN CGO_ENABLED=1 GOOS=linux go build -a -ldflags '-linkmode external -extldflags "-static" -s -w' -trimpath -o server_app ./cmd/web/main.go
+RUN CGO_ENABLED=0 go build -trimpath -o cleanup-orphans ./cmd/cleanup-orphans
 FROM alpine:latest
 
 RUN apk add --no-cache ca-certificates tzdata
@@ -18,6 +19,7 @@ RUN apk add --no-cache ca-certificates tzdata
 WORKDIR /app
 
 COPY --from=builder /app/server_app .
+COPY --from=builder /app/cleanup-orphans .
 COPY --from=builder /app/docs ./docs
 
 ENV TZ=Asia/Jakarta
