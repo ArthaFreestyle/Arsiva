@@ -17,28 +17,32 @@ type ProgressAnswerRequest struct {
 }
 
 type ProgressSceneRequest struct {
-	ContentType string `json:"content_type"  validate:"required,oneof=cerita"`
-	ContentId   int    `json:"content_id"    validate:"required,gt=0"`
-	SceneId     int    `json:"scene_id"      validate:"required,gt=0"`
+	CompletionID string `json:"completion_id"`
+	ContentType  string `json:"content_type"  validate:"required,oneof=cerita"`
+	ContentId    int    `json:"content_id"    validate:"required,gt=0"`
+	SceneId      int    `json:"scene_id"      validate:"required,gt=0"`
 }
 
 type ProgressSolveRequest struct {
-	ContentType string `json:"content_type"  validate:"required,oneof=puzzle"`
-	ContentId   int    `json:"content_id"    validate:"required,gt=0"`
-	Solved      bool   `json:"solved"`
+	CompletionID string `json:"completion_id"`
+	ContentType  string `json:"content_type"  validate:"required,oneof=puzzle"`
+	ContentId    int    `json:"content_id"    validate:"required,gt=0"`
+	Solved       bool   `json:"solved"`
 }
 
 type ProgressSubmitRequest struct {
-	ContentType string `json:"content_type"  validate:"required,oneof=kuis cerita puzzle"`
-	ContentId   int    `json:"content_id"    validate:"required,gt=0"`
+	CompletionID string `json:"completion_id"`
+	ContentType  string `json:"content_type"  validate:"required,oneof=kuis cerita puzzle"`
+	ContentId    int    `json:"content_id"    validate:"required,gt=0"`
 }
 
 // ==================== Responses ====================
 
 type ProgressStartResponse struct {
-	SessionKey string `json:"session_key"`
-	ExpiresAt  int64  `json:"expires_at"`
-	MaxScore   int    `json:"max_score"`
+	CompletionID string `json:"completion_id"`
+	SessionKey   string `json:"session_key"`
+	ExpiresAt    int64  `json:"expires_at"`
+	MaxScore     int    `json:"max_score"`
 }
 
 type ProgressAnswerResponse struct {
@@ -46,6 +50,7 @@ type ProgressAnswerResponse struct {
 }
 
 type ProgressSessionResponse struct {
+	CompletionID    string         `json:"completion_id"`
 	SessionKey      string         `json:"session_key"`
 	MemberId        string         `json:"member_id"`
 	GroupId         string         `json:"group_id"`
@@ -60,10 +65,18 @@ type ProgressSessionResponse struct {
 }
 
 type ProgressFinalizeResponse struct {
-	ProgresId     int  `json:"progres_id"`
-	LeveledUp     bool `json:"leveled_up"`
-	PreviousLevel int  `json:"previous_level"`
-	NewLevel      int  `json:"new_level"`
+	CompletionID              string                `json:"completion_id"`
+	Skor                      int                   `json:"skor"`
+	AwardedXP                 int                   `json:"awarded_xp"`
+	BonusXP                   int                   `json:"bonus_xp"`
+	TotalAwardedXP            int                   `json:"total_awarded_xp"`
+	TotalXP                   int                   `json:"total_xp"`
+	NewlyUnlockedAchievements []UnlockedAchievement `json:"newly_unlocked_achievements"`
+	Notifications             []Notification        `json:"notifications"`
+	ProgresId                 int                   `json:"progres_id"`
+	LeveledUp                 bool                  `json:"leveled_up"`
+	PreviousLevel             int                   `json:"previous_level"`
+	NewLevel                  int                   `json:"new_level"`
 	// EndingType is the ending the member reached (cerita only); empty/omitted for
 	// kuis and puzzle finalizes, which have no ending.
 	EndingType string `json:"ending_type,omitempty"`

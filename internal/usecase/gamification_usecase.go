@@ -19,11 +19,6 @@ var streakLocation, _ = time.LoadLocation("Asia/Jakarta")
 type GamificationUseCase interface {
 	GetStreak(ctx context.Context, claims *model.Claims) (*model.StreakResponse, error)
 	GetTodayTasks(ctx context.Context, claims *model.Claims) (*model.DailyTasksResponse, error)
-
-	// HandleContentFinished updates streak and daily-task progress after a member
-	// finishes any content. Errors are expected to be logged and swallowed by the caller
-	// so they never roll back the already-committed progress record.
-	HandleContentFinished(ctx context.Context, memberId int, contentType string, awardedXp int) error
 }
 
 type gamificationUseCaseImpl struct {
@@ -87,28 +82,6 @@ func (u *gamificationUseCaseImpl) GetTodayTasks(ctx context.Context, claims *mod
 	return buildDailyTasksResponse(tasks, today), nil
 }
 
-// ─── HandleContentFinished ───────────────────────────────────────────────────
-
-func (u *gamificationUseCaseImpl) HandleContentFinished(ctx context.Context, memberId int, contentType string, awardedXp int) error {
-	today := todayInJakarta()
-
-	if _, err := u.Repo.UpdateStreakAtomic(ctx, memberId, func(streak *entity.MemberStreak) {
-		applyStreakRules(streak, today)
-	}); err != nil {
-		return err
-	}
-
-	if err := u.Repo.ProgressDailyTasks(ctx, memberId, today, contentType, awardedXp); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// ─── Streak rules (pure — no DB calls) ───────────────────────────────────────
-
-// applyStreakRules applies the streak advancement rules (1–6) in-place.
-// Called inside the FOR UPDATE transaction so concurrent finishes are serialized.
 func applyStreakRules(streak *entity.MemberStreak, today time.Time) {
 	// Rule 1: already counted today — nothing to change.
 	if streak.LastActiveDate != nil && sameDay(*streak.LastActiveDate, today) {

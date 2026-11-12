@@ -290,7 +290,7 @@ Because scoring is server-side, member-facing **get-by-id** endpoints must not s
 - List endpoints (`GET /v1/quizzes`, `/v1/stories`) don't embed `Soal`/`Scenes` (`omitempty` + the list query skips them), so the leak only ever affects get-by-id.
 
 ### Gamification (`GamificationUseCase`)
-`Finalize` → `HandleContentFinished` drives streaks, daily tasks, XP totals, and level-ups (`internal/utils/level.go`). XP is awarded **once per content per member** (dedup on `member_progres`); crossing a level threshold auto-levels-up.
+`Finalize` → transactional `CompletionRepository.Complete` drives streaks, daily tasks, XP totals, and level-ups (`internal/utils/level.go`). XP is awarded **once per content per member** (dedup on `member_progres`); crossing a level threshold auto-levels-up.
 
 ## Analytics (super_admin dashboard)
 
@@ -473,3 +473,5 @@ Always ensure tests pass locally before pushing:
 ```bash
 go test ./...
 ```
+
+Achievement auto-award and persistent inbox use the same PostgreSQL completion transaction, member row lock, and replay snapshot. The deprecated POST achievement adapter calls the same evaluator. See `docs/achievements-notifications.md` for retry, frontend rollout and reconciliation.

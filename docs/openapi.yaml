@@ -7,7 +7,7 @@ info:
     ## Autentikasi
 
     Semua endpoint (kecuali Login dan GET uploaded files) memerlukan JWT Bearer
-    token. \ 
+    token. \
 
     Dapatkan token melalui endpoint `POST /v1/login`.
 
@@ -116,7 +116,7 @@ tags:
   - name: Achievements
     description: "CRUD badge/achievement catalog (🔒 GET = semua role, POST/PUT/DELETE = super_admin)"
   - name: Member Achievements
-    description: "Unlock & baca achievement milik member yang sedang login (🔒 member only)"
+    description: "Pemberian otomatis dan baca achievement milik member yang sedang login (🔒 member only)"
   - name: Game Progress
     description: "Sesi bermain quiz / cerita / puzzle — scoring real-time via Redis, flush ke member_progress saat selesai (🔒 member only)"
   - name: Leaderboard
@@ -126,6 +126,111 @@ tags:
   - name: Analytics
     description: "Data dashboard admin: ringkasan pengguna & konten serta grafik pertumbuhan. Endpoint saling independen agar FE bisa fetch paralel (🔒 super_admin only)"
 paths:
+  /v1/member/notifications:
+    get:
+      tags:
+      - Member Notifications
+      summary: List persistent inbox, including read items by default
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/MemberNotification'
+                  paging:
+                    type: object
+                    properties:
+                      page:
+                        type: integer
+                      size:
+                        type: integer
+                      total_item:
+                        type: integer
+                      total_page:
+                        type: integer
+        '401':
+          description: Authentication required
+        '403':
+          description: Member role and completed profile required
+      parameters:
+      - name: page
+        in: query
+        schema:
+          type: integer
+          default: 1
+      - name: size
+        in: query
+        schema:
+          type: integer
+          default: 20
+      - name: unread_only
+        in: query
+        schema:
+          type: boolean
+          default: false
+      description: Ordered by created_at DESC, notification_id DESC. GET never marks
+        read. Size 1..50; invalid size defaults to 10. Includes paging {page,size,total_item,total_page}.
+  /v1/member/notifications/unread-count:
+    get:
+      tags:
+      - Member Notifications
+      summary: Unread notification count
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      count:
+                        type: integer
+        '401':
+          description: Authentication required
+        '403':
+          description: Member role and completed profile required
+  /v1/member/notifications/{notification_id}/read:
+    patch:
+      tags:
+      - Member Notifications
+      summary: Mark read idempotently
+      security:
+      - BearerAuth: []
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/MemberNotification'
+        '401':
+          description: Authentication required
+        '403':
+          description: Member role and completed profile required
+        '404':
+          description: Not found or belongs to another member
+      parameters:
+      - name: notification_id
+        in: path
+        required: true
+        schema:
+          type: string
   /v1/login:
     post:
       tags:
@@ -623,7 +728,7 @@ paths:
       tags:
         - Users
       summary: Get all users
-      description: "Mengambil user yang aktif (`is_active = true`) dengan paginasi, diurutkan dari yang terbaru; `search` mencocokkan username atau email; `role` memfilter berdasarkan role. \ 
+      description: "Mengambil user yang aktif (`is_active = true`) dengan paginasi, diurutkan dari yang terbaru; `search` mencocokkan username atau email; `role` memfilter berdasarkan role. \
 
         🔒 **Role**: `super_admin`\n"
       operationId: getAllUsers
@@ -689,9 +794,9 @@ paths:
         - Users
       summary: Create user
       description: "Membuat user baru. Password akan di-hash menggunakan bcrypt (cost
-        12). \ 
+        12). \
 
-        Semua field wajib diisi. \ 
+        Semua field wajib diisi. \
 
         🔒 **Role**: `super_admin`\n"
       operationId: createUser
@@ -851,7 +956,7 @@ paths:
       tags:
         - Users
       summary: Get user by ID
-      description: "Mengambil detail satu user berdasarkan `user_id`. \ 
+      description: "Mengambil detail satu user berdasarkan `user_id`. \
 
         🔒 **Role**: `super_admin`\n"
       operationId: getUserById
@@ -885,9 +990,9 @@ paths:
         - Users
       summary: Update user
       description: "Mengupdate data user. Semua field harus diisi termasuk password
-        baru. \ 
+        baru. \
 
-        Password akan di-hash ulang. \ 
+        Password akan di-hash ulang. \
 
         🔒 **Role**: `super_admin`\n"
       operationId: updateUser
@@ -938,9 +1043,9 @@ paths:
         - Users
       summary: Delete user (soft delete)
       description: "Melakukan **soft delete** — mengubah `is_active` menjadi `false`.
-        \ 
+        \
 
-        Data user tetap ada di database. \ 
+        Data user tetap ada di database. \
 
         🔒 **Role**: `super_admin`\n"
       operationId: deleteUser
@@ -1504,11 +1609,11 @@ paths:
       tags:
         - Articles
       summary: Create article (draft)
-      description: "Membuat artikel baru dengan status **draft**. \ 
+      description: "Membuat artikel baru dengan status **draft**. \
 
-        Hanya memerlukan `title`, `category_id`, dan `created_by`. \ 
+        Hanya memerlukan `title`, `category_id`, dan `created_by`. \
 
-        Slug otomatis di-generate dari judul. \ 
+        Slug otomatis di-generate dari judul. \
 
         🔒 **Role**: `guru`, `super_admin`\n"
       operationId: createArticle
@@ -1612,9 +1717,9 @@ paths:
         - Articles
       summary: Update article
       description: "Update artikel dengan konten lengkap dari Block-Based Editor
-        (BSON). \ 
+        (BSON). \
 
-        Slug dan excerpt otomatis di-generate ulang. \ 
+        Slug dan excerpt otomatis di-generate ulang. \
 
         🔒 **Role**: `guru`, `super_admin`\n"
       operationId: updateArticle
@@ -1656,7 +1761,7 @@ paths:
       tags:
         - Articles
       summary: Delete article (soft delete)
-      description: "Mengubah `is_active` menjadi `false`. \ 
+      description: "Mengubah `is_active` menjadi `false`. \
 
         🔒 **Role**: `guru`, `super_admin`\n"
       operationId: deleteArticle
@@ -2281,7 +2386,7 @@ paths:
       tags:
         - Quizzes
       summary: Create quiz
-      description: "Membuat kuis baru beserta soal dan pilihan gandanya. \ 
+      description: "Membuat kuis baru beserta soal dan pilihan gandanya. \
 
         🔒 **Role**: `guru`, `super_admin`\n"
       operationId: createQuiz
@@ -2330,7 +2435,7 @@ paths:
       tags:
         - Quizzes
       summary: Get quiz by ID
-      description: "Get kuis lengkap beserta pertanyaan dan pilihan ganda. \ 
+      description: "Get kuis lengkap beserta pertanyaan dan pilihan ganda. \
 
         🔒 **Role**: `member`, `guru`, `super_admin`\n"
       operationId: getQuizById
@@ -2354,7 +2459,7 @@ paths:
         - Quizzes
       summary: Update quiz
       description: "Update kuis, pertanyaan, dan pilihan ganda. Ini akan me-replace
-        pertanyaan dan pilihan lama. \ 
+        pertanyaan dan pilihan lama. \
 
         🔒 **Role**: `guru`, `super_admin`\n"
       operationId: updateQuiz
@@ -2427,7 +2532,7 @@ paths:
       tags:
         - Stories
       summary: Get all stories
-      description: "Mengambil semua cerita interaktif. \ 
+      description: "Mengambil semua cerita interaktif. \
 
         🔒 **Role**: `member`, `guru`, `super_admin`\n"
       operationId: getAllStories
@@ -2455,7 +2560,7 @@ paths:
         - Stories
       summary: Create story
       description: "Membuat cerita interaktif baru (draft) hanya dengan metadata
-        cerita. \ 
+        cerita. \
 
         🔒 **Role**: `guru`, `super_admin`\n"
       operationId: createStory
@@ -2504,7 +2609,7 @@ paths:
       tags:
         - Stories
       summary: Get story by ID
-      description: "Mengambil detail cerita interaktif beserta scene-scene-nya. \ 
+      description: "Mengambil detail cerita interaktif beserta scene-scene-nya. \
 
         🔒 **Role**: `member`, `guru`, `super_admin`\n"
       operationId: getStoryById
@@ -2531,7 +2636,7 @@ paths:
       tags:
         - Stories
       summary: Update story
-      description: "Update metadata cerita interaktif (termasuk status publish). \ 
+      description: "Update metadata cerita interaktif (termasuk status publish). \
 
         🔒 **Role**: `guru`, `super_admin`\n"
       operationId: updateStory
@@ -2611,7 +2716,7 @@ paths:
       tags:
         - Stories
       summary: Create scene
-      description: "Menambahkan satu scene ke cerita interaktif. \ 
+      description: "Menambahkan satu scene ke cerita interaktif. \
 
         🔒 **Role**: `guru`, `super_admin`\n"
       operationId: createStoryScene
@@ -2666,7 +2771,7 @@ paths:
       tags:
         - Stories
       summary: Update scene
-      description: "Update satu scene pada cerita interaktif. \ 
+      description: "Update satu scene pada cerita interaktif. \
 
         🔒 **Role**: `guru`, `super_admin`\n"
       operationId: updateStoryScene
@@ -2707,7 +2812,7 @@ paths:
       tags:
         - Stories
       summary: Delete scene
-      description: "Hapus satu scene pada cerita interaktif. \ 
+      description: "Hapus satu scene pada cerita interaktif. \
 
         🔒 **Role**: `guru`, `super_admin`\n"
       operationId: deleteStoryScene
@@ -4337,88 +4442,88 @@ paths:
   /v1/member/achievements:
     post:
       tags:
-        - Member Achievements
-      summary: Unlock achievement
-      description: "Member merekam unlock achievement baru. `member_id` diambil dari JWT claims — jangan kirim di body. `unlocked_at` di-set server.\n\n🔒 **Role**: `member`\n"
+      - Member Achievements
+      summary: Adapter evaluasi achievement otomatis
+      description: 'Deprecated compatibility adapter: evaluates every eligible XP achievement under the same member
+        lock as completion. Repeated requests return the selected owned achievement without duplicate notifications.
+        Remove after coordinated frontend cutover; use completion notifications for presentation.'
       operationId: createMemberAchievement
       security:
-        - BearerAuth: []
+      - BearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/MemberAchievementCreateRequest"
+              $ref: '#/components/schemas/MemberAchievementCreateRequest'
       responses:
-        "201":
+        '201':
           description: Achievement berhasil di-unlock
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/MemberAchievementResponseWrapper"
-        "400":
+                $ref: '#/components/schemas/MemberAchievementResponseWrapper'
+        '400':
           description: Validasi gagal (achievement_id kosong / bukan angka)
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "403":
-          description: "XP belum mencukupi atau claims tidak valid"
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: XP belum mencukupi atau claims tidak valid
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                $ref: '#/components/schemas/ErrorResponse'
               example:
                 errors: XP belum mencukupi untuk membuka achievement ini
-        "404":
+        '404':
           description: Achievement tidak ditemukan
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "409":
-          description: Achievement sudah pernah di-unlock
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-              example:
-                errors: achievement sudah pernah di-unlock
-        "401":
-          $ref: "#/components/responses/UnauthorizedResponse"
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+      deprecated: true
     get:
       tags:
-        - Member Achievements
+      - Member Achievements
       summary: Daftar achievement yang di-unlock member
-      description: "Mengembalikan semua achievement yang sudah di-unlock oleh member yang sedang login.\n\n🔒 **Role**: `member`\n"
+      description: 'Mengembalikan semua achievement yang sudah di-unlock oleh member yang sedang login.
+
+
+        🔒 **Role**: `member`
+
+        '
       operationId: listMemberAchievements
       security:
-        - BearerAuth: []
+      - BearerAuth: []
       parameters:
-        - name: page
-          in: query
-          schema:
-            type: integer
-            default: 1
-        - name: size
-          in: query
-          description: Item per halaman (1-50, di luar rentang dianggap 10)
-          schema:
-            type: integer
-            default: 10
+      - name: page
+        in: query
+        schema:
+          type: integer
+          default: 1
+      - name: size
+        in: query
+        description: Item per halaman (1-50, di luar rentang dianggap 10)
+        schema:
+          type: integer
+          default: 10
       responses:
-        "200":
+        '200':
           description: Daftar achievement member
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/MemberAchievementListResponseWrapper"
-        "401":
-          $ref: "#/components/responses/UnauthorizedResponse"
-        "403":
-          $ref: "#/components/responses/ForbiddenResponse"
-        "409":
-          $ref: "#/components/responses/ProfileIncompleteResponse"
+                $ref: '#/components/schemas/MemberAchievementListResponseWrapper'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '403':
+          $ref: '#/components/responses/ForbiddenResponse'
+        '409':
+          $ref: '#/components/responses/ProfileIncompleteResponse'
   /v1/member/achievements/{achievement_id}:
     get:
       tags:
@@ -4456,25 +4561,26 @@ paths:
   /v1/member/achievements/{member_id}/{achievement_id}:
     delete:
       tags:
-        - Member Achievements
+      - Member Achievements
       summary: Hapus unlock achievement (super_admin)
-      description: "Menghapus unlock achievement tertentu milik member. Hanya untuk koreksi data.\n\n🔒 **Role**: `super_admin`\n"
+      description: 'Admin data correction, not permanent revocation: eligible achievements may be awarded again at
+        next completion/reconciliation. Existing notification dedupe keys are retained.'
       operationId: deleteMemberAchievement
       security:
-        - BearerAuth: []
+      - BearerAuth: []
       parameters:
-        - name: member_id
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: achievement_id
-          in: path
-          required: true
-          schema:
-            type: string
+      - name: member_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: achievement_id
+        in: path
+        required: true
+        schema:
+          type: string
       responses:
-        "200":
+        '200':
           description: Achievement unlock berhasil dihapus
           content:
             application/json:
@@ -4484,16 +4590,16 @@ paths:
                   data:
                     type: string
                     example: Member achievement deleted successfully
-        "401":
-          $ref: "#/components/responses/UnauthorizedResponse"
-        "403":
-          $ref: "#/components/responses/ForbiddenResponse"
-        "404":
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '403':
+          $ref: '#/components/responses/ForbiddenResponse'
+        '404':
           description: Unlock tidak ditemukan
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                $ref: '#/components/schemas/ErrorResponse'
   /v1/achievements:
     get:
       tags:
@@ -4825,111 +4931,291 @@ paths:
   /v1/progress/scene:
     post:
       tags:
-        - Game Progress
+      - Game Progress
       summary: Rekam scene yang dikunjungi (cerita)
-      description: "Mencatat bahwa member mencapai scene tertentu. Jika `is_ending = true`, skor di-set ke `ending_point` scene tersebut dan sesi langsung di-finalize (ditulis ke Postgres).\n\nAturan:\n- `scene_id` harus milik `content_id` (cerita) yang sama\n\n🔒 **Role**: `member`\n"
+      description: 'Finalization atomically persists progress, content XP, daily bonuses, final level, eligible achievements,
+        notifications and replay snapshot. Send completion_id from start. A non-ending scene still returns data: null.
+        The expired-session worker uses the same transaction but sends no push. Replay returns the original snapshot
+        including original read_at; current read state comes from inbox. Retry 409/503 with the same completion_id;
+        processing is bounded to 15 seconds.'
       operationId: submitProgressScene
       security:
-        - BearerAuth: []
+      - BearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ProgressSceneRequest"
+              $ref: '#/components/schemas/ProgressSceneRequest'
       responses:
-        "200":
-          description: "Scene dicatat. Jika bukan ending: `data` = null. Jika ending: `data` berisi `progres_id`."
+        '200':
+          description: 'Scene dicatat. Jika bukan ending: `data` = null. Jika ending: `data` berisi `progres_id`.'
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ProgressFinalizeResponseWrapper"
-        "400":
+                $ref: '#/components/schemas/ProgressFinalizeResponseWrapper'
+              examples:
+                noUnlock:
+                  value:
+                    data:
+                      progres_id: 123
+                      completion_id: 5c489677-7ed1-42b2-8c87-c337e64854ea
+                      skor: 100
+                      awarded_xp: 0
+                      bonus_xp: 0
+                      total_awarded_xp: 0
+                      total_xp: 400
+                      leveled_up: false
+                      previous_level: 2
+                      new_level: 2
+                      newly_unlocked_achievements: []
+                      notifications: []
+                bonusLevelUp:
+                  value:
+                    data: &scene_id001
+                      progres_id: 123
+                      completion_id: 5c489677-7ed1-42b2-8c87-c337e64854ea
+                      skor: 100
+                      awarded_xp: 0
+                      bonus_xp: 20
+                      total_awarded_xp: 20
+                      total_xp: 410
+                      leveled_up: true
+                      previous_level: 1
+                      new_level: 2
+                      newly_unlocked_achievements:
+                      - achievement_id: '3'
+                        nama: Kolektor EXP
+                        badge_icon: /assets/collector.png
+                        tier: bronze
+                        unlocked_at: '2026-11-12T10:00:00Z'
+                        notification_id: '901'
+                      notifications:
+                      - notification_id: '901'
+                        type: achievement_unlocked
+                        title: Achievement baru!
+                        message: Kamu mendapatkan Kolektor EXP.
+                        payload:
+                          achievement_id: '3'
+                          nama: Kolektor EXP
+                          badge_icon: /assets/collector.png
+                          tier: bronze
+                        created_at: '2026-11-12T10:00:00Z'
+                        read_at: null
+                replay:
+                  summary: Same snapshot and notification ID, even after inbox read
+                  value:
+                    data: *scene_id001
+        '400':
           description: Validasi gagal atau scene tidak ada dalam cerita ini
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          $ref: "#/components/responses/UnauthorizedResponse"
-        "403":
-          $ref: "#/components/responses/ForbiddenResponse"
-        "404":
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '403':
+          $ref: '#/components/responses/ForbiddenResponse'
+        '404':
           description: Sesi tidak ditemukan
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Session mismatch or being processed; retry same completion_id
+        '503':
+          description: Processing deadline reached; retry same completion_id
   /v1/progress/solve:
     post:
       tags:
-        - Game Progress
+      - Game Progress
       summary: Submit hasil solve puzzle
-      description: "Mencatat apakah puzzle berhasil diselesaikan (`solved: true` → skor 1, `false` → skor 0). Sesi langsung di-finalize setelah endpoint ini dipanggil.\n\n🔒 **Role**: `member`\n"
+      description: 'Finalization atomically persists progress, content XP, daily bonuses, final level, eligible achievements,
+        notifications and replay snapshot. Send completion_id from start. A non-ending scene still returns data: null.
+        The expired-session worker uses the same transaction but sends no push. Replay returns the original snapshot
+        including original read_at; current read state comes from inbox. Retry 409/503 with the same completion_id;
+        processing is bounded to 15 seconds.'
       operationId: submitProgressSolve
       security:
-        - BearerAuth: []
+      - BearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ProgressSolveRequest"
+              $ref: '#/components/schemas/ProgressSolveRequest'
       responses:
-        "200":
+        '200':
           description: Puzzle dicatat dan sesi di-finalize
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ProgressFinalizeResponseWrapper"
-        "400":
+                $ref: '#/components/schemas/ProgressFinalizeResponseWrapper'
+              examples:
+                noUnlock:
+                  value:
+                    data:
+                      progres_id: 123
+                      completion_id: 5c489677-7ed1-42b2-8c87-c337e64854ea
+                      skor: 100
+                      awarded_xp: 0
+                      bonus_xp: 0
+                      total_awarded_xp: 0
+                      total_xp: 400
+                      leveled_up: false
+                      previous_level: 2
+                      new_level: 2
+                      newly_unlocked_achievements: []
+                      notifications: []
+                bonusLevelUp:
+                  value:
+                    data: &solve_id001
+                      progres_id: 123
+                      completion_id: 5c489677-7ed1-42b2-8c87-c337e64854ea
+                      skor: 100
+                      awarded_xp: 0
+                      bonus_xp: 20
+                      total_awarded_xp: 20
+                      total_xp: 410
+                      leveled_up: true
+                      previous_level: 1
+                      new_level: 2
+                      newly_unlocked_achievements:
+                      - achievement_id: '3'
+                        nama: Kolektor EXP
+                        badge_icon: /assets/collector.png
+                        tier: bronze
+                        unlocked_at: '2026-11-12T10:00:00Z'
+                        notification_id: '901'
+                      notifications:
+                      - notification_id: '901'
+                        type: achievement_unlocked
+                        title: Achievement baru!
+                        message: Kamu mendapatkan Kolektor EXP.
+                        payload:
+                          achievement_id: '3'
+                          nama: Kolektor EXP
+                          badge_icon: /assets/collector.png
+                          tier: bronze
+                        created_at: '2026-11-12T10:00:00Z'
+                        read_at: null
+                replay:
+                  summary: Same snapshot and notification ID, even after inbox read
+                  value:
+                    data: *solve_id001
+        '400':
           description: Validasi gagal
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          $ref: "#/components/responses/UnauthorizedResponse"
-        "403":
-          $ref: "#/components/responses/ForbiddenResponse"
-        "404":
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '403':
+          $ref: '#/components/responses/ForbiddenResponse'
+        '404':
           description: Sesi tidak ditemukan
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Session mismatch or being processed; retry same completion_id
+        '503':
+          description: Processing deadline reached; retry same completion_id
   /v1/progress/submit:
     post:
       tags:
-        - Game Progress
+      - Game Progress
       summary: Submit manual (kuis)
-      description: "Finalisasi manual untuk sesi kuis — menulis satu baris `member_progress` ke Postgres, menghapus sesi Redis, dan (jika skor sempurna) menambah `total_xp` member.\n\n**Catatan**: Untuk `cerita` dan `puzzle`, finalize otomatis terjadi saat endpoint `/scene` (ending) atau `/solve` dipanggil.\n\n🔒 **Role**: `member`\n"
+      description: 'Finalization atomically persists progress, content XP, daily bonuses, final level, eligible achievements,
+        notifications and replay snapshot. Send completion_id from start. A non-ending scene still returns data: null.
+        The expired-session worker uses the same transaction but sends no push. Replay returns the original snapshot
+        including original read_at; current read state comes from inbox. Retry 409/503 with the same completion_id;
+        processing is bounded to 15 seconds.'
       operationId: submitProgressManual
       security:
-        - BearerAuth: []
+      - BearerAuth: []
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/ProgressSubmitRequest"
+              $ref: '#/components/schemas/ProgressSubmitRequest'
       responses:
-        "200":
+        '200':
           description: Sesi di-finalize, progres tersimpan ke database
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ProgressFinalizeResponseWrapper"
-        "400":
+                $ref: '#/components/schemas/ProgressFinalizeResponseWrapper'
+              examples:
+                noUnlock:
+                  value:
+                    data:
+                      progres_id: 123
+                      completion_id: 5c489677-7ed1-42b2-8c87-c337e64854ea
+                      skor: 100
+                      awarded_xp: 0
+                      bonus_xp: 0
+                      total_awarded_xp: 0
+                      total_xp: 400
+                      leveled_up: false
+                      previous_level: 2
+                      new_level: 2
+                      newly_unlocked_achievements: []
+                      notifications: []
+                bonusLevelUp:
+                  value:
+                    data: &submit_id001
+                      progres_id: 123
+                      completion_id: 5c489677-7ed1-42b2-8c87-c337e64854ea
+                      skor: 100
+                      awarded_xp: 0
+                      bonus_xp: 20
+                      total_awarded_xp: 20
+                      total_xp: 410
+                      leveled_up: true
+                      previous_level: 1
+                      new_level: 2
+                      newly_unlocked_achievements:
+                      - achievement_id: '3'
+                        nama: Kolektor EXP
+                        badge_icon: /assets/collector.png
+                        tier: bronze
+                        unlocked_at: '2026-11-12T10:00:00Z'
+                        notification_id: '901'
+                      notifications:
+                      - notification_id: '901'
+                        type: achievement_unlocked
+                        title: Achievement baru!
+                        message: Kamu mendapatkan Kolektor EXP.
+                        payload:
+                          achievement_id: '3'
+                          nama: Kolektor EXP
+                          badge_icon: /assets/collector.png
+                          tier: bronze
+                        created_at: '2026-11-12T10:00:00Z'
+                        read_at: null
+                replay:
+                  summary: Same snapshot and notification ID, even after inbox read
+                  value:
+                    data: *submit_id001
+        '400':
           description: Validasi gagal
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "401":
-          $ref: "#/components/responses/UnauthorizedResponse"
-        "403":
-          $ref: "#/components/responses/ForbiddenResponse"
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedResponse'
+        '403':
+          $ref: '#/components/responses/ForbiddenResponse'
+        '409':
+          description: Session mismatch or being processed; retry same completion_id
+        '503':
+          description: Processing deadline reached; retry same completion_id
   /v1/progress/session/{content_type}/{content_id}:
     get:
       tags:
@@ -5374,6 +5660,63 @@ components:
 
         Token berisi claims: `user_id`, `email`, `username`, `role`, `details` (role-specific: `GuruDetails` untuk guru, `MemberDetails` untuk member, `null` untuk super_admin)\n"
   schemas:
+    AchievementPayload:
+      type: object
+      required:
+      - achievement_id
+      - nama
+      - badge_icon
+      - tier
+      properties:
+        achievement_id:
+          type: string
+        nama:
+          type: string
+        badge_icon:
+          type: string
+        tier:
+          type: string
+    UnlockedAchievement:
+      allOf:
+      - $ref: '#/components/schemas/AchievementPayload'
+      - type: object
+        required:
+        - unlocked_at
+        - notification_id
+        properties:
+          unlocked_at:
+            type: string
+            format: date-time
+          notification_id:
+            type: string
+    MemberNotification:
+      type: object
+      required:
+      - notification_id
+      - type
+      - title
+      - message
+      - payload
+      - created_at
+      - read_at
+      properties:
+        notification_id:
+          type: string
+        type:
+          type: string
+        title:
+          type: string
+        message:
+          type: string
+        payload:
+          $ref: '#/components/schemas/AchievementPayload'
+        created_at:
+          type: string
+          format: date-time
+        read_at:
+          type: string
+          format: date-time
+          nullable: true
     RegisterRequest:
       type: object
       required:
@@ -7310,13 +7653,14 @@ components:
     ProgressSceneRequest:
       type: object
       required:
-        - content_type
-        - content_id
-        - scene_id
+      - content_type
+      - content_id
+      - scene_id
       properties:
         content_type:
           type: string
-          enum: [cerita]
+          enum:
+          - cerita
           example: cerita
         content_id:
           type: integer
@@ -7326,16 +7670,21 @@ components:
           type: integer
           minimum: 1
           example: 18
+        completion_id:
+          type: string
+          description: Backend UUID returned at start. Send on every finalize request and retry; retained snapshots
+            remain available after Redis cleanup. Omission is supported only for legacy active-session requests.
     ProgressSolveRequest:
       type: object
       required:
-        - content_type
-        - content_id
-        - solved
+      - content_type
+      - content_id
+      - solved
       properties:
         content_type:
           type: string
-          enum: [puzzle]
+          enum:
+          - puzzle
           example: puzzle
         content_id:
           type: integer
@@ -7344,27 +7693,38 @@ components:
         solved:
           type: boolean
           example: true
+        completion_id:
+          type: string
+          description: Backend UUID returned at start. Send on every finalize request and retry; retained snapshots
+            remain available after Redis cleanup. Omission is supported only for legacy active-session requests.
     ProgressSubmitRequest:
       type: object
       required:
-        - content_type
-        - content_id
+      - content_type
+      - content_id
       properties:
         content_type:
           type: string
-          enum: [kuis, cerita, puzzle]
+          enum:
+          - kuis
+          - cerita
+          - puzzle
           example: kuis
         content_id:
           type: integer
           minimum: 1
           example: 3
+        completion_id:
+          type: string
+          description: Backend UUID returned at start. Send on every finalize request and retry; retained snapshots
+            remain available after Redis cleanup. Omission is supported only for legacy active-session requests.
     ProgressStartResponse:
       type: object
       properties:
         session_key:
           type: string
-          description: "Redis key untuk sesi ini (format: `progress:session:{member_id}:{content_type}:{content_id}`)"
-          example: "progress:session:42:kuis:3"
+          description: 'Redis key untuk sesi ini (format: `progress:session:{member_id}:{content_type}:{content_id}`)'
+          example: progress:session:42:kuis:3
         expires_at:
           type: integer
           format: int64
@@ -7372,8 +7732,12 @@ components:
           example: 1747918200
         max_score:
           type: integer
-          description: "Skor maksimum yang mungkin dicapai (digunakan untuk menentukan apakah `xp_reward` diberikan)"
+          description: Skor maksimum yang mungkin dicapai (digunakan untuk menentukan apakah `xp_reward` diberikan)
           example: 100
+        completion_id:
+          type: string
+          description: Backend UUID returned at start. Send on every finalize request and retry; retained snapshots
+            remain available after Redis cleanup. Omission is supported only for legacy active-session requests.
     ProgressStartResponseWrapper:
       type: object
       properties:
@@ -7400,16 +7764,60 @@ components:
           example: 99
         leveled_up:
           type: boolean
-          description: "`true` jika XP yang diperoleh mendorong member naik ke level berikutnya"
+          description: '`true` jika XP yang diperoleh mendorong member naik ke level berikutnya'
           example: true
         previous_level:
           type: integer
-          description: Level member sebelum sesi ini diselesaikan (0 jika tidak ada XP yang diberikan)
+          description: Level before all content and bonus XP
           example: 0
         new_level:
           type: integer
-          description: Level member setelah sesi ini diselesaikan (0 jika tidak ada XP yang diberikan)
+          description: Final level including bonuses, also correct when no XP is awarded
           example: 1
+        completion_id:
+          type: string
+          description: Stable per-session backend ID
+        skor:
+          type: integer
+          description: Authoritative score
+        awarded_xp:
+          type: integer
+          description: Effective content XP, zero on repeat rewards
+        bonus_xp:
+          type: integer
+          description: Daily-task XP including all-tasks bonus
+        total_awarded_xp:
+          type: integer
+          description: Content XP plus bonus XP
+        total_xp:
+          type: integer
+          description: Final accumulated member XP
+        ending_type:
+          type: string
+          description: Present for story ending, unchanged from existing contract
+        newly_unlocked_achievements:
+          type: array
+          items:
+            $ref: '#/components/schemas/UnlockedAchievement'
+          description: Always an array; empty [] when none. Replay retains original notification IDs.
+        notifications:
+          type: array
+          items:
+            $ref: '#/components/schemas/MemberNotification'
+          description: Always an array; empty [] when none. Replay retains original notification IDs.
+      required:
+      - progres_id
+      - leveled_up
+      - previous_level
+      - new_level
+      - completion_id
+      - skor
+      - awarded_xp
+      - bonus_xp
+      - total_awarded_xp
+      - total_xp
+      - newly_unlocked_achievements
+      - notifications
     ProgressFinalizeResponseWrapper:
       type: object
       properties:
@@ -7423,16 +7831,19 @@ components:
       properties:
         session_key:
           type: string
-          example: "progress:session:42:kuis:3"
+          example: progress:session:42:kuis:3
         member_id:
           type: string
-          example: "42"
+          example: '42'
         group_id:
           type: string
-          example: ""
+          example: ''
         content_type:
           type: string
-          enum: [kuis, cerita, puzzle]
+          enum:
+          - kuis
+          - cerita
+          - puzzle
           example: kuis
         content_id:
           type: integer
@@ -7452,16 +7863,22 @@ components:
           example: 50
         state:
           type: string
-          enum: [active, flushing]
+          enum:
+          - active
+          - flushing
           example: active
         answers:
           type: object
           additionalProperties:
             type: integer
-          description: "Map dari `pertanyaan_id` / `scene_id` → skor yang diberikan"
+          description: Map dari `pertanyaan_id` / `scene_id` → skor yang diberikan
           example:
-            "12": 10
-            "13": 5
+            '12': 10
+            '13': 5
+        completion_id:
+          type: string
+          description: Backend UUID returned at start. Send on every finalize request and retry; retained snapshots
+            remain available after Redis cleanup. Omission is supported only for legacy active-session requests.
     ProgressSessionResponseWrapper:
       type: object
       properties:

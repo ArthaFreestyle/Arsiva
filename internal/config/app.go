@@ -8,7 +8,6 @@ import (
 	"ArthaFreestyle/Arsiva/internal/repository"
 	"ArthaFreestyle/Arsiva/internal/usecase"
 	"context"
-	"time"
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v3"
 	"github.com/gofiber/fiber/v3/middleware/limiter"
@@ -16,6 +15,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
+	"time"
 )
 
 type BootstrapConfig struct {
@@ -96,7 +96,7 @@ func Bootstrap(cfg BootstrapConfig) {
 	AchievementUseCase := usecase.NewAchievementUseCase(achievementRepo, cfg.Log, cfg.Validate)
 	MemberAchievementUseCase := usecase.NewMemberAchievementUseCase(memberAchievementRepo, memberRepo, achievementRepo, cfg.Log, cfg.Validate)
 	GamificationUseCase := usecase.NewGamificationUseCase(gamificationRepo, cfg.Log)
-	ProgressSessionUseCase := usecase.NewProgressSessionUseCase(memberProgressRepo, cfg.Redis, cfg.Log, cfg.Validate, GamificationUseCase)
+	ProgressSessionUseCase := usecase.NewProgressSessionUseCase(memberProgressRepo, cfg.Redis, cfg.Log, cfg.Validate, repository.NewCompletionRepository(cfg.DB, cfg.Log))
 	LeaderboardUseCase := usecase.NewLeaderboardUseCase(leaderboardRepo, groupRepo, cfg.Log)
 	AnalyticsUseCase := usecase.NewAnalyticsUseCase(analyticsRepo, cfg.Log)
 
@@ -130,9 +130,9 @@ func Bootstrap(cfg BootstrapConfig) {
 	AnalyticsController := http.NewAnalyticsController(AnalyticsUseCase, cfg.Log)
 
 	// Create middleware
-	authMiddleware            := middleware.NewAuthMiddleware(cfg.Secret, cfg.Log)
+	authMiddleware := middleware.NewAuthMiddleware(cfg.Secret, cfg.Log)
 	profileCompleteMiddleware := middleware.RequireProfileComplete()
-	authLimiter              := limiter.New(limiter.Config{
+	authLimiter := limiter.New(limiter.Config{
 		Max:          cfg.Config.GetInt("app.rate_limit.max"),
 		Expiration:   time.Duration(cfg.Config.GetInt("app.rate_limit.expiration_seconds")) * time.Second,
 		KeyGenerator: middleware.AuthLimiterKey,
@@ -152,23 +152,24 @@ func Bootstrap(cfg BootstrapConfig) {
 	})
 
 	routeConfig := route.RouteConfig{
-		App:                       cfg.App,
-		AuthController:            AuthController,
-		UserController:            UserController,
-		ArticleCategoryController: ArticleCategoryController,
-		ArticleController:         ArticleController,
-		UploadController:          UploadController,
-		PuzzleController:          PuzzleController,
-		QuizController:            QuizController,
-		CeritaController:          CeritaController,
-		StoryCategoryController:   StoryCategoryController,
-		QuizCategoryController:    QuizCategoryController,
-		GroupController:           GroupController,
-		SekolahController:         SekolahController,
-		GuruController:            GuruController,
+		App:                         cfg.App,
+		AuthController:              AuthController,
+		UserController:              UserController,
+		ArticleCategoryController:   ArticleCategoryController,
+		ArticleController:           ArticleController,
+		UploadController:            UploadController,
+		PuzzleController:            PuzzleController,
+		QuizController:              QuizController,
+		CeritaController:            CeritaController,
+		StoryCategoryController:     StoryCategoryController,
+		QuizCategoryController:      QuizCategoryController,
+		GroupController:             GroupController,
+		SekolahController:           SekolahController,
+		GuruController:              GuruController,
 		MemberController:            MemberController,
 		MemberSocialLinkController:  MemberSocialLinkController,
 		MemberAchievementController: MemberAchievementController,
+		NotificationController:      &http.NotificationController{Repo: &repository.NotificationRepository{DB: cfg.DB}},
 		AchievementController:       AchievementController,
 		ProgressController:          ProgressController,
 		LeaderboardController:       LeaderboardController,

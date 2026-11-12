@@ -7,30 +7,31 @@ import (
 )
 
 type RouteConfig struct {
-	App                       *fiber.App
-	AuthController            http.AuthController
-	UserController            http.UserController
-	ArticleCategoryController http.ArticleCategoryController
-	ArticleController         http.ArticleController
-	UploadController          http.UploadController
-	PuzzleController          http.PuzzleController
-	QuizController            http.QuizController
-	CeritaController          http.CeritaController
-	StoryCategoryController   http.StoryCategoryController
-	QuizCategoryController    http.QuizCategoryController
-	GroupController           http.GroupController
-	SekolahController         http.SekolahController
-	GuruController            http.GuruController
-	MemberController               http.MemberController
-	MemberSocialLinkController     http.MemberSocialLinkController
-	MemberAchievementController    http.MemberAchievementController
-	AchievementController          http.AchievementController
-	ProgressController             http.ProgressController
-	LeaderboardController          http.LeaderboardController
-	GamificationController         http.GamificationController
-	AnalyticsController            http.AnalyticsController
-	AuthMiddleware            fiber.Handler
-	ProfileCompleteMiddleware  fiber.Handler
+	NotificationController      *http.NotificationController
+	App                         *fiber.App
+	AuthController              http.AuthController
+	UserController              http.UserController
+	ArticleCategoryController   http.ArticleCategoryController
+	ArticleController           http.ArticleController
+	UploadController            http.UploadController
+	PuzzleController            http.PuzzleController
+	QuizController              http.QuizController
+	CeritaController            http.CeritaController
+	StoryCategoryController     http.StoryCategoryController
+	QuizCategoryController      http.QuizCategoryController
+	GroupController             http.GroupController
+	SekolahController           http.SekolahController
+	GuruController              http.GuruController
+	MemberController            http.MemberController
+	MemberSocialLinkController  http.MemberSocialLinkController
+	MemberAchievementController http.MemberAchievementController
+	AchievementController       http.AchievementController
+	ProgressController          http.ProgressController
+	LeaderboardController       http.LeaderboardController
+	GamificationController      http.GamificationController
+	AnalyticsController         http.AnalyticsController
+	AuthMiddleware              fiber.Handler
+	ProfileCompleteMiddleware   fiber.Handler
 	// AuthLimiter caps requests per account (keyed by email+path where the
 	// request body carries one) — protects one target account from brute force
 	// without punishing other users behind the same IP.
@@ -79,11 +80,11 @@ func (c *RouteConfig) SetupAuthRoutes() {
 	auth := c.App.Group("/v1", c.AuthMiddleware)
 
 	// Single role middlewares (built once, reused).
-	superadminOnly       := middleware.RoleMiddleware("super_admin")
-	allRoles             := middleware.RoleMiddleware("member", "guru", "super_admin")
-	guruRole             := middleware.RoleMiddleware("guru")
-	memberRole           := middleware.RoleMiddleware("member")
-	guruAdminRole        := middleware.RoleMiddleware("guru", "super_admin")
+	superadminOnly := middleware.RoleMiddleware("super_admin")
+	allRoles := middleware.RoleMiddleware("member", "guru", "super_admin")
+	guruRole := middleware.RoleMiddleware("guru")
+	memberRole := middleware.RoleMiddleware("member")
+	guruAdminRole := middleware.RoleMiddleware("guru", "super_admin")
 	superadminOrGuruRole := middleware.RoleMiddleware("super_admin", "guru")
 	superadminOrMemberRole := middleware.RoleMiddleware("super_admin", "member")
 
@@ -240,9 +241,9 @@ func (c *RouteConfig) SetupAuthRoutes() {
 	// ==========================================
 	// POST /guru and GET /guru/me are allowed while profile is incomplete
 	// (POST creates the profile, GET lets the FE detect "no profile yet").
-	auth.Post("/guru", superadminOrGuruRole, c.GuruController.Create)       // profile creation — no pc
+	auth.Post("/guru", superadminOrGuruRole, c.GuruController.Create) // profile creation — no pc
 	auth.Get("/guru", superadminOnly, c.GuruController.FindAll)
-	auth.Get("/guru/me", guruRole, c.GuruController.GetMe)                  // allowed while incomplete
+	auth.Get("/guru/me", guruRole, c.GuruController.GetMe) // allowed while incomplete
 	auth.Get("/guru/:id", superadminOrGuruRole, pc, c.GuruController.FindById)
 	auth.Put("/guru/:id", superadminOrGuruRole, pc, c.GuruController.Update)
 	auth.Delete("/guru/:id", superadminOnly, c.GuruController.Delete)
@@ -253,7 +254,7 @@ func (c *RouteConfig) SetupAuthRoutes() {
 	// POST /member and GET /member/me are allowed while profile is incomplete.
 	auth.Post("/member", superadminOrMemberRole, c.MemberController.Create) // profile creation — no pc
 	auth.Get("/member", superadminOnly, c.MemberController.FindAll)
-	auth.Get("/member/me", memberRole, c.MemberController.GetMe)            // allowed while incomplete
+	auth.Get("/member/me", memberRole, c.MemberController.GetMe) // allowed while incomplete
 	auth.Put("/member/me", memberRole, pc, c.MemberController.UpdateMe)
 	auth.Get("/member/profile", memberRole, pc, c.MemberController.GetProfile)
 	// NOTE: the wildcard "/member/:id" routes are registered AFTER the static
@@ -287,6 +288,11 @@ func (c *RouteConfig) SetupAuthRoutes() {
 	//   - create / read: member only (self)
 	//   - delete: super_admin only (corrective)
 	// ==========================================
+	if c.NotificationController != nil {
+		auth.Get("/member/notifications", memberRole, pc, c.NotificationController.List)
+		auth.Get("/member/notifications/unread-count", memberRole, pc, c.NotificationController.Count)
+		auth.Patch("/member/notifications/:notification_id/read", memberRole, pc, c.NotificationController.Read)
+	}
 	auth.Post("/member/achievements", memberRole, pc, c.MemberAchievementController.Create)
 	auth.Get("/member/achievements", memberRole, pc, c.MemberAchievementController.FindAllMine)
 	auth.Get("/member/achievements/:achievement_id", memberRole, pc, c.MemberAchievementController.FindOne)

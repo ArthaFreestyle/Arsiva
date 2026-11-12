@@ -2,7 +2,6 @@ package usecase
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -99,7 +98,7 @@ func TestApplyStreakRules(t *testing.T) {
 			},
 		},
 		{
-			name: "first ever active day",
+			name:  "first ever active day",
 			input: entity.MemberStreak{CurrentStreak: 0, LongestStreak: 0},
 			want: entity.MemberStreak{
 				CurrentStreak: 1, LongestStreak: 1,
@@ -348,65 +347,6 @@ func TestGetTodayTasks_AllCompleted(t *testing.T) {
 		t.Error("expected AllCompleted=true when all visible tasks have completed_at set")
 	}
 }
-
-// ─── HandleContentFinished tests ─────────────────────────────────────────────
-
-func TestHandleContentFinished_DelegatesCorrectly(t *testing.T) {
-	streakCalled := false
-	tasksCalled := false
-	capturedContentType := ""
-	capturedAwardedXp := 0
-
-	repo := &mockGamificationRepo{
-		updateStreakAtomicFn: func(_ context.Context, _ int, fn func(*entity.MemberStreak)) (*entity.MemberStreak, error) {
-			streakCalled = true
-			s := &entity.MemberStreak{}
-			fn(s)
-			return s, nil
-		},
-		progressDailyTasksFn: func(_ context.Context, _ int, _ time.Time, contentType string, awardedXp int) error {
-			tasksCalled = true
-			capturedContentType = contentType
-			capturedAwardedXp = awardedXp
-			return nil
-		},
-	}
-	uc := NewGamificationUseCase(repo, nil)
-
-	err := uc.HandleContentFinished(context.Background(), 42, "kuis", 50)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !streakCalled {
-		t.Error("expected UpdateStreakAtomic to be called")
-	}
-	if !tasksCalled {
-		t.Error("expected ProgressDailyTasks to be called")
-	}
-	if capturedContentType != "kuis" {
-		t.Errorf("contentType: got %q, want %q", capturedContentType, "kuis")
-	}
-	if capturedAwardedXp != 50 {
-		t.Errorf("awardedXp: got %d, want 50", capturedAwardedXp)
-	}
-}
-
-func TestHandleContentFinished_StreakErrorPropagates(t *testing.T) {
-	repoErr := errors.New("db down")
-	repo := &mockGamificationRepo{
-		updateStreakAtomicFn: func(_ context.Context, _ int, _ func(*entity.MemberStreak)) (*entity.MemberStreak, error) {
-			return nil, repoErr
-		},
-	}
-	uc := NewGamificationUseCase(repo, nil)
-
-	err := uc.HandleContentFinished(context.Background(), 42, "kuis", 0)
-	if err == nil {
-		t.Fatal("expected error from failed streak update, got nil")
-	}
-}
-
-// ─── buildDailyTasksResponse tests ───────────────────────────────────────────
 
 func TestBuildDailyTasksResponse_EmptyTasksNotAllCompleted(t *testing.T) {
 	today := todayInJakarta()
