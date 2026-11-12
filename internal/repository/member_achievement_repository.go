@@ -6,7 +6,6 @@ import (
 	"strconv"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sirupsen/logrus"
 
@@ -154,53 +153,10 @@ func (r *memberAchievementRepositoryImpl) Create(ctx context.Context, memberId, 
 	if err != nil {
 		return nil, ErrMemberAchievementNotFound
 	}
-	aid, err := strconv.Atoi(achievementId)
-	if err != nil {
-		return nil, ErrAchievementFKViolation
-	}
-
-	query := `
-		WITH ins AS (
-			INSERT INTO member_achievements (member_id, achievement_id)
-			VALUES ($1, $2)
-			RETURNING member_id, achievement_id
-		)
-		SELECT a.achievement_id::text,
-		       a.nama,
-		       COALESCE(a.deskripsi, '') AS deskripsi,
-		       a.badge_icon,
-		       a.xp_required,
-		       a.tier::text AS tier,
-		       ma.unlocked_at::text AS unlocked_at
-		FROM ins
-		JOIN achievements a ON a.achievement_id = ins.achievement_id
-		JOIN member_achievements ma ON ma.member_id = ins.member_id AND ma.achievement_id = ins.achievement_id
-	`
-	rows, err := r.DB.Query(ctx, query, mid, aid)
-	if err != nil {
-		if pgErr, ok := err.(*pgconn.PgError); ok {
-			switch pgErr.Code {
-			case "23505":
-				return nil, ErrMemberAchievementExists
-			case "23503":
-				if pgErr.ConstraintName == "member_achievements_member_id_fkey" {
-					r.Log.Errorf("FK violation on member_id in member_achievements — JWT references a nonexistent member: %v", err)
-					return nil, err
-				}
-				return nil, ErrAchievementFKViolation
-			}
-		}
-		r.Log.Errorf("Error Create member achievement: %v", err)
+	if _, err = ReconcileMember(ctx, r.DB, mid, true); err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	result, err := pgx.CollectExactlyOneRow(rows, pgx.RowToAddrOfStructByNameLax[entity.MemberAchievement])
-	if err != nil {
-		r.Log.Errorf("Error collecting row Create member achievement: %v", err)
-		return nil, err
-	}
-	return result, nil
+	return r.FindOne(ctx, memberId, achievementId)
 }
 
 func (r *memberAchievementRepositoryImpl) Delete(ctx context.Context, memberId, achievementId string) error {

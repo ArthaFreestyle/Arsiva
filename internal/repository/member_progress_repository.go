@@ -3,10 +3,8 @@ package repository
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sirupsen/logrus"
 
@@ -16,9 +14,7 @@ import (
 
 var ErrContentNotFound = errors.New("content not found or not published")
 
-// ErrInvalidReference is returned when SaveProgress hits a foreign-key violation it
-// cannot recover from (e.g. member_id does not reference a real member). The caller
-// should treat this as bad input (4xx) rather than an opaque server error.
+// ErrInvalidReference indicates a session whose member no longer exists.
 var ErrInvalidReference = errors.New("progress references a row that does not exist")
 
 type MemberProgressRepository interface {
@@ -44,11 +40,6 @@ type MemberProgressRepository interface {
 
 	// Returns the xp_reward from the content table (read fresh at finalize time).
 	GetContentXpReward(ctx context.Context, contentType string, contentId int) (int, error)
-
-	// Atomically inserts member_progress and optionally credits total_xp and recomputes level.
-	// Returns the new progres_id, previous level, new level, and the XP actually awarded
-	// (0 if the member already earned XP for this content, even when awardedXp > 0).
-	SaveProgress(ctx context.Context, progress *entity.MemberProgress, awardedXp int) (progresId int, prevLevel int, newLevel int, effectiveXp int, err error)
 }
 
 type memberProgressRepositoryImpl struct {
@@ -208,64 +199,7 @@ func (r *memberProgressRepositoryImpl) GetContentXpReward(ctx context.Context, c
 	return xpReward, nil
 }
 
-func (r *memberProgressRepositoryImpl) SaveProgress(ctx context.Context, progress *entity.MemberProgress, awardedXp int) (int, int, int, int, error) {
-	var groupId *string
-	if progress.GroupId != "" {
-		groupId = &progress.GroupId
-	}
-
-	progresId, prevLevel, newLevel, effectiveXp, err := r.insertProgress(ctx, progress, awardedXp, groupId)
-	if err == nil {
-		return progresId, prevLevel, newLevel, effectiveXp, nil
-	}
-
-	// Classify the failure. A foreign-key violation means the row references something
-	// that no longer exists — member_progress has FKs on member_id and group_id
-	// (migration 20260318204005). The most common cause of an ending-scene 500 is a
-	// stale/invalid group_id that was attached at /start: the session plays through but
-	// the finalize INSERT trips member_progress_group_id_fkey. Losing the whole
-	// completion over a dropped group reference is the wrong trade-off, so we retry once
-	// with group_id = NULL (keeping the score + XP) and only surface a hard error when
-	// the broken reference is something we can't shed.
-	var pgErr *pgconn.PgError
-	if errors.As(err, &pgErr) && pgErr.Code == "23503" { // foreign_key_violation
-		if pgErr.ConstraintName == "member_progress_group_id_fkey" && groupId != nil {
-			r.Log.Warnf("SaveProgress: group_id=%q does not reference a valid group; persisting progress without it", *groupId)
-			if progresId, prevLevel, newLevel, effectiveXp, err = r.insertProgress(ctx, progress, awardedXp, nil); err == nil {
-				return progresId, prevLevel, newLevel, effectiveXp, nil
-			}
-		}
-		r.Log.Errorf("SaveProgress foreign-key violation (constraint=%s detail=%s): %v", pgErr.ConstraintName, pgErr.Detail, err)
-		return 0, 0, 0, 0, fmt.Errorf("%w: %s", ErrInvalidReference, pgErr.ConstraintName)
-	}
-
-	return 0, 0, 0, 0, err
-}
-
-// insertProgress runs the member_progress INSERT (and optional XP + level update) in a
-// single transaction. Returns progres_id, previous level, new level, and the XP actually
-// written — which may be 0 even when awardedXp > 0 if the member already earned XP for
-// this (member_id, content_type, content_id) triple.
-func (r *memberProgressRepositoryImpl) insertProgress(ctx context.Context, progress *entity.MemberProgress, awardedXp int, groupId *string) (progresId int, prevLevel int, newLevel int, effectiveXp int, err error) {
-	tx, err := r.DB.Begin(ctx)
-	if err != nil {
-		r.Log.Errorf("SaveProgress begin tx: %v", err)
-		return 0, 0, 0, 0, err
-	}
-	defer func() {
-		if err != nil {
-			_ = tx.Rollback(ctx)
-		}
-	}()
-
-	// Serialize concurrent finalizes for the same member+content so the EXISTS check
-	// and INSERT can't interleave. hashtext produces an int4; cast to int8 for the lock.
-	lockKey := fmt.Sprintf("mp:%d:%s:%d", progress.MemberId, progress.ContentType, progress.ContentId)
-	if _, err = tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext($1)::bigint)`, lockKey); err != nil {
-		r.Log.Errorf("SaveProgress advisory lock: %v", err)
-		return 0, 0, 0, 0, err
-	}
-
+func (r *memberProgressRepositoryImpl) saveProgressTx(ctx context.Context, tx pgx.Tx, progress *entity.MemberProgress, awardedXp int, groupId *string) (progresId, prevLevel, newLevel, effectiveXp int, err error) {
 	// XP is awarded at most once per (member_id, content_type, content_id).
 	// A prior 0-XP row (imperfect attempt) does NOT block a later perfect run.
 	effectiveXp = awardedXp
@@ -301,6 +235,12 @@ func (r *memberProgressRepositoryImpl) insertProgress(ctx context.Context, progr
 		return 0, 0, 0, 0, err
 	}
 
+	var initialXP int
+	if err = tx.QueryRow(ctx, `SELECT total_xp FROM members WHERE member_id=$1`, progress.MemberId).Scan(&initialXP); err != nil {
+		return 0, 0, 0, 0, err
+	}
+	prevLevel = utils.LevelForXP(initialXP)
+	newLevel = prevLevel
 	if effectiveXp > 0 {
 		var newTotalXp int
 		err = tx.QueryRow(ctx,
@@ -325,9 +265,5 @@ func (r *memberProgressRepositoryImpl) insertProgress(ctx context.Context, progr
 		}
 	}
 
-	if err = tx.Commit(ctx); err != nil {
-		r.Log.Errorf("SaveProgress commit: %v", err)
-		return 0, 0, 0, 0, err
-	}
-	return progresId, prevLevel, newLevel, effectiveXp, nil
+	return
 }

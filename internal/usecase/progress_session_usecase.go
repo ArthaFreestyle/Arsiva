@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"strconv"
 	"time"
 
@@ -37,11 +38,11 @@ type ProgressSessionUseCase interface {
 }
 
 type progressSessionUseCaseImpl struct {
-	Repo         repository.MemberProgressRepository
-	Redis        *redis.Client
-	Log          *logrus.Logger
-	Validator    *validator.Validate
-	Gamification GamificationUseCase
+	Completion repository.CompletionRepository
+	Repo       repository.MemberProgressRepository
+	Redis      *redis.Client
+	Log        *logrus.Logger
+	Validator  *validator.Validate
 }
 
 func NewProgressSessionUseCase(
@@ -49,15 +50,16 @@ func NewProgressSessionUseCase(
 	redisClient *redis.Client,
 	log *logrus.Logger,
 	validate *validator.Validate,
-	gamification GamificationUseCase,
+	completion repository.CompletionRepository,
 ) ProgressSessionUseCase {
-	return &progressSessionUseCaseImpl{
-		Repo:         repo,
-		Redis:        redisClient,
-		Log:          log,
-		Validator:    validate,
-		Gamification: gamification,
+	u := &progressSessionUseCaseImpl{
+		Repo:       repo,
+		Redis:      redisClient,
+		Log:        log,
+		Validator:  validate,
+		Completion: completion,
 	}
+	return u
 }
 
 // ─── Redis key helpers ───────────────────────────────────────────────────────
@@ -101,6 +103,10 @@ func (u *progressSessionUseCaseImpl) Start(ctx context.Context, req *model.Progr
 		))
 	}
 
+	if err != nil && err != redis.Nil {
+		return nil, fiber.ErrInternalServerError
+	}
+
 	// Compute max_score once at session start.
 	maxScore, err := u.computeMaxScore(ctx, req.ContentType, req.ContentId)
 	if err != nil {
@@ -113,7 +119,9 @@ func (u *progressSessionUseCaseImpl) Start(ctx context.Context, req *model.Progr
 
 	answersJSON, _ := json.Marshal(map[string]int{})
 
+	completionID := uuid.NewString()
 	fields := map[string]any{
+		"completion_id":    completionID,
 		"member_id":        memberId,
 		"group_id":         req.GroupId,
 		"content_type":     req.ContentType,
@@ -127,19 +135,23 @@ func (u *progressSessionUseCaseImpl) Start(ctx context.Context, req *model.Progr
 		"state":            "active",
 	}
 
-	pipe := u.Redis.Pipeline()
-	pipe.HMSet(ctx, key, fields)
-	pipe.Expire(ctx, key, ttl)
-	pipe.ZAdd(ctx, progressActiveZSet, redis.Z{Score: float64(expiresAt), Member: key})
-	if _, err = pipe.Exec(ctx); err != nil {
-		u.Log.Errorf("Start: redis pipeline: %v", err)
+	args := []interface{}{int(ttl.Seconds()), expiresAt}
+	for k, v := range fields {
+		args = append(args, k, v)
+	}
+	created, err := u.Redis.Eval(ctx, `if redis.call('EXISTS',KEYS[1])==1 then return 0 end; redis.call('HSET',KEYS[1],unpack(ARGV,3)); redis.call('EXPIRE',KEYS[1],ARGV[1]); redis.call('ZADD',KEYS[2],ARGV[2],KEYS[1]); return 1`, []string{key, progressActiveZSet}, args...).Int()
+	if err != nil {
 		return nil, fiber.ErrInternalServerError
+	}
+	if created == 0 {
+		return nil, fiber.ErrConflict
 	}
 
 	return &model.ProgressStartResponse{
-		SessionKey: key,
-		ExpiresAt:  expiresAt,
-		MaxScore:   maxScore,
+		SessionKey:   key,
+		CompletionID: completionID,
+		ExpiresAt:    expiresAt,
+		MaxScore:     maxScore,
 	}, nil
 }
 
@@ -222,6 +234,34 @@ func (u *progressSessionUseCaseImpl) Scene(ctx context.Context, req *model.Progr
 	}
 
 	key := sessionKey(memberId, req.ContentType, req.ContentId)
+	if req.CompletionID != "" {
+		if u.Completion == nil {
+			return nil, fiber.ErrInternalServerError
+		}
+		mid, _ := strconv.Atoi(memberId)
+		saved, err := u.Completion.FindCompletion(ctx, mid, req.CompletionID, req.ContentType, req.ContentId)
+		if err != nil {
+			return nil, fiber.ErrInternalServerError
+		}
+		if saved != nil {
+			u.cleanupCompletion(ctx, key, req.CompletionID)
+			return saved, nil
+		}
+		active, err := u.Redis.HGet(ctx, key, "completion_id").Result()
+		if err == redis.Nil {
+			return nil, fiber.ErrNotFound
+		}
+		if err != nil {
+			return nil, fiber.ErrInternalServerError
+		}
+		if active != req.CompletionID {
+			return nil, fiber.ErrConflict
+		}
+	}
+
+	if state, _ := u.Redis.HGet(ctx, key, "state").Result(); state == "flushing" {
+		return u.finalizeExpected(ctx, key, "submit", req.CompletionID)
+	}
 	if _, err := u.loadActiveSession(ctx, key); err != nil {
 		return nil, err
 	}
@@ -245,28 +285,16 @@ func (u *progressSessionUseCaseImpl) Scene(ctx context.Context, req *model.Progr
 
 	// Record scene visit in Redis.
 	sceneKey := strconv.Itoa(req.SceneId)
-	pipe := u.Redis.Pipeline()
-	pipe.HSet(ctx, key, fmt.Sprintf("answers.%s", sceneKey), endingPoint)
+	fields := []interface{}{fmt.Sprintf("answers.%s", sceneKey), endingPoint}
 	if isEnding {
-		pipe.HSet(ctx, key, "running_skor", endingPoint)
-		// Mark that an ending was reached so Finalize can award the story's XP for
-		// completing it. A branching story has several endings with different
-		// ending_point values; max_score is only the best one, so we must not gate
-		// story XP on running_skor == max_score (that denies XP for every non-optimal
-		// ending). ending_point can legitimately be 0, so we can't infer completion
-		// from running_skor alone — hence an explicit flag.
-		pipe.HSet(ctx, key, "reached_ending", 1)
-		// Stash which ending was reached so Finalize can echo it back — the client
-		// needs it to show "you got ending X" and has no other source for it.
-		pipe.HSet(ctx, key, "ending_type", endingType)
+		fields = append(fields, "running_skor", endingPoint, "reached_ending", 1, "ending_type", endingType)
 	}
-	if _, err = pipe.Exec(ctx); err != nil {
-		u.Log.Errorf("Scene: redis pipeline: %v", err)
-		return nil, fiber.ErrInternalServerError
+	if err = u.writeActive(ctx, key, req.CompletionID, fields...); err != nil {
+		return nil, err
 	}
 
 	if isEnding {
-		return u.Finalize(ctx, key, "submit")
+		return u.finalizeExpected(ctx, key, "submit", req.CompletionID)
 	}
 
 	return nil, nil
@@ -286,6 +314,34 @@ func (u *progressSessionUseCaseImpl) Solve(ctx context.Context, req *model.Progr
 	}
 
 	key := sessionKey(memberId, req.ContentType, req.ContentId)
+	if req.CompletionID != "" {
+		if u.Completion == nil {
+			return nil, fiber.ErrInternalServerError
+		}
+		mid, _ := strconv.Atoi(memberId)
+		saved, err := u.Completion.FindCompletion(ctx, mid, req.CompletionID, req.ContentType, req.ContentId)
+		if err != nil {
+			return nil, fiber.ErrInternalServerError
+		}
+		if saved != nil {
+			u.cleanupCompletion(ctx, key, req.CompletionID)
+			return saved, nil
+		}
+		active, err := u.Redis.HGet(ctx, key, "completion_id").Result()
+		if err == redis.Nil {
+			return nil, fiber.ErrNotFound
+		}
+		if err != nil {
+			return nil, fiber.ErrInternalServerError
+		}
+		if active != req.CompletionID {
+			return nil, fiber.ErrConflict
+		}
+	}
+
+	if state, _ := u.Redis.HGet(ctx, key, "state").Result(); state == "flushing" {
+		return u.finalizeExpected(ctx, key, "submit", req.CompletionID)
+	}
 	if _, err := u.loadActiveSession(ctx, key); err != nil {
 		return nil, err
 	}
@@ -295,12 +351,11 @@ func (u *progressSessionUseCaseImpl) Solve(ctx context.Context, req *model.Progr
 		skor = 1
 	}
 
-	if err := u.Redis.HSet(ctx, key, "running_skor", skor).Err(); err != nil {
-		u.Log.Errorf("Solve: redis set running_skor: %v", err)
-		return nil, fiber.ErrInternalServerError
+	if err := u.writeActive(ctx, key, req.CompletionID, "running_skor", skor); err != nil {
+		return nil, err
 	}
 
-	return u.Finalize(ctx, key, "submit")
+	return u.finalizeExpected(ctx, key, "submit", req.CompletionID)
 }
 
 // ─── Submit ──────────────────────────────────────────────────────────────────
@@ -317,8 +372,32 @@ func (u *progressSessionUseCaseImpl) Submit(ctx context.Context, req *model.Prog
 	}
 
 	key := sessionKey(memberId, req.ContentType, req.ContentId)
+	if req.CompletionID != "" {
+		if u.Completion == nil {
+			return nil, fiber.ErrInternalServerError
+		}
+		mid, _ := strconv.Atoi(memberId)
+		saved, err := u.Completion.FindCompletion(ctx, mid, req.CompletionID, req.ContentType, req.ContentId)
+		if err != nil {
+			return nil, fiber.ErrInternalServerError
+		}
+		if saved != nil {
+			u.cleanupCompletion(ctx, key, req.CompletionID)
+			return saved, nil
+		}
+		active, err := u.Redis.HGet(ctx, key, "completion_id").Result()
+		if err == redis.Nil {
+			return nil, fiber.ErrNotFound
+		}
+		if err != nil {
+			return nil, fiber.ErrInternalServerError
+		}
+		if active != req.CompletionID {
+			return nil, fiber.ErrConflict
+		}
+	}
 
-	return u.Finalize(ctx, key, "submit")
+	return u.finalizeExpected(ctx, key, "submit", req.CompletionID)
 }
 
 // ─── GetSession ──────────────────────────────────────────────────────────────
@@ -348,6 +427,7 @@ func (u *progressSessionUseCaseImpl) GetSession(ctx context.Context, contentType
 
 	return &model.ProgressSessionResponse{
 		SessionKey:      key,
+		CompletionID:    data["completion_id"],
 		MemberId:        data["member_id"],
 		GroupId:         data["group_id"],
 		ContentType:     data["content_type"],
@@ -363,50 +443,25 @@ func (u *progressSessionUseCaseImpl) GetSession(ctx context.Context, contentType
 
 // claimSessionScript atomically transitions state active→flushing.
 // Returns 1 if claimed, 0 if already flushing (another caller), -1 if gone/done.
-var claimSessionScript = redis.NewScript(`
-local state = redis.call('HGET', KEYS[1], 'state')
-if state == 'active' then
-    redis.call('HSET', KEYS[1], 'state', 'flushing')
-    return 1
-elseif state == 'flushing' then
-    return 0
-else
-    return -1
-end
-`)
-
-// ─── Finalize ────────────────────────────────────────────────────────────────
-
 func (u *progressSessionUseCaseImpl) Finalize(ctx context.Context, key string, cause string) (*model.ProgressFinalizeResponse, error) {
-	// Step 1: atomically transition state active→flushing via Lua script.
-	result, err := claimSessionScript.Run(ctx, u.Redis, []string{key}).Int()
+	return u.finalizeExpected(ctx, key, cause, "")
+}
+func (u *progressSessionUseCaseImpl) finalizeExpected(ctx context.Context, key, cause, expected string) (*model.ProgressFinalizeResponse, error) {
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	values, err := u.Redis.Eval(ctx, `if ARGV[1]~='' and redis.call('HGET',KEYS[1],'completion_id')~=ARGV[1] then return {} end; if redis.call('EXISTS',KEYS[1])==0 then return {} end; redis.call('HSET',KEYS[1],'state','flushing'); return redis.call('HGETALL',KEYS[1])`, []string{key}, expected).StringSlice()
 	if err != nil {
-		u.Log.Errorf("Finalize claimSession script: %v", err)
 		return nil, fiber.ErrInternalServerError
 	}
-
-	switch result {
-	case -1:
-		// Session gone or already fully flushed.
-		return &model.ProgressFinalizeResponse{}, nil
-	case 0:
-		// Another goroutine is mid-finalize. Wait briefly then read its progres_id.
-		time.Sleep(100 * time.Millisecond)
-		existing, err := u.Redis.HGet(ctx, key, "progres_id").Result()
-		if err == nil && existing != "" {
-			id, _ := strconv.Atoi(existing)
-			return &model.ProgressFinalizeResponse{ProgresId: id}, nil
-		}
-		// Session already cleaned up by the other goroutine.
-		return &model.ProgressFinalizeResponse{}, nil
+	data := map[string]string{}
+	for i := 0; i+1 < len(values); i += 2 {
+		data[values[i]] = values[i+1]
 	}
-	// result == 1: we claimed the session.
-
-	// Step 2: read session data.
-	data, err := u.Redis.HGetAll(ctx, key).Result()
-	if err != nil || len(data) == 0 {
-		// Already flushed.
-		return &model.ProgressFinalizeResponse{}, nil
+	if len(data) == 0 {
+		return nil, fiber.ErrNotFound
+	}
+	if data["completion_id"] == "" {
+		return nil, fiber.NewError(409, "sesi lama; mulai sesi baru")
 	}
 
 	memberIdStr := data["member_id"]
@@ -423,14 +478,23 @@ func (u *progressSessionUseCaseImpl) Finalize(ctx context.Context, key string, c
 	maxScore, _ := strconv.Atoi(maxScoreStr)
 	durationSeconds, _ := strconv.Atoi(durationSecondsStr)
 
+	if u.Completion != nil {
+		saved, err := u.Completion.FindCompletion(ctx, memberId, data["completion_id"], contentType, contentId)
+		if err != nil {
+			return nil, fiber.ErrInternalServerError
+		}
+		if saved != nil {
+			u.cleanupCompletion(ctx, key, data["completion_id"])
+			return saved, nil
+		}
+	}
 	// Step 3: fetch fresh xp_reward from content table (guru may have changed it mid-session).
 	xpReward, err := u.Repo.GetContentXpReward(ctx, contentType, contentId)
 	if err != nil {
 		if u.Log != nil {
 			u.Log.Errorf("Finalize GetContentXpReward (%s/%d): %v", contentType, contentId, err)
 		}
-		// Restore state so a retry can succeed.
-		_ = u.Redis.HSet(ctx, key, "state", "active").Err()
+		// Keep the immutable session available for retry.
 		// A missing content row is a client-visible condition, not a server fault.
 		if errors.Is(err, repository.ErrContentNotFound) {
 			return nil, fiber.NewError(fiber.StatusNotFound, "konten tidak ditemukan")
@@ -464,57 +528,26 @@ func (u *progressSessionUseCaseImpl) Finalize(ctx context.Context, key string, c
 		Duration:    durationSeconds,
 	}
 
-	// Step 5: persist to Postgres in a single transaction.
-	// effectiveXp may be less than awardedXp when the repo zeroes it out because the
-	// member already earned XP for this content (one-time-per-content rule).
-	progresId, prevLevel, newLevel, effectiveXp, err := u.Repo.SaveProgress(ctx, progress, awardedXp)
+	if u.Completion == nil {
+		return nil, fiber.ErrInternalServerError
+	}
+	today := todayInJakarta()
+	response, err := u.Completion.Complete(ctx, data["completion_id"], progress, awardedXp, data["ending_type"], today, func(streak *entity.MemberStreak) { applyStreakRules(streak, today) })
 	if err != nil {
 		if u.Log != nil {
-			u.Log.Errorf("Finalize SaveProgress (cause=%s key=%s): %v", cause, key, err)
+			u.Log.Errorf("Finalize completion (cause=%s): %v", cause, err)
 		}
-		// Leave the key intact with state=active so a retry can succeed.
-		_ = u.Redis.HSet(ctx, key, "state", "active").Err()
-		// A foreign-key violation we couldn't recover from means the session carried
-		// bad data (e.g. an unknown member_id) — that's a 4xx, not a server fault, and
-		// retrying won't help, so report it precisely instead of a blank 500.
 		if errors.Is(err, repository.ErrInvalidReference) {
-			return nil, fiber.NewError(fiber.StatusBadRequest, "sesi progres menunjuk data yang tidak valid")
+			return nil, fiber.ErrBadRequest
+		}
+		if errors.Is(err, context.DeadlineExceeded) || ctx.Err() != nil {
+			return nil, fiber.ErrServiceUnavailable
 		}
 		return nil, fiber.ErrInternalServerError
 	}
+	u.cleanupCompletion(ctx, key, data["completion_id"])
+	return response, nil
 
-	if u.Log != nil {
-		u.Log.Infof("Finalize: %s progres_id=%d skor=%d/%d xp=%d level=%d→%d (cause=%s)", key, progresId, runningSkor, maxScore, effectiveXp, prevLevel, newLevel, cause)
-	}
-
-	// Step 5b: update streak + daily-task progress. Must not fail the finalize —
-	// progress is already committed, so we log any error and continue.
-	// We pass effectiveXp (0 on repeat completions) so earn_xp daily tasks only tick
-	// when XP is actually granted; the streak and content-type task still tick regardless.
-	if u.Gamification != nil {
-		if err2 := u.Gamification.HandleContentFinished(ctx, memberId, contentType, effectiveXp); err2 != nil {
-			if u.Log != nil {
-				u.Log.Errorf("Finalize HandleContentFinished (key=%s): %v", key, err2)
-			}
-		}
-	}
-
-	// Step 6: write progres_id back to Redis so a racing caller from step 1 can read it.
-	_ = u.Redis.HSet(ctx, key, "progres_id", progresId).Err()
-
-	// Step 7: clean up Redis.
-	pipe := u.Redis.Pipeline()
-	pipe.Del(ctx, key)
-	pipe.ZRem(ctx, progressActiveZSet, key)
-	_, _ = pipe.Exec(ctx)
-
-	return &model.ProgressFinalizeResponse{
-		ProgresId:     progresId,
-		LeveledUp:     newLevel > prevLevel,
-		PreviousLevel: prevLevel,
-		NewLevel:      newLevel,
-		EndingType:    data["ending_type"],
-	}, nil
 }
 
 // ─── ListExpiredSessionKeys ───────────────────────────────────────────────────
@@ -539,10 +572,11 @@ func (u *progressSessionUseCaseImpl) ListExpiredSessionKeys(ctx context.Context)
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 type sessionData struct {
-	RunningSkor int
-	MaxScore    int
-	Answers     map[string]int
-	State       string
+	CompletionID string
+	RunningSkor  int
+	MaxScore     int
+	Answers      map[string]int
+	State        string
 }
 
 func (u *progressSessionUseCaseImpl) loadActiveSession(ctx context.Context, key string) (*sessionData, error) {
@@ -563,10 +597,11 @@ func (u *progressSessionUseCaseImpl) loadActiveSession(ctx context.Context, key 
 	maxScore, _ := strconv.Atoi(data["max_score"])
 
 	return &sessionData{
-		RunningSkor: runningSkor,
-		MaxScore:    maxScore,
-		Answers:     answers,
-		State:       data["state"],
+		CompletionID: data["completion_id"],
+		RunningSkor:  runningSkor,
+		MaxScore:     maxScore,
+		Answers:      answers,
+		State:        data["state"],
 	}, nil
 }
 
@@ -575,8 +610,22 @@ func (u *progressSessionUseCaseImpl) persistAnswers(ctx context.Context, key str
 	if err != nil {
 		return err
 	}
-	return u.Redis.HMSet(ctx, key, map[string]any{
-		"running_skor": s.RunningSkor,
-		"answers":      string(answersJSON),
-	}).Err()
+	return u.writeActive(ctx, key, s.CompletionID, "running_skor", s.RunningSkor, "answers", string(answersJSON))
+}
+func (u *progressSessionUseCaseImpl) writeActive(ctx context.Context, key string, expected string, fields ...interface{}) error {
+	n, err := u.Redis.Eval(ctx, `if redis.call('HGET',KEYS[1],'state')~='active' then return 0 end; if ARGV[1]~='' and redis.call('HGET',KEYS[1],'completion_id')~=ARGV[1] then return 0 end; redis.call('HSET',KEYS[1],unpack(ARGV,2)); return 1`, []string{key}, append([]interface{}{expected}, fields...)...).Int()
+	if err != nil {
+		return fiber.ErrInternalServerError
+	}
+	if n == 0 {
+		return fiber.ErrConflict
+	}
+	return nil
+}
+
+func (u *progressSessionUseCaseImpl) cleanupCompletion(ctx context.Context, key, id string) {
+	_, err := u.Redis.Eval(ctx, `if redis.call('HGET',KEYS[1],'completion_id') == ARGV[1] then redis.call('DEL',KEYS[1]); redis.call('ZREM',KEYS[2],KEYS[1]); end; return 1`, []string{key, progressActiveZSet}, id).Result()
+	if err != nil && u.Log != nil {
+		u.Log.Warnf("completion committed; Redis cleanup failed: %v", err)
+	}
 }

@@ -16,19 +16,11 @@ type GamificationRepository interface {
 	// Streak — reads the current row, or returns a zeroed struct if none yet.
 	GetStreak(ctx context.Context, memberId int) (*entity.MemberStreak, error)
 
-	// Atomically locks the streak row (creating it if missing), calls fn to apply
-	// business rules in-place, then saves the result. One tx + SELECT FOR UPDATE.
-	UpdateStreakAtomic(ctx context.Context, memberId int, fn func(*entity.MemberStreak)) (*entity.MemberStreak, error)
-
 	// Daily tasks — idempotent setup of today's fixed task set via ON CONFLICT DO NOTHING.
 	EnsureTodayTasks(ctx context.Context, memberId int, today time.Time) error
 
 	// Returns today's task rows (all types including the hidden bonus row).
 	GetTodayTasks(ctx context.Context, memberId int, today time.Time) ([]*entity.DailyTask, error)
-
-	// Atomically increments daily task progress after content is finished.
-	// Handles XP credit and the all-tasks bonus, all in one transaction.
-	ProgressDailyTasks(ctx context.Context, memberId int, today time.Time, contentType string, awardedXp int) error
 }
 
 type gamificationRepositoryImpl struct {
@@ -66,77 +58,6 @@ func (r *gamificationRepositoryImpl) GetStreak(ctx context.Context, memberId int
 	return streak, nil
 }
 
-func (r *gamificationRepositoryImpl) UpdateStreakAtomic(ctx context.Context, memberId int, fn func(*entity.MemberStreak)) (*entity.MemberStreak, error) {
-	tx, err := r.DB.Begin(ctx)
-	if err != nil {
-		r.Log.Errorf("UpdateStreakAtomic begin tx: %v", err)
-		return nil, err
-	}
-	defer func() {
-		if err != nil {
-			_ = tx.Rollback(ctx)
-		}
-	}()
-
-	// Lazily create the streak row if it doesn't exist yet.
-	_, err = tx.Exec(ctx, `
-		INSERT INTO member_streaks (member_id)
-		VALUES ($1)
-		ON CONFLICT (member_id) DO NOTHING
-	`, memberId)
-	if err != nil {
-		r.Log.Errorf("UpdateStreakAtomic upsert: %v", err)
-		return nil, err
-	}
-
-	// Lock the row so concurrent finalize calls don't double-count the same day.
-	var streak entity.MemberStreak
-	err = tx.QueryRow(ctx, `
-		SELECT member_id, current_streak, longest_streak, last_active_date, freezes_available, updated_at
-		FROM member_streaks
-		WHERE member_id = $1
-		FOR UPDATE
-	`, memberId).Scan(
-		&streak.MemberId,
-		&streak.CurrentStreak,
-		&streak.LongestStreak,
-		&streak.LastActiveDate,
-		&streak.FreezesAvailable,
-		&streak.UpdatedAt,
-	)
-	if err != nil {
-		r.Log.Errorf("UpdateStreakAtomic select for update: %v", err)
-		return nil, err
-	}
-
-	// Apply streak rules in the usecase (fn modifies the struct in-place).
-	fn(&streak)
-
-	_, err = tx.Exec(ctx, `
-		UPDATE member_streaks
-		SET current_streak    = $1,
-		    longest_streak    = $2,
-		    last_active_date  = $3,
-		    freezes_available = $4,
-		    updated_at        = NOW()
-		WHERE member_id = $5
-	`, streak.CurrentStreak, streak.LongestStreak, streak.LastActiveDate, streak.FreezesAvailable, memberId)
-	if err != nil {
-		r.Log.Errorf("UpdateStreakAtomic update: %v", err)
-		return nil, err
-	}
-
-	if err = tx.Commit(ctx); err != nil {
-		r.Log.Errorf("UpdateStreakAtomic commit: %v", err)
-		return nil, err
-	}
-	return &streak, nil
-}
-
-// ─── Daily tasks ─────────────────────────────────────────────────────────────
-
-// fixedDailyTasks is the fixed set of tasks generated each day.
-// daily_complete_bonus tracks whether all visible tasks are done (hidden from list response).
 var fixedDailyTasks = []struct {
 	taskType    string
 	targetCount int
@@ -193,67 +114,6 @@ func (r *gamificationRepositoryImpl) GetTodayTasks(ctx context.Context, memberId
 		return nil, rows.Err()
 	}
 	return tasks, nil
-}
-
-func (r *gamificationRepositoryImpl) ProgressDailyTasks(ctx context.Context, memberId int, today time.Time, contentType string, awardedXp int) error {
-	// Ensure task rows exist before starting the transaction.
-	if err := r.EnsureTodayTasks(ctx, memberId, today); err != nil {
-		return err
-	}
-
-	tx, err := r.DB.Begin(ctx)
-	if err != nil {
-		r.Log.Errorf("ProgressDailyTasks begin tx: %v", err)
-		return err
-	}
-	defer func() {
-		if err != nil {
-			_ = tx.Rollback(ctx)
-		}
-	}()
-
-	// Increment the task matching this content type (kuis→complete_quiz, etc.).
-	taskType := contentTypeToTaskType(contentType)
-	if taskType != "" {
-		var completed bool
-		var xpReward int
-		completed, xpReward, err = r.incrementTask(ctx, tx, memberId, today, taskType, 1)
-		if err != nil {
-			return err
-		}
-		if completed {
-			if err = r.creditXP(ctx, tx, memberId, xpReward); err != nil {
-				return err
-			}
-			if err = r.advanceBonusTask(ctx, tx, memberId, today); err != nil {
-				return err
-			}
-		}
-	}
-
-	// Increment earn_xp by how much XP was actually awarded this finish.
-	if awardedXp > 0 {
-		var completed bool
-		var xpReward int
-		completed, xpReward, err = r.incrementTask(ctx, tx, memberId, today, "earn_xp", awardedXp)
-		if err != nil {
-			return err
-		}
-		if completed {
-			if err = r.creditXP(ctx, tx, memberId, xpReward); err != nil {
-				return err
-			}
-			if err = r.advanceBonusTask(ctx, tx, memberId, today); err != nil {
-				return err
-			}
-		}
-	}
-
-	if err = tx.Commit(ctx); err != nil {
-		r.Log.Errorf("ProgressDailyTasks commit: %v", err)
-		return err
-	}
-	return nil
 }
 
 // incrementTask increments current_count for the given task type (capped at target_count).
@@ -328,4 +188,104 @@ func contentTypeToTaskType(contentType string) string {
 	default:
 		return ""
 	}
+}
+
+func (r *gamificationRepositoryImpl) updateStreakTx(ctx context.Context, tx pgx.Tx, memberId int, fn func(*entity.MemberStreak)) (*entity.MemberStreak, error) {
+	var err error
+	// Lazily create the streak row if it doesn't exist yet.
+	_, err = tx.Exec(ctx, `
+		INSERT INTO member_streaks (member_id)
+		VALUES ($1)
+		ON CONFLICT (member_id) DO NOTHING
+	`, memberId)
+	if err != nil {
+		r.Log.Errorf("UpdateStreakAtomic upsert: %v", err)
+		return nil, err
+	}
+
+	// Lock the row so concurrent finalize calls don't double-count the same day.
+	var streak entity.MemberStreak
+	err = tx.QueryRow(ctx, `
+		SELECT member_id, current_streak, longest_streak, last_active_date, freezes_available, updated_at
+		FROM member_streaks
+		WHERE member_id = $1
+		FOR UPDATE
+	`, memberId).Scan(
+		&streak.MemberId,
+		&streak.CurrentStreak,
+		&streak.LongestStreak,
+		&streak.LastActiveDate,
+		&streak.FreezesAvailable,
+		&streak.UpdatedAt,
+	)
+	if err != nil {
+		r.Log.Errorf("UpdateStreakAtomic select for update: %v", err)
+		return nil, err
+	}
+
+	// Apply streak rules in the usecase (fn modifies the struct in-place).
+	fn(&streak)
+
+	_, err = tx.Exec(ctx, `
+		UPDATE member_streaks
+		SET current_streak    = $1,
+		    longest_streak    = $2,
+		    last_active_date  = $3,
+		    freezes_available = $4,
+		    updated_at        = NOW()
+		WHERE member_id = $5
+	`, streak.CurrentStreak, streak.LongestStreak, streak.LastActiveDate, streak.FreezesAvailable, memberId)
+	if err != nil {
+		r.Log.Errorf("UpdateStreakAtomic update: %v", err)
+		return nil, err
+	}
+
+	return &streak, nil
+}
+
+func (r *gamificationRepositoryImpl) progressDailyTasksTx(ctx context.Context, tx pgx.Tx, memberId int, today time.Time, contentType string, awardedXp int) error {
+	var err error
+	for _, t := range fixedDailyTasks {
+		if _, err := tx.Exec(ctx, `INSERT INTO daily_tasks(member_id,task_date,task_type,target_count,xp_reward) VALUES($1,$2,$3::daily_task_type_enum,$4,$5) ON CONFLICT DO NOTHING`, memberId, today, t.taskType, t.targetCount, t.xpReward); err != nil {
+			return err
+		}
+	}
+	// Increment the task matching this content type (kuis→complete_quiz, etc.).
+	taskType := contentTypeToTaskType(contentType)
+	if taskType != "" {
+		var completed bool
+		var xpReward int
+		completed, xpReward, err = r.incrementTask(ctx, tx, memberId, today, taskType, 1)
+		if err != nil {
+			return err
+		}
+		if completed {
+			if err = r.creditXP(ctx, tx, memberId, xpReward); err != nil {
+				return err
+			}
+			if err = r.advanceBonusTask(ctx, tx, memberId, today); err != nil {
+				return err
+			}
+		}
+	}
+
+	// Increment earn_xp by how much XP was actually awarded this finish.
+	if awardedXp > 0 {
+		var completed bool
+		var xpReward int
+		completed, xpReward, err = r.incrementTask(ctx, tx, memberId, today, "earn_xp", awardedXp)
+		if err != nil {
+			return err
+		}
+		if completed {
+			if err = r.creditXP(ctx, tx, memberId, xpReward); err != nil {
+				return err
+			}
+			if err = r.advanceBonusTask(ctx, tx, memberId, today); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }

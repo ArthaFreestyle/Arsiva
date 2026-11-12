@@ -69,15 +69,6 @@ func (u *memberAchievementUseCaseImpl) Create(ctx context.Context, req *model.Me
 		return nil, fiber.NewError(fiber.StatusForbidden, "XP belum mencukupi untuk membuka achievement ini")
 	}
 
-	exists, err := u.Repo.Exists(ctx, memberId, req.AchievementId)
-	if err != nil {
-		u.Log.Warnf("Failed check achievement exists: %v", err)
-		return nil, fiber.ErrInternalServerError
-	}
-	if exists {
-		return nil, fiber.NewError(fiber.StatusConflict, "achievement sudah pernah di-unlock")
-	}
-
 	result, err := u.Repo.Create(ctx, memberId, req.AchievementId)
 	if err != nil {
 		if errors.Is(err, repository.ErrMemberAchievementExists) {

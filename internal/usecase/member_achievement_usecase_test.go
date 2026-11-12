@@ -202,8 +202,8 @@ func TestMemberAchievementCreate_AlreadyUnlocked(t *testing.T) {
 		},
 	}
 	mockRepo := &mockMemberAchievementRepo{
-		existsFn: func(ctx context.Context, memberId, achievementId string) (bool, error) {
-			return true, nil
+		createFn: func(ctx context.Context, memberId, achievementId string) (*entity.MemberAchievement, error) {
+			return &entity.MemberAchievement{AchievementId: achievementId}, nil
 		},
 	}
 	uc := newTestMemberAchievementUseCase(mockRepo, memberRepo, achRepo)
@@ -211,11 +211,11 @@ func TestMemberAchievementCreate_AlreadyUnlocked(t *testing.T) {
 	req := &model.MemberAchievementCreateRequest{AchievementId: "2"}
 	_, err := uc.Create(context.Background(), req, memberClaims("7"))
 
-	if err == nil {
-		t.Fatal("expected conflict when already unlocked")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if mockRepo.createCallCount != 0 {
-		t.Fatalf("repo Create must not be called on duplicate; got %d calls", mockRepo.createCallCount)
+	if mockRepo.createCallCount != 1 {
+		t.Fatal("adapter must evaluate eligible achievements even on replay")
 	}
 }
 

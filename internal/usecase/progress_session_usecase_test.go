@@ -22,6 +22,7 @@ import (
 // ─── Mock repository ──────────────────────────────────────────────────────────
 
 type mockProgressRepo struct {
+	afterCommit             func()
 	contentExists           bool
 	contentExistsErr        error
 	kuisMaxScore            int
@@ -48,6 +49,8 @@ type mockProgressRepo struct {
 	saveProgressCalls int
 	lastAwardedXp     int
 	lastAwardedXpSet  bool
+	results           map[string]*model.ProgressFinalizeResponse
+	completeMu        sync.Mutex
 	mu                sync.Mutex
 }
 
@@ -99,7 +102,7 @@ func newTestUseCase(t *testing.T, repo *mockProgressRepo) (ProgressSessionUseCas
 	t.Cleanup(mr.Close)
 
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	uc := NewProgressSessionUseCase(repo, rdb, nil, validator.New(), nil)
+	uc := NewProgressSessionUseCase(repo, rdb, nil, validator.New(), repo)
 	return uc, mr
 }
 
@@ -329,7 +332,7 @@ func TestFinalize_DoubleConcurrent_InsertOnce(t *testing.T) {
 	}
 }
 
-func TestFinalize_DBError_LeavesRedisActive(t *testing.T) {
+func TestFinalize_DBError_LeavesFrozenSessionRetryable(t *testing.T) {
 	repo := &mockProgressRepo{
 		contentExists: true, kuisMaxScore: 100,
 		xpReward: 100, saveProgressErr: errors.New("db down"),
@@ -348,8 +351,8 @@ func TestFinalize_DBError_LeavesRedisActive(t *testing.T) {
 
 	// Redis key must still exist with state=active.
 	state := mr.HGet(key, "state")
-	if state != "active" {
-		t.Errorf("expected state=active after DB failure, got %q", state)
+	if state != "flushing" {
+		t.Errorf("expected state=flushing after DB failure, got %q", state)
 	}
 }
 
@@ -725,5 +728,134 @@ func TestAnswers_JSONRoundTrip(t *testing.T) {
 	}
 	if decoded["1"] != 5 || decoded["2"] != 10 {
 		t.Errorf("answers round-trip mismatch: %v", decoded)
+	}
+}
+
+func (m *mockProgressRepo) FindCompletion(_ context.Context, _ int, id, _ string, _ int) (*model.ProgressFinalizeResponse, error) {
+	m.completeMu.Lock()
+	defer m.completeMu.Unlock()
+	return m.results[id], nil
+}
+func (m *mockProgressRepo) Complete(ctx context.Context, id string, p *entity.MemberProgress, xp int, ending string, _ time.Time, _ func(*entity.MemberStreak)) (*model.ProgressFinalizeResponse, error) {
+	m.completeMu.Lock()
+	defer m.completeMu.Unlock()
+	if saved := m.results[id]; saved != nil {
+		return saved, nil
+	}
+	pid, prev, next, effective, err := m.SaveProgress(ctx, p, xp)
+	if err != nil {
+		return nil, err
+	}
+	result := &model.ProgressFinalizeResponse{CompletionID: id, ProgresId: pid, PreviousLevel: prev, NewLevel: next, LeveledUp: next > prev, EndingType: ending, Skor: p.Skor, AwardedXP: effective, NewlyUnlockedAchievements: []model.UnlockedAchievement{}, Notifications: []model.Notification{}}
+	if m.results == nil {
+		m.results = map[string]*model.ProgressFinalizeResponse{}
+	}
+	m.results[id] = result
+	if m.afterCommit != nil {
+		m.afterCommit()
+	}
+	return result, nil
+}
+
+func TestCompletionReplayAfterRedisCleanup(t *testing.T) {
+	repo := &mockProgressRepo{contentExists: true, kuisMaxScore: 100, xpReward: 100, saveProgressId: 17}
+	uc, mr := newTestUseCase(t, repo)
+	ctx := context.Background()
+	claims := progressMemberClaims("42")
+	start, err := uc.Start(ctx, defaultStartReq(), claims)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mr.HSet(start.SessionKey, "running_skor", "100")
+	req := &model.ProgressSubmitRequest{ContentType: "kuis", ContentId: 1, CompletionID: start.CompletionID}
+	first, err := uc.Submit(ctx, req, claims)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mr.Exists(start.SessionKey) {
+		t.Fatal("Redis not cleaned")
+	}
+	// Durable replay works even when Redis is unavailable (including cleanup).
+	mr.SetError("ERR injected Redis outage")
+	replay, err := uc.Submit(ctx, req, claims)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, _ := json.Marshal(first)
+	b, _ := json.Marshal(replay)
+	if string(a) != string(b) {
+		t.Fatalf("snapshot changed: %s / %s", a, b)
+	}
+	if repo.saveProgressCalls != 1 {
+		t.Fatal("replayed effects")
+	}
+}
+func TestSolveRetryAfterTransactionFailure(t *testing.T) {
+	repo := &mockProgressRepo{contentExists: true, xpReward: 100, saveProgressErr: errors.New("injected rollback")}
+	uc, mr := newTestUseCase(t, repo)
+	ctx := context.Background()
+	claims := progressMemberClaims("42")
+	start, err := uc.Start(ctx, &model.ProgressStartRequest{ContentType: "puzzle", ContentId: 1, DurationSeconds: 60}, claims)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := &model.ProgressSolveRequest{ContentType: "puzzle", ContentId: 1, Solved: true, CompletionID: start.CompletionID}
+	if _, err = uc.Solve(ctx, req, claims); err == nil {
+		t.Fatal("expected failure")
+	}
+	if mr.HGet(start.SessionKey, "state") != "flushing" {
+		t.Fatal("snapshot not frozen")
+	}
+	repo.saveProgressErr = nil
+	req.Solved = false
+	got, err := uc.Solve(ctx, req, claims)
+	if err != nil || got.Skor != 1 || got.AwardedXP != 100 {
+		t.Fatalf("retry changed frozen score: %+v %v", got, err)
+	}
+}
+func TestOldCompletionCannotMutateNewSession(t *testing.T) {
+	repo := &mockProgressRepo{contentExists: true}
+	uc, mr := newTestUseCase(t, repo)
+	ctx := context.Background()
+	claims := progressMemberClaims("42")
+	start, err := uc.Start(ctx, defaultStartReq(), claims)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = uc.Submit(ctx, &model.ProgressSubmitRequest{ContentType: "kuis", ContentId: 1, CompletionID: "wrong-session"}, claims)
+	if err == nil || mr.HGet(start.SessionKey, "state") != "active" {
+		t.Fatal("foreign completion changed session")
+	}
+}
+
+func TestCommittedCompletionSurvivesRedisCleanupFailure(t *testing.T) {
+	repo := &mockProgressRepo{contentExists: true, saveProgressId: 19}
+	uc, mr := newTestUseCase(t, repo)
+	ctx := context.Background()
+	claims := progressMemberClaims("42")
+	start, err := uc.Start(ctx, defaultStartReq(), claims)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo.afterCommit = func() { mr.SetError("ERR injected cleanup failure") }
+	req := &model.ProgressSubmitRequest{ContentType: "kuis", ContentId: 1, CompletionID: start.CompletionID}
+	first, err := uc.Submit(ctx, req, claims)
+	if err != nil || first.ProgresId != 19 {
+		t.Fatalf("commit lost: %+v %v", first, err)
+	}
+	if !mr.Exists(start.SessionKey) {
+		t.Fatal("expected failed cleanup")
+	}
+	replay, err := uc.Submit(ctx, req, claims)
+	if err != nil || replay.CompletionID != first.CompletionID || repo.saveProgressCalls != 1 {
+		t.Fatalf("replay failed: %+v %v", replay, err)
+	}
+	mr.SetError("")
+	repo.afterCommit = nil
+	if _, err = uc.Finalize(ctx, start.SessionKey, "expired"); err != nil {
+		t.Fatal(err)
+	}
+	if mr.Exists(start.SessionKey) || repo.saveProgressCalls != 1 {
+		t.Fatal("worker failed to resolve committed session")
 	}
 }
