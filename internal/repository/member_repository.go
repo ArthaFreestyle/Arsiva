@@ -17,7 +17,7 @@ type MemberRepository interface {
 	Create(ctx context.Context, member *entity.Member) (*entity.Member, error)
 	FindById(ctx context.Context, memberId string) (*entity.Member, error)
 	FindByUserId(ctx context.Context, userId string) (*entity.Member, error)
-	FindAll(ctx context.Context, search string, limit int, offset int) ([]*entity.Member, int, error)
+	FindAll(ctx context.Context, search string, profileStatus string, limit int, offset int) ([]*entity.MemberAccount, int, error)
 	Update(ctx context.Context, member *entity.Member) (*entity.Member, error)
 	Delete(ctx context.Context, memberId string) error
 	FindSekolahByMemberId(ctx context.Context, memberId string) (*entity.Sekolah, error)
@@ -175,51 +175,37 @@ func (r *memberRepositoryImpl) FindByUserId(ctx context.Context, userId string) 
 	return result, nil
 }
 
-func (r *memberRepositoryImpl) FindAll(ctx context.Context, search string, limit int, offset int) ([]*entity.Member, int, error) {
+func (r *memberRepositoryImpl) FindAll(ctx context.Context, search string, profileStatus string, limit int, offset int) ([]*entity.MemberAccount, int, error) {
 	searchPattern := "%" + search + "%"
-
-	countQuery := `
-		SELECT COUNT(*)
-		FROM members m
-		LEFT JOIN users u ON m.user_id = u.user_id
-		WHERE (COALESCE(m.nis, '') ILIKE $1 OR COALESCE(u.username, '') ILIKE $1)
+	// The existing members_user_id_key UNIQUE constraint ensures one row per
+	// account. Keep the population identical for count and paginated data.
+	const population = `
+		FROM users u
+		LEFT JOIN members m ON m.user_id = u.user_id
+		WHERE u.role = 'member' AND u.is_active = TRUE
+		  AND ($1 = 'all'
+		       OR ($1 = 'with_profile' AND m.member_id IS NOT NULL)
+		       OR ($1 = 'without_profile' AND m.member_id IS NULL))
+		  AND (u.username ILIKE $2 OR COALESCE(m.nis, '') ILIKE $2)
 	`
 	var total int
-	err := r.DB.QueryRow(ctx, countQuery, searchPattern).Scan(&total)
-	if err != nil {
+	if err := r.DB.QueryRow(ctx, `SELECT COUNT(*) `+population, profileStatus, searchPattern).Scan(&total); err != nil {
 		r.Log.Errorf("Error counting FindAll member: %v", err)
 		return nil, 0, err
 	}
-
 	query := `
-		SELECT m.member_id::text,
-		       COALESCE(m.user_id::text, '') AS user_id,
-		       COALESCE(m.sekolah_id::text, '') AS sekolah_id,
-		       COALESCE(m.nis, '') AS nis,
-		       m.total_xp,
-		       m.level,
-		       COALESCE(m.foto_profil, '') AS foto_profil,
-		       COALESCE(m.bio, '') AS bio,
-		       COALESCE(m.tanggal_lahir::text, '') AS tanggal_lahir,
-		       COALESCE(m.jenis_kelamin::text, '') AS jenis_kelamin,
-		       COALESCE(m.minat, '') AS minat,
-		       COALESCE(m.last_active::text, '') AS last_active,
-		       COALESCE(u.username, '') AS username,
-		       COALESCE(u.email, '') AS email
-		FROM members m
-		LEFT JOIN users u ON m.user_id = u.user_id
-		WHERE (COALESCE(m.nis, '') ILIKE $1 OR COALESCE(u.username, '') ILIKE $1)
-		ORDER BY m.member_id ASC
-		LIMIT $2 OFFSET $3
-	`
-	rows, err := r.DB.Query(ctx, query, searchPattern, limit, offset)
+		SELECT u.user_id::text, m.member_id IS NOT NULL AS has_profile,
+		       m.member_id::text, m.sekolah_id::text, m.nis, m.total_xp, m.level,
+		       m.foto_profil, m.bio, m.tanggal_lahir::text, m.jenis_kelamin::text,
+		       m.minat, u.username, u.email
+	` + population + ` ORDER BY u.user_id ASC LIMIT $3 OFFSET $4`
+	rows, err := r.DB.Query(ctx, query, profileStatus, searchPattern, limit, offset)
 	if err != nil {
 		r.Log.Errorf("Error query FindAll member: %v", err)
 		return nil, 0, err
 	}
 	defer rows.Close()
-
-	members, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByNameLax[entity.Member])
+	members, err := pgx.CollectRows(rows, pgx.RowToAddrOfStructByName[entity.MemberAccount])
 	if err != nil {
 		r.Log.Errorf("Error collecting rows FindAll member: %v", err)
 		return nil, 0, err

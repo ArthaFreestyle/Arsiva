@@ -366,7 +366,7 @@ func (m *mockMemberRepo) Create(ctx context.Context, member *entity.Member) (*en
 func (m *mockMemberRepo) FindById(ctx context.Context, memberId string) (*entity.Member, error) {
 	return nil, nil
 }
-func (m *mockMemberRepo) FindAll(ctx context.Context, search string, limit int, offset int) ([]*entity.Member, int, error) {
+func (m *mockMemberRepo) FindAll(ctx context.Context, search string, profileStatus string, limit int, offset int) ([]*entity.MemberAccount, int, error) {
 	return nil, 0, nil
 }
 func (m *mockMemberRepo) Update(ctx context.Context, member *entity.Member) (*entity.Member, error) {

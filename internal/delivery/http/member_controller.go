@@ -68,15 +68,17 @@ func (c *memberControllerImpl) FindAll(ctx fiber.Ctx) error {
 	page, _ := strconv.Atoi(ctx.Query("page", "1"))
 	size, _ := strconv.Atoi(ctx.Query("size", "10"))
 	search := ctx.Query("search", "")
+	profileStatus := ctx.Query("profile_status", "all")
+	page, size = model.NormalizePaging(page, size)
 
-	members, total, err := c.MemberUseCase.FindAll(ctx.Context(), search, page, size)
+	members, total, err := c.MemberUseCase.FindAll(ctx.Context(), search, profileStatus, page, size)
 	if err != nil {
 		c.Log.Warnf("Failed get all member: %v", err)
 		return err
 	}
 
-	return ctx.Status(fiber.StatusOK).JSON(model.WebResponse[[]*model.MemberResponse]{
-		Data: members,
+	return ctx.Status(fiber.StatusOK).JSON(model.WebResponse[[]*model.MemberAccountResponse]{
+		Data:   members,
 		Paging: model.NewPageMetaData(page, size, total),
 	})
 }

@@ -25,14 +25,6 @@ func ToMemberResponse(member *entity.Member) *model.MemberResponse {
 	}
 }
 
-func ToMemberResponses(members []*entity.Member) []*model.MemberResponse {
-	var responses []*model.MemberResponse
-	for _, m := range members {
-		responses = append(responses, ToMemberResponse(m))
-	}
-	return responses
-}
-
 func ToMemberDetailResponse(member *entity.Member, sekolah *entity.Sekolah) *model.MemberDetailResponse {
 	if member == nil {
 		return nil
@@ -103,4 +95,27 @@ func ToMemberProfileResponse(
 		Achievements: achievementResponses,
 		SocialLinks:  socialLinkResponses,
 	}
+}
+
+func ToMemberAccountResponses(accounts []*entity.MemberAccount) []*model.MemberAccountResponse {
+	result := make([]*model.MemberAccountResponse, len(accounts))
+	for i, account := range accounts {
+		result[i] = &model.MemberAccountResponse{
+			UserId:       account.UserId,
+			HasProfile:   account.HasProfile,
+			MemberId:     account.MemberId,
+			SekolahId:    account.SekolahId,
+			NIS:          account.NIS,
+			TotalXP:      account.TotalXP,
+			Level:        account.Level,
+			FotoProfil:   account.FotoProfil,
+			Bio:          account.Bio,
+			TanggalLahir: account.TanggalLahir,
+			JenisKelamin: account.JenisKelamin,
+			Minat:        account.Minat,
+			Username:     account.Username,
+			Email:        account.Email,
+		}
+	}
+	return result
 }

@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"context"
+	"math"
 
 	"github.com/go-playground/validator/v10"
 	"github.com/gofiber/fiber/v3"
@@ -17,7 +18,7 @@ import (
 type MemberUseCase interface {
 	Create(ctx context.Context, req *model.MemberCreateRequest, claims *model.Claims) (*model.MemberResponse, error)
 	FindById(ctx context.Context, memberId string, claims *model.Claims) (*model.MemberDetailResponse, error)
-	FindAll(ctx context.Context, search string, page int, size int) ([]*model.MemberResponse, int, error)
+	FindAll(ctx context.Context, search string, profileStatus string, page int, size int) ([]*model.MemberAccountResponse, int, error)
 	Update(ctx context.Context, memberId string, req *model.MemberUpdateProfileRequest, claims *model.Claims) (*model.MemberResponse, error)
 	Delete(ctx context.Context, memberId string) error
 	GetMe(ctx context.Context, claims *model.Claims) (*model.MemberDetailResponse, error)
@@ -26,11 +27,11 @@ type MemberUseCase interface {
 }
 
 type memberUseCaseImpl struct {
-	MemberRepository        repository.MemberRepository
-	AchievementRepository   repository.MemberAchievementRepository
-	SocialLinkRepository    repository.MemberSocialLinkRepository
-	Log                     *logrus.Logger
-	Validator               *validator.Validate
+	MemberRepository      repository.MemberRepository
+	AchievementRepository repository.MemberAchievementRepository
+	SocialLinkRepository  repository.MemberSocialLinkRepository
+	Log                   *logrus.Logger
+	Validator             *validator.Validate
 }
 
 func NewMemberUseCase(
@@ -100,23 +101,29 @@ func (u *memberUseCaseImpl) FindById(ctx context.Context, memberId string, claim
 	return converter.ToMemberDetailResponse(member, sekolah), nil
 }
 
-func (u *memberUseCaseImpl) FindAll(ctx context.Context, search string, page int, size int) ([]*model.MemberResponse, int, error) {
-	if page < 1 {
-		page = 1
+func (u *memberUseCaseImpl) FindAll(ctx context.Context, search string, profileStatus string, page int, size int) ([]*model.MemberAccountResponse, int, error) {
+	if profileStatus == "" {
+		profileStatus = "all"
 	}
-	if size < 1 || size > 50 {
-		size = 10
+	switch profileStatus {
+	case "all", "with_profile", "without_profile":
+	default:
+		return nil, 0, fiber.NewError(fiber.StatusBadRequest, "profile_status harus all, with_profile, atau without_profile")
+	}
+	page, size = model.NormalizePaging(page, size)
+	if page-1 > math.MaxInt/size {
+		return nil, 0, fiber.NewError(fiber.StatusBadRequest, "page terlalu besar")
 	}
 
 	offset := (page - 1) * size
 
-	members, total, err := u.MemberRepository.FindAll(ctx, search, size, offset)
+	members, total, err := u.MemberRepository.FindAll(ctx, search, profileStatus, size, offset)
 	if err != nil {
 		u.Log.Warnf("Failed get all member: %v", err)
 		return nil, 0, fiber.ErrInternalServerError
 	}
 
-	return converter.ToMemberResponses(members), total, nil
+	return converter.ToMemberAccountResponses(members), total, nil
 }
 
 func (u *memberUseCaseImpl) Update(ctx context.Context, memberId string, req *model.MemberUpdateProfileRequest, claims *model.Claims) (*model.MemberResponse, error) {
