@@ -57,7 +57,7 @@ func (m *mockMemberRepoForAch) FindById(ctx context.Context, memberId string) (*
 func (m *mockMemberRepoForAch) FindByUserId(ctx context.Context, userId string) (*entity.Member, error) {
 	return nil, nil
 }
-func (m *mockMemberRepoForAch) FindAll(ctx context.Context, search string, limit int, offset int) ([]*entity.Member, int, error) {
+func (m *mockMemberRepoForAch) FindAll(ctx context.Context, search string, profileStatus string, limit int, offset int) ([]*entity.MemberAccount, int, error) {
 	return nil, 0, nil
 }
 func (m *mockMemberRepoForAch) Update(ctx context.Context, member *entity.Member) (*entity.Member, error) {

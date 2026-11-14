@@ -3887,8 +3887,20 @@ paths:
     get:
       tags:
         - Member
-      summary: Get all member
-      description: "Mengambil daftar member dengan pagination dan pencarian berdasarkan NIS atau username.\n\n🔒 **Role**: `super_admin`\n"
+      summary: Get active member accounts
+      description: |
+        Mengambil akun aktif dengan role member, termasuk akun tanpa profil dan tanpa
+        syarat verifikasi email. Pencarian berdasarkan username/NIS digabung dengan
+        filter profil sebelum count dan pagination. Urutan stabil berdasarkan user_id.
+        has_profile hanya menyatakan keberadaan baris profil, bukan kelengkapan field.
+        Akun tanpa profil memiliki member_id dan semua field profil bernilai null.
+        Gunakan user_id sebagai key baris; aksi detail/edit berbasis member_id hanya
+        tersedia jika has_profile=true. Reset page ke 1 saat search/filter berubah.
+        paging.total_item adalah total hasil setelah filter, sebelum pagination.
+        Tanpa search dan dengan profile_status=all, total sama dengan summary by_role.member
+        pada keadaan data yang sama; with_profile + without_profile = all.
+
+        🔒 **Role**: `super_admin`
       operationId: getAllMember
       security:
         - BearerAuth: []
@@ -3898,18 +3910,25 @@ paths:
           schema:
             type: integer
             default: 1
-          description: Nomor halaman
+          description: Nomor halaman; nilai kurang dari 1 dinormalisasi menjadi 1
         - name: size
           in: query
           schema:
             type: integer
             default: 10
-          description: Jumlah item per halaman
+          description: Jumlah item per halaman (1–50); nilai di luar rentang dinormalisasi menjadi 10
         - name: search
           in: query
           schema:
             type: string
           description: Pencarian berdasarkan NIS atau username
+        - name: profile_status
+          in: query
+          description: Filter keberadaan profil; bukan kelengkapan field profil.
+          schema:
+            type: string
+            default: all
+            enum: [all, with_profile, without_profile]
       responses:
         "200":
           description: Daftar member berhasil diambil
@@ -3919,18 +3938,45 @@ paths:
                 $ref: "#/components/schemas/MemberListWrapper"
               example:
                 data:
-                  - member_id: "1"
+                  - user_id: "7"
+                    has_profile: true
+                    member_id: "1"
                     nis: "2024001"
                     sekolah_id: "1"
                     total_xp: 0
                     level: 0
+                    foto_profil: null
+                    bio: null
+                    tanggal_lahir: null
+                    jenis_kelamin: null
+                    minat: null
                     username: andi_siswa
                     email: andi@example.com
+                  - user_id: "8"
+                    has_profile: false
+                    member_id: null
+                    nis: null
+                    sekolah_id: null
+                    total_xp: null
+                    level: null
+                    foto_profil: null
+                    bio: null
+                    tanggal_lahir: null
+                    jenis_kelamin: null
+                    minat: null
+                    username: siswa_baru
+                    email: siswa@example.com
                 paging:
                   page: 1
                   size: 10
-                  total_item: 42
-                  total_page: 5
+                  total_item: 2
+                  total_page: 1
+        "400":
+          description: profile_status bukan all/with_profile/without_profile, atau page terlalu besar.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "401":
           $ref: "#/components/responses/UnauthorizedResponse"
         "403":
@@ -5450,7 +5496,7 @@ paths:
       tags:
         - Analytics
       summary: Ringkasan pengguna per role
-      description: "Jumlah pengguna **aktif** (`is_active = TRUE`, user yang di-soft-delete tidak dihitung) per role. `total` selalu sama dengan jumlah `by_role`; ketiga role selalu ada walau bernilai 0.\n\n🔒 **Role**: `super_admin`.\n"
+      description: "Jumlah pengguna **aktif** (`is_active = TRUE`, user yang di-soft-delete tidak dihitung) per role. `total` selalu sama dengan jumlah `by_role`; ketiga role selalu ada walau bernilai 0. `by_role.member` mencakup akun member aktif dengan maupun tanpa profil dan tanpa syarat verifikasi email.\n\n🔒 **Role**: `super_admin`.\n"
       operationId: getAnalyticsUserSummary
       security:
         - BearerAuth: []
@@ -7259,6 +7305,78 @@ components:
           type: string
           format: email
           example: andi@example.com
+    MemberAccountResponse:
+      type: object
+      description: Akun member aktif dengan profil opsional. Semua properti tetap hadir; data profil yang tidak tersedia bernilai null.
+      required: [user_id, has_profile, member_id, sekolah_id, nis, total_xp, level, foto_profil, bio, tanggal_lahir, jenis_kelamin, minat, username, email]
+      properties:
+        user_id:
+          type: string
+          description: Identitas akun stabil untuk key baris.
+          example: "7"
+        has_profile:
+          type: boolean
+          description: Ada baris members untuk akun ini; bukan indikator kelengkapan profil.
+          example: true
+        member_id:
+          nullable: true
+          type: string
+          description: ID member
+          example: "1"
+        sekolah_id:
+          nullable: true
+          type: string
+          description: ID sekolah asal
+          example: "1"
+        nis:
+          nullable: true
+          type: string
+          description: Nomor Induk Siswa
+          example: "2024001"
+        total_xp:
+          nullable: true
+          type: integer
+          description: Total XP yang dikumpulkan (server-owned)
+          example: 150
+        level:
+          nullable: true
+          type: integer
+          description: Level gamifikasi (server-owned)
+          example: 2
+        foto_profil:
+          nullable: true
+          type: string
+          description: URL foto profil
+          example: /uploads/2026/03/foto.jpg
+        bio:
+          nullable: true
+          type: string
+          example: Siswa kelas 9 yang suka sains.
+        tanggal_lahir:
+          nullable: true
+          type: string
+          format: date
+          example: "2010-05-15"
+        jenis_kelamin:
+          nullable: true
+          type: string
+          enum:
+            - L
+            - P
+            - Lainnya
+            - null
+          example: L
+        minat:
+          nullable: true
+          type: string
+          example: "Matematika, IPA"
+        username:
+          type: string
+          example: andi_siswa
+        email:
+          type: string
+          format: email
+          example: andi@example.com
     MemberDetailResponse:
       type: object
       properties:
@@ -7323,9 +7441,11 @@ components:
         data:
           type: array
           items:
-            $ref: "#/components/schemas/MemberResponse"
+            $ref: "#/components/schemas/MemberAccountResponse"
         paging:
-          $ref: "#/components/schemas/PageMetaData"
+          description: page/size sudah dinormalisasi; total_item menghitung seluruh hasil filter sebelum LIMIT/OFFSET, bukan panjang data halaman.
+          allOf:
+            - $ref: "#/components/schemas/PageMetaData"
         errors:
           type: string
     MemberSocialLinkRequest:
